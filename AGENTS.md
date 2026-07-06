@@ -182,7 +182,6 @@ the Claude Code agent surface; treat them as context for other agents.
 | `agent-skills@addy-agent-skills` | user | Addy Osmani engineering workflow skills |
 | `code-review@claude-plugins-official` | project | Structured code review flows |
 | `claude-md-management@claude-plugins-official` | project | CLAUDE.md file operations |
-| `yas@yet-another-statusline` | user | Statusline surface |
 
 ### Plugin Boundaries
 
@@ -201,7 +200,27 @@ the Claude Code agent surface; treat them as context for other agents.
   guidance.
 - **code-review**: structured review flows for diffs and PRs.
 - **claude-md-management**: CLAUDE.md file operations and maintenance.
-- **YAS**: statusline surface only.
+
+## Context Window Management
+
+Avoid last 20% of context window for:
+- Large-scale refactoring
+- Feature implementation spanning multiple files
+- Debugging complex interactions
+
+Lower sensitivity tasks (single edits, docs, simple fixes) tolerate higher utilization.
+
+## Workflow and Knowledge Capture
+
+- **Workflow Surface Policy** — `skills/` is canonical. `commands/` is legacy.
+  New workflow contributions land in `skills/` first. `commands/` only for
+  migration shims or cross-harness parity.
+- **Knowledge Capture** — Put captured knowledge in the right place:
+  - Personal debugging notes, preferences, temporary context → memory
+  - Team/project knowledge (architecture decisions, API changes, runbooks) →
+    the project's existing docs structure
+  - If an existing doc already captures the information, do not duplicate it
+  - If no obvious location exists, ask before creating a new top-level file
 
 ## Project Skills
 
