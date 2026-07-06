@@ -10,6 +10,10 @@ payload="${TOOL_INPUT:-}"
 if [[ -z "$payload" ]] && [[ ! -t 0 ]]; then
     payload="$(cat)"
 fi
+MAX_PAYLOAD_BYTES=1048576
+if [[ ${#payload} -gt "$MAX_PAYLOAD_BYTES" ]]; then
+    exit 0
+fi
 
 f=$(printf '%s' "$payload" | python3 -c '
 import json

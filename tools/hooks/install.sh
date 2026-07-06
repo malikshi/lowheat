@@ -45,8 +45,9 @@ for hook in "$HOOKS_DIR"/*; do
   target="$GIT_HOOKS_DIR/$name"
 
   if [[ -e "$target" ]] && [[ ! -L "$target" ]]; then
-    echo "WARN: $target exists and is not a symlink; skipping (move it aside first if you want to install)." >&2
-    continue
+    echo "ERROR: $target exists and is not a symlink." >&2
+    echo "       Move or remove it before installing hooks." >&2
+    exit 1
   fi
 
   if [[ -L "$target" ]] && [[ "$(readlink "$target")" == "$hook" ]]; then

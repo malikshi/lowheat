@@ -290,6 +290,9 @@ def _validate_wiki(result: ValidationResult, wiki_value: str, source_path: Path)
         result.warn(f"wiki: cannot locate repo root from {source_path} — skipping existence check")
         return
     candidate = (repo_root / val).resolve()
+    if not str(candidate).startswith(str(repo_root.resolve())):
+        result.err(f"wiki: path escapes repo root: {val}")
+        return
     if not candidate.exists():
         result.err(f"wiki: points to non-existent file: {val}")
 

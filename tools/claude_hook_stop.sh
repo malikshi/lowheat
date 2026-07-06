@@ -15,10 +15,16 @@ mapfile -t CHANGED_FILES < <(
 )
 
 CODEDNA_SESSION_ADDED=false
+EXPECTED_SESSION="${CLAUDE_SESSION_ID:-}"
+if [[ -n "$EXPECTED_SESSION" ]]; then
+    SESSION_MATCH="^\\+\\s+-\\s+session_id:.*${EXPECTED_SESSION}"
+else
+    SESSION_MATCH="^\\+\\s+-\\s+session_id:"
+fi
 if {
     git diff -- .codedna 2>/dev/null || true
     git diff --cached -- .codedna 2>/dev/null || true
-} | grep -qE '^\+\s+session_id:'; then
+} | grep -qE "$SESSION_MATCH"; then
     CODEDNA_SESSION_ADDED=true
 fi
 

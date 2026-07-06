@@ -90,7 +90,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="codedna-staged-") as temp_dir:
         temp_root = Path(temp_dir)
         for rel_path in files:
-            staged_path = temp_root / rel_path.name
+            staged_path = temp_root / rel_path
+            staged_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 staged_bytes = subprocess.check_output(
                     ["git", "show", f":{rel_path.as_posix()}"],
