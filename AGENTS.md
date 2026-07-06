@@ -222,6 +222,200 @@ Lower sensitivity tasks (single edits, docs, simple fixes) tolerate higher utili
   - If an existing doc already captures the information, do not duplicate it
   - If no obvious location exists, ask before creating a new top-level file
 
+## Coding Style
+
+### Immutability (CRITICAL)
+
+Create new objects; never mutate in place — `update(orig, field, val)` returns a new copy; `modify(...)` in-place is rejected. Immutable data prevents hidden side effects, simplifies debugging, enables safe concurrency.
+
+### Core Principles
+
+- **KISS** — simplest solution that works; clarity over cleverness.
+- **DRY** — extract repeated logic; introduce abstractions only when repetition is real.
+- **YAGNI** — no speculative features; start simple, refactor when pressure is real.
+
+### File Organization
+
+Many small files over few large files: 200–400 lines typical, 800 max, high cohesion, low coupling, organized by feature/domain not by type.
+
+### Error Handling
+
+Handle errors explicitly at every level. User-facing messages in UI code. Detailed context server-side. **Never** silently swallow.
+
+### Input Validation
+
+Validate at every system boundary. Schema-based where available. Fast fail with clear messages. All external data is untrusted.
+
+### Naming Conventions
+
+- Variables/functions: `camelCase` with descriptive names.
+- Booleans: `is`/`has`/`should`/`can` prefix.
+- Interfaces/types/components: `PascalCase`.
+- Constants: `UPPER_SNAKE_CASE`.
+- Tests: snake_case describing the behavior under test.
+
+### Code Smells to Avoid
+
+- **Deep nesting** — prefer early returns once conditions stack.
+- **Magic numbers** — named constants for thresholds, delays, limits.
+- **Long functions** — split at 50 lines; each piece gets one responsibility.
+
+### Quality Checklist
+
+Before marking work complete:
+- [ ] Readable, well-named identifiers.
+- [ ] Functions focused (<50 lines).
+- [ ] Files cohesive (<800 lines).
+- [ ] No deeper than 4 nesting levels.
+- [ ] Errors handled explicitly.
+- [ ] No hardcoded values; use constants or config.
+- [ ] Immutable patterns enforced.
+
+## Security Guidelines
+
+### Mandatory Security Checks
+
+Before any commit:
+- [ ] No hardcoded secrets (API keys, passwords, tokens).
+- [ ] All user inputs validated.
+- [ ] SQL injection prevention (parameterized queries).
+- [ ] XSS prevention (sanitized HTML).
+- [ ] CSRF protection enabled.
+- [ ] Authentication/authorization verified.
+- [ ] Rate limiting on appropriate surfaces.
+- [ ] Error messages do not leak sensitive data.
+
+### Secret Management
+
+- **Never** hardcode secrets.
+- Environment variables or a secret manager.
+- Validate required secrets at startup.
+- Rotate any exposed secrets.
+
+### Security Review Triggers
+
+Stop and invoke **security-reviewer** when touching: authentication or authorization code, user input, database queries, file-system operations, external API calls, cryptographic operations, payment or financial code.
+
+### Security Response Protocol
+
+1. Stop immediately.
+2. Invoke **security-reviewer** agent.
+3. Fix CRITICAL issues before continuing.
+4. Rotate any exposed secrets.
+5. Review the codebase for similar issues.
+
+## Testing Requirements
+
+### Minimum Test Coverage: 80%
+
+Test types (all required):
+1. **Unit tests** — individual functions, utilities, components.
+2. **Integration tests** — API endpoints, database operations.
+3. **E2E tests** — critical user flows (framework chosen per language).
+
+### Test-Driven Development (Mandatory)
+
+1. Write test first (RED) — must fail.
+2. Write minimal implementation (GREEN) — must pass.
+3. Refactor (IMPROVE).
+4. Verify coverage (80%+).
+
+### Troubleshooting Failures
+
+1. Invoke **tdd-guide** agent.
+2. Test isolation check.
+3. Verify mocks.
+4. Fix the implementation — not the tests, unless the test is wrong.
+
+### Test Structure (AAA Pattern)
+
+Arrange / Act / Assert. Use descriptive names explaining the behavior under test.
+
+## Git Workflow
+
+### Commit Message Format
+
+```
+<type>: <description>
+
+<optional body>
+```
+
+Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`. Attribution disabled globally via `~/.claude/settings.json`.
+
+### Pull Request Workflow
+
+When creating PRs:
+1. Analyze full commit history — not just the latest commit.
+2. Use `git diff [base-branch]...HEAD` to see all changes.
+3. Draft a comprehensive PR summary.
+4. Include a test plan with TODOs.
+5. Push with `-u` flag if on a new branch.
+
+## Code Review Standards
+
+### When to Review
+
+Mandatory triggers:
+- After writing or modifying code.
+- Before any commit to shared branches.
+- When security-sensitive code is changed.
+- When architectural changes are made.
+- Before merging pull requests.
+
+Pre-review requirements:
+- All automated checks (CI/CD) passing.
+- Merge conflicts resolved.
+- Branch up to date with target branch.
+
+### Review Checklist
+
+Before marking code complete:
+- [ ] Readable and well-named.
+- [ ] Functions focused (<50 lines).
+- [ ] Files cohesive (<800 lines).
+- [ ] No deep nesting (>4 levels).
+- [ ] Errors handled explicitly.
+- [ ] No hardcoded secrets or credentials.
+- [ ] No leftover debug statements.
+- [ ] Tests exist for new functionality.
+- [ ] Test coverage meets 80% minimum.
+
+### Review Severity Levels
+
+| Level    | Meaning                                  | Action                   |
+|----------|------------------------------------------|--------------------------|
+| CRITICAL | Security vulnerability or data loss risk | BLOCK — must fix first.  |
+| HIGH     | Bug or significant quality issue         | WARN — should fix first. |
+| MEDIUM   | Maintainability concern                  | INFO — consider fixing.  |
+| LOW      | Style or minor suggestion                | NOTE — optional.         |
+
+### Agents
+
+Use **code-reviewer** for general quality, **security-reviewer** for OWASP Top 10, plus per-language reviewers (`python-reviewer`, `go-reviewer`, `rust-reviewer`, `typescript-reviewer`, …).
+
+### Approval Criteria
+
+- **Approve**: no CRITICAL or HIGH issues.
+- **Warning**: only HIGH issues remain.
+- **Block**: CRITICAL issues found.
+
+## Development Workflow
+
+### Feature Implementation Workflow
+
+0. **Research & Reuse** — mandatory first:
+   - GitHub code search (`gh search repos`, `gh search code`).
+   - Library docs via Context7 or vendor sources.
+   - Exa only when the first two are insufficient.
+   - Search package registries (npm, PyPI, crates.io, …).
+   - Prefer forking portable solutions over hand-rolled code.
+1. **Plan First** — invoke **planner** agent; identify dependencies and risks; break into phases.
+2. **TDD Approach** — invoke **tdd-guide** agent; RED → GREEN → IMPROVE; verify 80%+ coverage.
+3. **Code Review** — invoke **code-reviewer** agent; address CRITICAL and HIGH; fix MEDIUM when practical.
+4. **Commit & Push** — conventional-commits format; comprehensive PR summary. This repository requires **explicit user approval** before `git commit` or `git push`.
+5. **Pre-Review Checks** — CI/CD green, no merge conflicts, branch up to date.
+
 ## Project Skills
 
 ### Claude Code Skills (`.claude/skills/`)
