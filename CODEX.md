@@ -13,7 +13,10 @@ The behavior contract adapted from `https://github.com/jbarbier/CLAUDE.md` lives
 in `AGENTS.md`. Follow that contract through the Codex tool surface: complete real
 fixes, separate reasoning from deterministic checks, verify before completion, use
 the confusion protocol for high-stakes ambiguity, preserve safety boundaries, and
-report restart needs.
+report restart needs;
+plus the Karpathy behavioral guidelines adopted from
+`https://github.com/multica-ai/andrej-karpathy-skills`: think before coding,
+simplicity first, surgical changes, and goal-driven execution.
 
 **Do not replace this adapter with the upstream template, and do not symlink the
 agent surfaces** unless the project owner explicitly requests that migration.
@@ -170,4 +173,4 @@ file.
 | `https://github.com/ciembor/agent-rules-books` | Book-derived engineering rules in `.agents/skills/agent-rules-books` |
 | `https://github.com/yzhao062/agent-style` | Pinned prose rules in `.agent-style/` |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into `AGENTS.md` |
-| `https://github.com/multica-ai/andrej-karpathy-skips` | Karpathy behavioral guidelines |
+| `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |

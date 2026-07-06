@@ -1,8 +1,8 @@
 # Agent Instructions
 
 This repository operates as a multi-agent workspace. This file is the **cross-agent
-source of truth**. Agent-specific files (`CLAUDE.md`, `CODEX.md`, `GEMINI.md`,
-`agents/codex.md`) are adapters — they add tool-specific deltas but must not
+source of truth**. Agent-specific files (`CLAUDE.md`, `CODEX.md`, `GEMINI.md`)
+are adapters — they add tool-specific deltas but must not
 duplicate the tables below.
 
 Read these companion surfaces when relevant:
@@ -610,7 +610,6 @@ Before claiming completion, run the smallest checks that prove the change:
 | `https://github.com/Larens94/codedna` | CodeDNA source map tool |
 | `https://github.com/colbymchenry/codegraph` | CodeGraph MCP server |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
-| `https://github.com/tmck-code/yet-another-statusline` | YAS statusline plugin |
 | `https://github.com/addyosmani/agent-skills` | Addy Osmani engineering skills |
 | `https://github.com/ciembor/agent-rules-books` | Book-derived engineering rules |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into `AGENTS.md` |

@@ -181,7 +181,6 @@ Same table as `AGENTS.md`; this file links rather than duplicates it:
 - `https://github.com/Larens94/codedna` — CodeDNA source map tool
 - `https://github.com/colbymchenry/codegraph` — CodeGraph MCP server
 - `https://github.com/obra/superpowers` — Superpowers plugin
-- `https://github.com/tmck-code/yet-another-statusline` — YAS statusline plugin
 - `https://github.com/addyosmani/agent-skills` — Addy Osmani engineering skills
 - `https://github.com/ciembor/agent-rules-books` — Book-derived engineering rules
 - `https://github.com/jbarbier/CLAUDE.md` — Operating-contract influence
