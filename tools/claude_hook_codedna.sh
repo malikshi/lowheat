@@ -100,7 +100,7 @@ if echo "$OUTPUT" | grep -q "^FAIL "; then
         echo "  exports: function(arg) -> type"
         echo "  used_by: caller.py → caller_fn"
         echo "  rules:   constraint"
-        echo '  agent:   model-id | YYYY-MM-DD | what you did'
+        echo "  agent:   model-id | provider | YYYY-MM-DD | session_id | what you implemented"
         echo '  """'
     fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
