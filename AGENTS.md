@@ -12,6 +12,7 @@ Read these companion surfaces when relevant:
 | `CLAUDE.md` | Claude Code adapter: hook scripts, plugins, skill paths, agent-style import |
 | `GEMINI.md` | Gemini adapter: fallbacks for tools unavailable outside Claude Code |
 | `CODEX.md` | Codex adapter: CodeDNA/RTK contract mirror |
+| `COMMANDCODE.md` | CommandCode adapter: RTK manual-prefix contract |
 | `RTK.md` | Token-efficient CLI proxy command reference |
 | `.codedna` | Source map and session ledger (always read before editing source) |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
