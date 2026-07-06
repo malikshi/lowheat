@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# commit-msg — Reject commit messages that contain LLM thinking markers
+# (e.g. <think>, </think>) or other raw model output patterns. The repo
+# rule is: commit messages must be written for humans, not for models.
+#
+# Installed by tools/hooks/install.sh. The hook receives the path to the
+# commit message file as $1.
+
+set -eu
+
+COMMIT_MSG_FILE="$1"
+
+if grep -qE '<think>|</think>' "$COMMIT_MSG_FILE"; then
+  echo "ERROR: commit message contains LLM thinking marker (<think> or </think>)." >&2
+  echo "       Rewrite the message in plain prose. See AGENTS.md for the commit-message policy." >&2
+  exit 1
+fi
