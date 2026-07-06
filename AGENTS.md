@@ -293,7 +293,34 @@ Project hooks are defined in `.claude/settings.json`. Hook scripts live under `t
 ### Hook script details
 
 **`claude_hook_session_start.sh`** — emits a JSON banner with project name and module
-count so the agent reads `.codedna` before editing source files. Also emits an RTK
+count so the agent reads `.codedna` before editing source files.
+
+### CodeDNA reading protocol
+
+1. Read the **module docstring** at the top of every Python file before reading any code.
+2. Parse `exports:` — these are symbols you **must never rename or remove** without explicit instruction.
+3. Parse `used_by:` — callers that depend on this file. Filter: "does this caller's domain intersect with my current task?" Only explore callers relevant to the specific change.
+4. Parse `related:` — files sharing the same logic without importing each other. Same filter applies.
+5. Parse `rules:` — hard constraints for every edit in this file; read **before writing any logic**.
+6. Parse `agent:` — session history written by previous agents; read to understand *why* the current state exists.
+7. For any function with a `Rules:` docstring, read and respect those before writing logic.
+
+### CodeDNA editing protocol
+
+1. **First step:** re-read `rules:`, the `agent:` history, and the `Rules:` of the function you are editing.
+2. Apply all file-level constraints before writing.
+3. After editing, check `used_by:` targets (especially `[cascade]`-tagged ones).
+4. Never remove `exports:` symbols — they are contracts used by other files.
+5. If you discover a constraint or fix a bug, **update `rules:` for the next agent**.
+6. **Append a new `agent:` line** to the module docstring after editing: `model-id | provider | YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last 5 entries — drop the oldest when adding a 6th. Full history is in git and `.codedna`.
+
+### New-file mandate
+
+Every new Python source file **must begin** with a CodeDNA module docstring (see header format below). This is a hard requirement for this repository.
+
+### Session-start history
+
+At session start, read the last 3 `agent_sessions:` entries in `.codedna` to understand recent project history. Also emits an RTK
 reminder when `rtk` is on PATH.
 
 **`claude_hook_pretooluse.sh`** — inspects the Write/Edit payload's `file_path`. If it
@@ -338,7 +365,8 @@ fields. On success, prints an RTK session savings summary.
 exports: function(arg) -> type
 used_by: caller.py → caller_fn
 rules:   constraint the agent must respect
-agent:   model-id | YYYY-MM-DD | what you did
+agent:   model-id | provider | YYYY-MM-DD | session_id | what you implemented and what you noticed
+         message: "<open hypothesis or observation for the next agent>"
 """
 ```
 

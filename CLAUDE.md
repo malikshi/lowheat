@@ -101,7 +101,8 @@ before commit validation.
 exports: function(arg) -> type
 used_by: caller.py → caller_fn
 rules:   constraint the agent must respect
-agent:   model-id | YYYY-MM-DD | what you did
+agent:   model-id | provider | YYYY-MM-DD | session_id | what you implemented and what you noticed
+         message: "<open hypothesis or observation for the next agent>"
 """
 ```
 
