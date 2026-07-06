@@ -222,7 +222,12 @@ Lower sensitivity tasks (single edits, docs, simple fixes) tolerate higher utili
   - If an existing doc already captures the information, do not duplicate it
   - If no obvious location exists, ask before creating a new top-level file
 
-## Coding Style
+## Coding Style (adapted from ECC)
+
+The following six sections adapt the **Everything Claude Code** rule packs
+(`https://github.com/affaan-m/ECC`) — strong defaults for agents that build
+software directly. Read them as starting posture, not universal law; relax what
+your task or agent surface does not need.
 
 ### Immutability (CRITICAL)
 
@@ -857,3 +862,4 @@ Before claiming completion, run the smallest checks that prove the change:
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into `AGENTS.md` |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
 | `https://github.com/yzhao062/agent-style` | Pinned prose rules in `.agent-style/` |
+| `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
