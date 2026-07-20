@@ -1,7 +1,7 @@
 # Agent Instructions
 
 This repository operates as a multi-agent workspace. This file is the **cross-agent
-source of truth**. Agent-specific files (`CLAUDE.md`, `CODEX.md`, `GEMINI.md`)
+source of truth**. Agent-specific files (`CLAUDE.md`, `GEMINI.md`)
 are adapters — they add tool-specific deltas but must not
 duplicate the tables below.
 
@@ -11,8 +11,6 @@ Read these companion surfaces when relevant:
 |---|---|
 | `CLAUDE.md` | Claude Code adapter: hook scripts, plugins, skill paths, agent-style import |
 | `GEMINI.md` | Gemini adapter: fallbacks for tools unavailable outside Claude Code |
-| `CODEX.md` | Codex adapter: CodeDNA/RTK contract mirror |
-| `COMMANDCODE.md` | CommandCode adapter: RTK manual-prefix contract |
 | `RTK.md` | Token-efficient CLI proxy command reference |
 | `.codedna` | Source map and session ledger (always read before editing source) |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
@@ -63,8 +61,7 @@ use judgment on trivial tasks.
 
 1. Read `AGENTS.md` first to understand the contract, CodeGraph, CodeDNA, and the
    hook-ledger protocol.
-2. Read the matching adapter: `CLAUDE.md` for Claude Code, `CODEX.md` for Codex,
-   `GEMINI.md` for Gemini.
+2. Read the matching adapter: `CLAUDE.md` for Claude Code, `GEMINI.md` for Gemini.
 3. Use RTK for shell commands per the Command Style section.
 4. Use CodeGraph tools for structural code questions when available, or the
    `rg`/`find` fallbacks named in `GEMINI.md` when not.
@@ -74,7 +71,7 @@ use judgment on trivial tasks.
 Some guidance comes from the upstream Claude Code template and was
 intentionally adapted:
 
-- `AGENTS.md` remains the source of truth. `CLAUDE.md`, `GEMINI.md`, `CODEX.md`
+- `AGENTS.md` remains the source of truth. `CLAUDE.md`, `GEMINI.md`
   stay as adapters rather than symlinks — each tool has different capabilities
   and fallbacks.
 - Automatic commit and push are **disabled**. The upstream template recommends it,
@@ -837,6 +834,35 @@ Field-observed (maintainer observation of LLM output, 2022–2026):
 > Orwell, "Politics and the English Language" (1946), Rule 6. Rules are guides to
 > clarity, not ends in themselves.
 
+### Dyslexia-Friendly Output (opt-in)
+
+Dyslexia-friendly output formatting is available on request. It restructures a
+response for faster decoding: headline first, short sentences, one bold anchor per
+line, numbered processes, whitespace between ideas. It never simplifies content.
+Every fact, caveat, and technical term stays; only the shape changes.
+
+This formatting is **opt-in**. It does not change default output. Apply it only
+when the user explicitly asks with one of these triggers:
+
+- `/i-have-dyslexia` (Claude Code plugin/skill surface)
+- "dyslexia fit", "fit", "fit my dyslexia" (runs the personalization interview)
+- an explicit request to follow dyslexia formatting
+
+Precedence when active:
+
+- Dyslexia rules supersede the agent-style prose defaults above for that response
+  (for example bold-anchor-per-line overrides the bullet and transition-word
+  guidance). This is intentional and scoped to the active response only.
+- Rule 4 (never simplify the content) is absolute. Structure carries the load;
+  content is never dropped.
+- Safety carve-outs still hold: never reformat error messages, code, or logs, and
+  confirm destructive actions before formatting for brevity.
+- A `## My profile` block, if the interview wrote one, overrides individual rules.
+
+When inactive, output stays on the agent-style defaults above. Full rule bodies and
+the "dyslexia fit" interview are pinned in `.agents/dyslexia/i-have-dyslexia.md`.
+Read that file on demand; do not load it into context globally.
+
 ## Verification
 
 Before claiming completion, run the smallest checks that prove the change:
@@ -862,4 +888,5 @@ Before claiming completion, run the smallest checks that prove the change:
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into `AGENTS.md` |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
 | `https://github.com/yzhao062/agent-style` | Pinned prose rules in `.agent-style/` |
+| `https://github.com/mdeloughry/i-have-dyslexia` | Dyslexia-friendly output formatting rules (opt-in), pinned in `.agents/dyslexia/` |
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |

@@ -77,10 +77,8 @@ Full contract is in `AGENTS.md`. This block lists the per-hook Claude runtime:
 | `PostToolUse` | `Write\|Edit` | `tools/claude_hook_codedna.sh` | Validates CodeDNA headers; emits L2 `Rules:` reminders |
 | `Stop` | — | `tools/claude_hook_stop.sh` | Blocks completion until `.codedna` has an `agent_sessions` entry when tracked or untracked project files changed; prints RTK session savings on success |
 
-These hooks are **Claude Code-specific**. `CODEX.md` and `GEMINI.md` restate the
+These hooks are **Claude Code-specific**. `GEMINI.md` restates the
 CodeDNA session-ledger contract as a manual responsibility.
-
-<REDACTED> CodeDNA
 
 When tracked or untracked project files are changed, update `.codedna` with an
 `agent_sessions` entry before the final response. The Stop hook blocks completion
@@ -95,27 +93,9 @@ before commit validation.
 
 ### CodeDNA header format (Python)
 
-```python
-"""filename.py — purpose ≤15 words.
-
-exports: function(arg) -> type
-used_by: caller.py → caller_fn
-rules:   constraint the agent must respect
-agent:   model-id | provider | YYYY-MM-DD | session_id | what you implemented and what you noticed
-         message: "<open hypothesis or observation for the next agent>"
-"""
-```
-
-### CodeDNA L2 function annotations (Python)
-
-```python
-def my_function():
-    """Short description.
-
-    Rules:   constraint the agent must respect
-    message: model-id | YYYY-MM-DD | observation for next agent
-    """
-```
+The Python module-header and L2 function-annotation formats live in `AGENTS.md`
+under "### CodeDNA header format (Python)". Edit them there; do not duplicate them
+in this adapter.
 
 ## Command Style
 
@@ -144,7 +124,7 @@ Before claiming completion, run the smallest checks that prove the change:
 This repository uses `agent-style` `v0.3.5` from
 `https://github.com/yzhao062/agent-style` for technical prose. Full rule bodies are
 pinned in `.agent-style/RULES.md` and imported via `@.agent-style/claude-code.md`
-from the root `CLAUDE.md`. When asked "is agent-style active?" or "what writing
+from `AGENTS.md`. When asked "is agent-style active?" or "what writing
 rules apply here?", answer:
 
 > agent-style v0.3.5 active: 21 rules (RULE-01..12 canonical + RULE-A..I
@@ -172,6 +152,17 @@ Writing defaults for this agent surface:
 
 Do not load `.agent-style/RULES.md` into context globally. Reference it on demand.
 <!-- END agent-style -->
+
+## Dyslexia-Friendly Output (opt-in)
+
+Dyslexia-friendly output formatting is available on request. It restructures a
+response for faster decoding without simplifying content. It is **opt-in** and does
+not change default output. Triggers: `/i-have-dyslexia`, "dyslexia fit", "fit", or
+an explicit request. On Claude Code it is also invocable through the
+`i-have-dyslexia` plugin/Skill surface. Canonical rules and precedence live in
+`AGENTS.md` under "### Dyslexia-Friendly Output (opt-in)"; full rule bodies and the
+interview are pinned in `.agents/dyslexia/i-have-dyslexia.md`. Read on demand; do
+not duplicate the rules here.
 
 ## Source Repositories
 

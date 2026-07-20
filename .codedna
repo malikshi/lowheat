@@ -8,4 +8,31 @@ packages:
 
 cross_cutting_patterns: {}
 
-agent_sessions: []
+agent_sessions:
+  - agent: claude-fable-5
+    provider: anthropic
+    date: 2026-07-20
+    session_id: e5874473-f0aa-49d4-b752-9354bc226b77
+    task: "Integrate i-have-dyslexia opt-in output-formatting rules, vendored + wired across all adapters"
+    changed: [.agents/dyslexia/i-have-dyslexia.md, AGENTS.md, CLAUDE.md, CODEX.md, GEMINI.md, COMMANDCODE.md, .codedna]
+    visited: [AGENTS.md, CLAUDE.md, CODEX.md, GEMINI.md, COMMANDCODE.md, README.md, .codedna, .agent-style/RULES.md]
+    message: "Docs-only integration mirroring agent-style. Rules pinned in .agents/dyslexia/; canonical section in AGENTS.md Agent Style; adapters carry one-line pointers (deltas-only). Opt-in: triggers /i-have-dyslexia, 'dyslexia fit', 'fit'; default output unchanged. No prose-enforcement hook exists; next agent could add one to tools/ if enforcement is wanted."
+  - agent: claude-fable-5
+    provider: anthropic
+    date: 2026-07-20
+    session_id: e5874473-f0aa-49d4-b752-9354bc226b77
+    task: "Delete COMMANDCODE.md adapter and remove all cross-references (owner-approved: CommandCode no longer a dev agent)"
+    changed: [COMMANDCODE.md, AGENTS.md, README.md, .codedna]
+    visited: [COMMANDCODE.md, AGENTS.md, README.md, CLAUDE.md, CODEX.md, GEMINI.md, .codedna]
+    message: "Removed COMMANDCODE.md (was load-bearing: manual RTK-prefix contract, harness-safety, manual CodeDNA duty, rtk-command-code source row). Fixed 2 external cross-refs: AGENTS.md companion table row and README.md layout row. Verified zero dangling COMMANDCODE/rtk-command-code refs repo-wide, including structural adapter-list refs (AGENTS.md how-to-use, adapter intros) which never named it. rtk-command-code source row was unique to the file and died with it."
+  - agent: claude-fable-5
+    provider: anthropic
+    date: 2026-07-20
+    session_id: e5874473-f0aa-49d4-b752-9354bc226b77
+    task: "Delete CODEX.md adapter and remove all file-reference cross-references (owner-approved: Codex no longer a dev agent)"
+    changed: [CODEX.md, AGENTS.md, CLAUDE.md, README.md, .codedna]
+    visited: [CODEX.md, AGENTS.md, CLAUDE.md, GEMINI.md, README.md, .codedna]
+    message: "Removed CODEX.md (was load-bearing: no-Skill/Agent/hook tool map, manual CodeDNA ledger contract, shell grep -n fallback, dyslexia opt-in pointer). Fixed 6 file-reference sites: AGENTS.md intro list, companion table, how-to-use step, do-not-symlink list; CLAUDE.md hook note; README.md layout row. Left concept mentions of 'Codex' as a peer-agent name (GEMINI.md capability comparisons) and the .codex/* hook-exclude glob (AGENTS.md) intact -- those are not file pointers. Surviving adapters: CLAUDE.md, GEMINI.md. No source row was unique to CODEX.md."
+
+
+

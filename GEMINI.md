@@ -63,51 +63,25 @@ contract is a **manual responsibility** for Gemini:
 
 ### CodeDNA header format (Python)
 
-```python
-"""filename.py — purpose ≤15 words.
-
-exports: function(arg) -> type
-used_by: caller.py → caller_fn
-rules:   constraint the agent must respect
-agent:   model-id | provider | YYYY-MM-DD | session_id | what you implemented and what you noticed
-         message: "<open hypothesis or observation for the next agent>"
-"""
-```
-
-### CodeDNA L2 function annotations (Python)
-
-```python
-def my_function():
-    """Short description.
-
-    Rules:   constraint the agent must respect
-    message: model-id | YYYY-MM-DD | observation for next agent
-    """
-```
+The Python module-header and L2 function-annotation formats live in `AGENTS.md`
+under "### CodeDNA header format (Python)". Edit them there; do not duplicate them
+in this adapter.
 
 ## Agent Style
 
 For technical prose, follow the `Agent Style` section in `AGENTS.md`. Gemini may
 not follow Claude `@path` imports, so read `.agent-style/RULES.md` before writing
 or editing substantial prose. When asked "is agent-style active?", use the
-self-verification response defined in `AGENTS.md`:
+self-verification response (version string and the 21-rule list) defined in
+`AGENTS.md` under "## Agent Style". Do not duplicate the writing defaults or the
+rule list here.
 
-> agent-style v0.3.5 active: 21 rules (RULE-01..12 canonical + RULE-A..I
-> field-observed); full bodies at .agent-style/RULES.md.
-
-Writing defaults:
-
-- Use clear, scientifically accessible language.
-- Keep meaningful technical detail and factual accuracy.
-- Preserve Markdown, LaTeX, and reStructuredText formats unless asked otherwise.
-- Do not convert prose into bullet points unless the content is a real list.
-- Prefer full forms such as `it is` and `he would` in technical prose.
-- Avoid casual em dashes and en dashes. Prefer commas, semicolons, colons, or
-  parentheses.
-- Keep terms consistent. Define an abbreviation once, then use it consistently.
-- Break long or nested sentences into shorter sentences.
-- Do not overuse transition words such as "Additionally", "Furthermore", or
-  "Moreover".
+Dyslexia-friendly output formatting is available on request (opt-in; does not
+change default output). Triggers: `/i-have-dyslexia`, "dyslexia fit", "fit". Gemini
+has no Skill surface, so read the pinned rules directly at
+`.agents/dyslexia/i-have-dyslexia.md`. Canonical guidance and precedence live in
+`AGENTS.md` under "### Dyslexia-Friendly Output (opt-in)". Do not duplicate the
+rules here.
 
 ## Book-Derived Guidance
 
@@ -140,7 +114,7 @@ edit), use the shell `grep -n` directly rather than `rtk grep`.
 Before claiming completion, run the smallest checks that prove the change:
 
 - For config or docs edits, run syntax checks or targeted grep checks.
-- For Python source edits, run CodeDNA validation and the relevant `pytest`
+- For Python source edits, run CodeDNA validation and the relevant `rtk pytest`
   targets.
 - For Go source edits, run `go build ./...` and `go vet ./...`.
 - For browser-facing work, verify with a real browser when possible.

@@ -7,7 +7,7 @@ Minimal agent-operations bootstrap — multi-agent workspace contract lives in `
 | Path | Purpose |
 |---|---|
 | `AGENTS.md` | Cross-agent source of truth — operating, security, testing, CodeDNA, RTK, agent-style |
-| `CLAUDE.md` / `GEMINI.md` / `CODEX.md` / `COMMANDCODE.md` | Per-tool adapter deltas |
+| `CLAUDE.md` / `GEMINI.md` | Per-tool adapter deltas |
 | `RTK.md` | RTK command reference (root-level) |
 | `tools/` | Claude Code hook scripts + CodeDNA validator |
 | `LICENSE` | Apache-2.0 |
