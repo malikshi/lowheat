@@ -11,7 +11,6 @@ Read these companion surfaces when relevant:
 |---|---|
 | `CLAUDE.md` | Claude Code adapter: hook scripts, plugins, skill paths, agent-style import |
 | `RTK.md` | Token-efficient CLI proxy command reference |
-| `.codedna` | Source map and session ledger (always read before editing source) |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
 | `.mcp.json` or `.claude/mcp.json` | MCP server definitions (two servers expose `codegraph_*` family: `codegraph`, `caveman-shrink` — equivalent) |
 | `.agent-style/` | Pinned prose rules imported by Claude Code |
@@ -59,7 +58,7 @@ use judgment on trivial tasks.
 ### How to use this file with a new agent
 
 1. Read `AGENTS.md` first to understand the contract, CodeGraph, CodeDNA, and the
-   hook-ledger protocol.
+   annotation protocol.
 2. Read the matching adapter: `CLAUDE.md` for Claude Code.
 3. Use RTK for shell commands per the Command Style section.
 4. Use CodeGraph tools for structural code questions when available, or the
@@ -181,15 +180,11 @@ the Claude Code agent surface; treat them as context for other agents.
 | Plugin | Scope | Purpose |
 |---|---|---|
 | `caveman@caveman` | user | Compressed communication, cavecrew agents, commit/review/stats skills |
-| `codedna@codedna` | user | Source map annotations, session ledger, `codedna` CLI |
 | `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
 | `agent-skills@addy-agent-skills` | user | Addy Osmani engineering workflow skills |
 
 ### Plugin Boundaries
 
-- **CodeDNA**: annotation and session-ledger protocol. Use `/codedna:init` for
-  first-time annotation, `/codedna:check` for coverage reports, `/codedna:impact <file>`
-  for dependency chains.
 - **Caveman**: compressed agent communication. Use when token efficiency matters and is
   explicitly triggered. Cavecrew agents (`builder`, `investigator`, `reviewer`)
   available via `.claude/skills/cavecrew`.
@@ -499,76 +494,139 @@ Do not load all full book files globally.
 
 ## CodeDNA
 
-- Treat `.codedna` as the repo-local source map and session ledger.
-- When tracked or untracked project files are changed, `.codedna` must include a
-  matching `agent_sessions` entry in the diff. The Stop hook blocks completion
-  otherwise.
-- Before editing source files, check the nearest CodeDNA header for module purpose,
-  exports, `used_by`, rules, and agent notes.
-- After source changes, keep CodeDNA annotations current. Add or update module
-  headers and public-function `Rules:` docstrings for behavior, constraints, and
-  edge cases that changed.
-- At session end, append an `agent_sessions` entry to `.codedna` with: `agent`,
-  `provider`, `date`, `session_id`, `task`, `changed`, `visited`, `message`.
+CodeDNA is a source-annotation convention adapted from
+`https://github.com/Larens94/codedna`. This repository uses the convention only.
+It does not use the `codedna` binary, a validator, git hooks, or a `.codedna`
+ledger file. Git is the authoritative audit log. Agents apply and maintain
+these annotations by hand while reading and editing code.
 
-### CodeDNA reading protocol
+### Scope
 
-1. Read the **module docstring** at the top of every Python file before reading any code.
-2. Parse `exports:` — these are symbols you **must never rename or remove** without explicit instruction.
-3. Parse `used_by:` — callers that depend on this file. Filter: "does this caller's domain intersect with my current task?" Only explore callers relevant to the specific change.
-4. Parse `related:` — files sharing the same logic without importing each other. Same filter applies.
-5. Parse `rules:` — hard constraints for every edit in this file; read **before writing any logic**.
-6. Parse `agent:` — session history written by previous agents; read to understand *why* the current state exists.
-7. For any function with a `Rules:` docstring, read and respect those before writing logic.
+Apply CodeDNA annotations to every source file in the project whose language
+supports comments: Python, Go, JavaScript, TypeScript, Rust, shell, and any
+other commented source language. Do not annotate documentation, plain text, or
+commentless data formats: `.md`, `.tex`, `.rst`, `.txt`, `.json`, and similar.
+Documentation and prose follow the Agent Style rules instead.
 
-### CodeDNA editing protocol
+### Module header (L1)
 
-1. **First step:** re-read `rules:`, the `agent:` history, and the `Rules:` of the function you are editing.
-2. Apply all file-level constraints before writing.
-3. After editing, check `used_by:` targets (especially `[cascade]`-tagged ones).
-4. Never remove `exports:` symbols — they are contracts used by other files.
-5. If you discover a constraint or fix a bug, **update `rules:` for the next agent**.
-6. **Append a new `agent:` line** to the module docstring after editing: `model-id | provider | YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last 5 entries — drop the oldest when adding a 6th. Full history is in git and `.codedna`.
+Every source file begins with a module header written in the file's native
+comment syntax. Python uses the module docstring; Go, JavaScript, TypeScript,
+and Rust use leading `//` lines; shell uses leading `#` lines. Fields appear in
+this order:
 
-### New-file mandate
+- First line: `filename — <what it does, 15 words or fewer>.`
+- `exports:` public symbols this file provides, separated by ` | `. Use `->`
+  for a return type.
+- `used_by:` consumer files that depend on this file, one per line as
+  `consumer_file → symbol(s)`. Tag a consumer `[cascade]` when an edit here must
+  be verified against it.
+- `related:` (optional) files that share the same pattern or logic without an
+  import link.
+- `rules:` the hard constraint agents must never violate, or `none`.
+- `agent:` a rolling history of the last 5 sessions, oldest first, newest
+  appended last: `model-id | provider | YYYY-MM-DD | session_id | what you did
+  and what you noticed`.
+- `message:` (optional) an open hypothesis or observation for the next agent,
+  indented beneath `agent:`.
 
-Every new Python source file **must begin** with a CodeDNA module docstring (see header format below). This is a hard requirement for this repository.
-
-### Session-start history
-
-At session start, read the last 3 `agent_sessions:` entries in `.codedna` to understand recent project history.
-
-### CodeDNA header format (Python)
+Python module docstring:
 
 ```python
-"""filename.py — purpose ≤15 words.
+"""src/config.py — Bot configuration with lazy environment loading.
 
-exports: function(arg) -> type
-used_by: caller.py → caller_fn
-rules:   constraint the agent must respect
-agent:   model-id | provider | YYYY-MM-DD | session_id | what you implemented and what you noticed
-         message: "<open hypothesis or observation for the next agent>"
+exports: class Config | get_config()
+used_by: manager/src/admin/menu.py → DB_FILE, logger [cascade]
+rules:   Never read os.environ at import time; load lazily in get_config().
+agent:   claude-fable-5 | anthropic | 2026-07-24 | s_example | tightened lazy load
 """
 ```
 
-### CodeDNA L2 function annotations (Python)
+Go, TypeScript, JavaScript, or Rust leading comments:
+
+```go
+// auth.go — API-key middleware for the ZiVPN HTTP surface.
+//
+// exports: Middleware
+// used_by: ZiVPN/cmd/zivpn-api/main.go → Middleware
+// rules:   none
+// agent:   claude-fable-5 | anthropic | 2026-07-24 | s_example | reviewed guard
+```
+
+### Function annotation (L2)
+
+Every public function carries a `Rules:` block in its docstring or leading
+comment stating what the agent must or must not do there. Omit it only for
+trivial functions with no domain constraint.
 
 ```python
-def my_function():
-    """Short description.
+def charge(amount_cents: int) -> None:
+    """Charge the customer for a completed order.
 
-    Rules:   constraint the agent must respect
-    message: model-id | YYYY-MM-DD | observation for next agent
+    Rules:   amount_cents is in cents, not euros; divide by 100 before display.
     """
 ```
 
-### CodeDNA modes
+### Inline annotations on complex logic
 
-| Mode | Behavior |
-|---|---|
-| `agent` | Full enforcement: module headers + inline `# Rules:` / `# message:` on non-trivial logic + semantic naming (`type_shape_domain_origin`) |
-| `semi` | Module headers + inline Rules: on new/edited code + semantic naming on new variables |
-| `human` | Module headers only; L2 enforcement skipped |
+Place a `# Rules:` or `# message:` comment (native comment syntax) directly
+above a block when the block encodes a business rule, filters or transforms in a
+non-obvious way, depends on step order, or works around an edge case. Skip
+simple getters and setters, obvious control flow, and standard library calls.
+
+```python
+# Rules: skip cancelled orders — status=4 means cancelled in the legacy DB.
+```
+
+### Agent protocols
+
+**Reading files.** Read the module header before any code. Parse `exports:`,
+the symbols you must never rename or remove without explicit instruction. Parse
+`used_by:` and `related:`, then follow only the callers whose domain intersects
+your current task, not all of them blindly. Parse `rules:`, the hard constraints
+for every edit in this file. Parse `agent:`, the session history that explains
+why the current state exists. Read the `Rules:` block of any function before
+writing logic in it.
+
+**Writing new files.** Begin every new source file with a complete L1 module
+header, and give every public function an L2 `Rules:` block.
+
+**Writing good rules.** Rules must be specific and actionable. Write
+`soft-delete via deleted_at — never issue DELETE` rather than a vague line such
+as `handle deletes carefully`. Never write vague rules such as `handle errors
+gracefully` or `follow best practices`. Use `rules: none` only when a file
+genuinely has no domain constraint. Every time you discover a constraint, fix a
+bug, or notice a non-obvious behavior, add it to `rules:` immediately. This is
+how you communicate with the next agent.
+
+**Writing critical functions.** Give every public function a `Rules:`
+annotation that covers its constraints, invariants, and edge cases.
+
+**Editing files.** Re-read `rules:`, the `agent:` history, and the `Rules:` of
+the function you are editing. Apply all file-level constraints before writing.
+After editing, check `used_by:` targets, especially `[cascade]`-tagged ones.
+Never remove `exports:` symbols; they are contracts used by other files. If you
+discover a constraint or fix a bug, update `rules:` for the next agent. Append a
+new `agent:` line to the module header in the form `model-id | provider |
+YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
+5 entries; drop the oldest when adding a 6th. Full history is in git.
+
+**Session end protocol.** At the end of every session that modifies files,
+record the work in the git commit rather than a ledger file. When you create the
+commit (which requires explicit user approval per Command Style), add these
+trailers:
+
+```
+<imperative summary of changes>
+
+AI-Agent:    <model-id>
+AI-Provider: <provider>
+AI-Session:  <session_id>
+AI-Visited:  <comma-separated list of files read>
+AI-Message:  <one-line summary of what was found or left open>
+```
+
+Git is the source of truth for history and verification.
 
 ## RTK
 
@@ -833,7 +891,7 @@ Read that file on demand; do not load it into context globally.
 Before claiming completion, run the smallest checks that prove the change:
 
 - For config or docs edits, run syntax checks or targeted grep checks.
-- For Python source edits, run CodeDNA validation and the relevant `rtk pytest`
+- For Python source edits, run the relevant `rtk pytest`
   targets.
 - For Go source edits, run `rtk go build ./...` and `rtk go vet ./...`.
 - For browser-facing work, verify with a real browser when possible.
@@ -845,7 +903,6 @@ Before claiming completion, run the smallest checks that prove the change:
 |---|---|
 | `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
 | `https://github.com/JuliusBrussee/caveman` | Caveman plugin and cavecrew skills |
-| `https://github.com/Larens94/codedna` | CodeDNA source map tool |
 | `https://github.com/colbymchenry/codegraph` | CodeGraph MCP server |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
 | `https://github.com/addyosmani/agent-skills` | Addy Osmani engineering skills |

@@ -9,7 +9,6 @@ Minimal agent-operations bootstrap — multi-agent workspace contract lives in `
 | `AGENTS.md` | Cross-agent source of truth — operating, security, testing, CodeDNA, RTK, agent-style |
 | `CLAUDE.md` | Per-tool adapter deltas |
 | `RTK.md` | RTK command reference (root-level) |
-| `tools/` | Claude Code hook scripts + CodeDNA validator |
 | `LICENSE` | Apache-2.0 |
 
 ## Bootstrapping
@@ -19,7 +18,7 @@ git clone <repo> lowheat
 cd lowheat
 ```
 
-Hooks and plugins configure themselves from `.claude/settings.json`. If hooks report `.codedna` missing, initialize it per the CodeDNA section in `AGENTS.md`.
+Hooks and plugins configure themselves from `.claude/settings.json`. CodeDNA is a hand-applied annotation convention with no binary, validator, or ledger file — see the CodeDNA section in `AGENTS.md`.
 
 ## Operating contract
 

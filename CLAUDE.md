@@ -39,13 +39,16 @@ The following entries are specific to the Claude Code surface and do not appear 
   and `caveman-shrink`) both expose the `codegraph_*` family; they are equivalent,
   so either tool prefix is fine. When neither is available, fall back to the
   `rg`/`find` search table in the CodeGraph section of `AGENTS.md`.
+- CodeDNA is a hand-applied annotation convention — there is no binary, validator,
+  hook, or `.codedna` ledger. See the CodeDNA section of `AGENTS.md` for the
+  protocol; git is the authoritative audit log.
 
 ### Tools
 
 | Tool | Purpose |
 |---|---|
 | **Bash** | Run commands via `rtk` wrapper per `RTK.md`. The PreToolUse hook auto-rewrites raw `grep` → `rtk grep`, so raw shell `grep` returns compressed output — use the `Grep` tool when you need exact `line:content` for an edit. |
-| **Read / Write / Edit** | File operations. PostToolUse runs the CodeDNA validator; PreToolUse reminds the agent to read docstrings before editing source. |
+| **Read / Write / Edit** | File operations. CodeDNA annotations are applied by hand per `AGENTS.md`; check the module header before editing source. |
 | **Grep / Glob** | Pattern and file search. Use `Grep` for exact matches; `rtk grep`/`rtk rg` is lossy by design. |
 | **Skill** | Invoke installed skills from the catalogue in `AGENTS.md`. |
 | **Agent** | Spawn sub-agents for isolated or parallel work. |
@@ -72,22 +75,12 @@ Full contract is in `AGENTS.md`. This block lists the per-hook Claude runtime:
 |---|---|---|---|
 | `SessionStart` | — | `tools/claude_hook_session_start.sh` | Prints project + module count banner; prints RTK reminder if `rtk` on PATH |
 | `PreToolUse` | `Bash` | `rtk hook claude` | Rewrites raw shell commands into RTK equivalents |
-| `PreToolUse` | `Write\|Edit` | `tools/claude_hook_pretooluse.sh` | Reminds the agent to check CodeDNA annotations before editing source |
-| `PostToolUse` | `Write\|Edit` | `tools/claude_hook_codedna.sh` | Validates CodeDNA headers; emits L2 `Rules:` reminders |
-| `Stop` | — | `tools/claude_hook_stop.sh` | Blocks completion until `.codedna` has an `agent_sessions` entry when tracked or untracked project files changed; prints RTK session savings on success |
 
-These hooks are **Claude Code-specific**.
+These hooks are **Claude Code-specific**. There are no CodeDNA hooks — the
+annotation convention is applied by hand per the CodeDNA section of `AGENTS.md`.
 
-When tracked or untracked project files are changed, update `.codedna` with an
-`agent_sessions` entry before the final response. The Stop hook blocks completion
-when project files changed but `.codedna` is not part of the diff.
-
-Required `agent_sessions` fields: `agent`, `provider`, `date`, `session_id`, `task`,
-`changed`, `visited`, `message`.
-
-After editing, adding, deleting, or staging Python source, run
-`codedna init <path> --no-llm` or `codedna update <path>` on the touched path
-before commit validation.
+After editing source, keep the module header and `Rules:` blocks current per the
+CodeDNA editing protocol in `AGENTS.md`.
 
 ### CodeDNA header format (Python)
 
@@ -110,7 +103,7 @@ target path as an argument, or set the tool working directory.
 Before claiming completion, run the smallest checks that prove the change:
 
 - For config or docs edits, run syntax checks or targeted grep checks.
-- For Python source edits, run CodeDNA validation and the relevant `rtk pytest`
+- For Python source edits, run the relevant `rtk pytest`
   targets.
 - For Go source edits, run `rtk go build ./...` and `rtk go vet ./...`.
 - For browser-facing work, verify with a real browser when possible.
@@ -148,7 +141,6 @@ Same table as `AGENTS.md`; this file links rather than duplicates it:
 
 - `https://github.com/rtk-ai/rtk` — RTK CLI and command reference
 - `https://github.com/JuliusBrussee/caveman` — Caveman plugin and cavecrew skills
-- `https://github.com/Larens94/codedna` — CodeDNA source map tool
 - `https://github.com/colbymchenry/codegraph` — CodeGraph MCP server
 - `https://github.com/obra/superpowers` — Superpowers plugin
 - `https://github.com/addyosmani/agent-skills` — Addy Osmani engineering skills
