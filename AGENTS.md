@@ -1,18 +1,18 @@
 # Agent Instructions
 
-This repository operates as a multi-agent workspace. This file is the **cross-agent
-source of truth**. Agent-specific files (`CLAUDE.md`)
-are adapters — they add tool-specific deltas but must not
-duplicate the tables below.
+This repository operates as a multi-agent workspace. This file is the single,
+self-contained instruction surface. It is the **cross-agent source of truth**:
+agent adapters (such as `CLAUDE.md`) add tool-specific deltas but must not
+duplicate its content.
 
-Read these companion surfaces when relevant:
+## Companion Surfaces
 
 | File | Role |
 |---|---|
-| `CLAUDE.md` | Claude Code adapter: hook scripts, plugins, skill paths, agent-style import |
-| `RTK.md` | Token-efficient CLI proxy command reference |
+| `CLAUDE.md` | Claude Code adapter: per-tool deltas only; inherits everything else from this file |
+| `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
+| `README.md` | Project bootstrap and layout |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
-| `.agent-style/` | Pinned prose rules imported by Claude Code |
 
 ## Operating Contract
 
@@ -56,8 +56,7 @@ use judgment on trivial tasks.
 
 ### How to use this file with a new agent
 
-1. Read `AGENTS.md` first to understand the contract, CodeDNA, and the
-   annotation protocol.
+1. Read this file to understand the contract, CodeDNA, and the annotation protocol.
 2. Read the matching adapter: `CLAUDE.md` for Claude Code.
 3. Use RTK for shell commands per the Command Style section.
 
@@ -130,20 +129,39 @@ intentionally adapted:
   repository rule overrides any upstream templates that suggest automatic commit and
   push behavior.
 
-## Installed Plugins (Claude Code)
+### RTK quick reference
 
-The following Claude Code plugins are installed and enabled. These are specific to
-the Claude Code agent surface; treat them as context for other agents.
+RTK is a token-optimized CLI proxy (60–90% token savings). Full catalogue:
+`RTK.md` or `~/.claude/RTK.md`, and `rtk --help`.
+
+**Grep is lossy by design.** `rtk grep` and `rtk rg` group matches by file, strip
+whitespace, and truncate lines. Correct for surveys and rough counts; for exact
+`line:content` use the native Grep tool.
+
+| Area | Commands |
+|---|---|
+| Core navigation | `rtk ls`, `rtk tree`, `rtk read <file>`, `rtk smart <file>`, `rtk find -name "*.go"`, `rtk grep "p" path`, `rtk rg "p" path`, `rtk wc <file>` |
+| Git | `rtk git status`, `rtk git log --oneline -10`, `rtk git diff`, `rtk git show <commit>`, `rtk git blame <file>` |
+| Go | `rtk go build ./...`, `rtk go test ./...`, `rtk go vet ./...`, `rtk go mod tidy`, `rtk golangci-lint run` |
+| JS/frontend | `rtk npm test`, `rtk npx tsc --noEmit`, `rtk pnpm test`, `rtk jest`, `rtk vitest`, `rtk tsc --noEmit`, `rtk next build`, `rtk lint .`, `rtk prettier --check .`, `rtk format .`, `rtk playwright test`, `rtk prisma generate` |
+| Python | `rtk pytest -q`, `rtk ruff check .`, `rtk ruff format --check .`, `rtk mypy .`, `rtk pip list` |
+| Rust/Ruby/.NET/Android | `rtk cargo test`, `rtk rake test`, `rtk rubocop`, `rtk rspec`, `rtk dotnet test`, `rtk gradlew test` |
+| GitHub | `rtk gh pr list`, `rtk gh pr view <number>`, `rtk gh issue list`, `rtk gh run list`, `rtk glab mr list` |
+| Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk kubectl get pods`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
+| Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
+| Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env`, `rtk pipe` |
+| Meta/analytics | `rtk gain`, `rtk gain --history`, `rtk gain --session`, `rtk config`, `rtk telemetry`, `rtk learn`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Hooks | `rtk hook claude`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk init`, `rtk trust`, `rtk untrust`, `rtk verify` |
+| Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
+
+## Installed Plugins (Claude Code)
 
 | Plugin | Scope | Purpose |
 |---|---|---|
 | `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
 
-### Plugin Boundaries
-
-- **Superpowers**: workflow skills for structured development. Use when the request
-  matches a Superpowers skill pattern (planning, TDD, debugging, parallel work,
-  verification).
+Use the Skill tool when a Superpowers skill matches the task; otherwise read the
+tracked `SKILL.md` for project guidance.
 
 ## Context Window Management
 
@@ -365,8 +383,6 @@ Use **code-reviewer** for general quality, **security-reviewer** for OWASP Top 1
 4. **Commit & Push** — conventional-commits format; comprehensive PR summary. This repository requires **explicit user approval** before `git commit` or `git push`.
 5. **Pre-Review Checks** — CI/CD green, no merge conflicts, branch up to date.
 
-## Project Skills
-
 ## CodeDNA
 
 CodeDNA is a source-annotation convention adapted from
@@ -503,182 +519,14 @@ AI-Message:  <one-line summary of what was found or left open>
 
 Git is the source of truth for history and verification.
 
-## RTK
-
-RTK is a token-optimized CLI proxy. Prefix shell commands with `rtk` for 60–90% token
-savings on dev operations. Full reference: `rtk --help` or `~/.claude/RTK.md`.
-
-### Rule
-
-Always prefer RTK-wrapped commands. Bypass only when raw output is required, RTK is
-unavailable, or RTK cannot run the command.
-
-### Grep is lossy by design
-
-`rtk grep` and `rtk rg` group matches by file, strip whitespace, and truncate lines.
-That is correct for surveys ("which files mention X", rough counts), but it loses
-exact `line:content`. When you need a precise line number or the full matching line
-(for example, to feed an edit), use the `Grep` tool instead.
-
-### Core Navigation
-
-```bash
-rtk ls                         # List directory contents (compact)
-rtk tree                       # Directory tree (compact)
-rtk read <file>                # Read file with intelligent filtering
-rtk smart <file>               # Generate a 2-line technical summary
-rtk find -name "*.go"          # Find files (compact tree output)
-rtk grep "pattern" path        # Compact grep - strips whitespace, groups by file
-rtk rg "pattern" path          # Ripgrep-compatible search through RTK
-rtk wc <file>                  # Compact line/word/byte counts
-```
-
-### Git Operations
-
-```bash
-rtk git status                 # Compact git status
-rtk git log --oneline -10      # Compact log (default: last 10)
-rtk git diff                   # Ultra-condensed diff (only changed lines)
-rtk diff                       # Ultra-condensed native diff wrapper
-rtk git show <commit>          # Compact commit view
-rtk git blame <file>           # Compact blame output
-rtk gt stack                   # Graphite stacked PR commands, when gt is installed
-```
-
-### Go Development
-
-```bash
-rtk go build ./...             # Go build with compact output
-rtk go test ./...              # Go test with compact output
-rtk go vet ./...               # Go vet with compact output
-rtk go mod tidy                # Go mod tidy with compact output
-rtk golangci-lint run          # Go linting with compact output
-```
-
-### JavaScript and Frontend Development
-
-```bash
-rtk npm test                   # npm run with filtered output
-rtk npx tsc --noEmit           # npx routes known tools to compact filters
-rtk pnpm test                  # pnpm with ultra-compact output
-rtk jest                       # Jest with compact output
-rtk vitest                     # Vitest with compact output
-rtk tsc --noEmit               # TypeScript compiler with grouped errors
-rtk next build                 # Next.js build with compact output
-rtk lint .                     # ESLint with grouped rule violations
-rtk prettier --check .         # Prettier format checker
-rtk format .                   # Universal format checker
-rtk playwright test            # Playwright E2E with compact output
-rtk prisma generate            # Prisma with compact output
-```
-
-### Python Development
-
-```bash
-rtk pytest -q                  # Pytest with compact output
-rtk ruff check .               # Ruff linting with compact output
-rtk ruff format --check .      # Ruff format check with compact output
-rtk mypy .                     # Type checking with grouped errors
-rtk pip list                   # Pip list with compact output
-```
-
-### Rust, Ruby, .NET, and Android
-
-```bash
-rtk cargo test                 # Cargo with compact output
-rtk rake test                  # Rake/Rails test with compact output
-rtk rubocop                    # RuboCop linter with compact output
-rtk rspec                      # RSpec test runner with compact output
-rtk dotnet test                # .NET commands with compact output
-rtk gradlew test               # Android Gradle wrapper with compact output
-```
-
-### GitHub CLI
-
-```bash
-rtk gh pr list                 # PR list with compact output
-rtk gh pr view <number>        # PR view with compact output
-rtk gh issue list              # Issue list with compact output
-rtk gh run list                # Workflow runs with compact output
-rtk glab mr list               # GitLab CLI with compact output
-```
-
-### Cloud, Containers, and Databases
-
-```bash
-rtk aws sts get-caller-identity # AWS CLI with compact JSON output
-rtk docker ps                  # Docker with compact output
-rtk kubectl get pods           # Kubectl with compact output
-rtk psql -c "select 1"         # PostgreSQL output with compact tables
-rtk curl https://example.com   # Curl with auto-JSON detection
-rtk wget <url>                 # Download with compact progress output
-```
-
-### Testing and Linting
-
-```bash
-rtk test <cmd>                 # Run tests, show only failures
-rtk err <cmd>                  # Run command, show only errors/warnings
-rtk lint <cmd>                 # ESLint with grouped rule violations
-rtk log <file-or-cmd>          # Filter and deduplicate log output
-rtk summary <cmd>              # Run command and show heuristic summary
-```
-
-### Data and Config
-
-```bash
-rtk json <file>                # Show JSON (compact values)
-rtk json --keys-only <file>    # Show JSON keys only
-rtk deps                       # Summarize project dependencies
-rtk env                        # Show environment variables (filtered, sensitive masked)
-rtk pipe                       # Read stdin, apply an RTK filter, print filtered output
-```
-
-### Meta Commands
-
-```bash
-rtk gain                       # Token savings summary
-rtk gain --history             # Command-level savings history
-rtk gain --session             # Current session savings
-rtk cc-economics               # Claude Code spending vs RTK savings analysis
-rtk config                     # Show or create RTK configuration
-rtk telemetry                  # Manage telemetry consent and data
-rtk learn                      # Learn CLI corrections from Claude Code error history
-rtk proxy <cmd>                # Run raw, but track usage
-rtk run <cmd>                  # Run raw, no filtering or tracking
-rtk discover                   # Discover missed RTK savings from Claude Code history
-rtk session                    # Show RTK adoption across Claude Code sessions
-```
-
-### Hook Integration
-
-```bash
-rtk hook claude                # Hook processors for Claude Code (rewrites Bash tool)
-rtk rewrite <cmd>              # Rewrite a raw command to its RTK equivalent
-rtk hook-audit                 # Show hook rewrite audit metrics
-rtk init                       # Initialize RTK instructions for assistant CLI usage
-rtk trust                      # Trust project-local TOML filters in current directory
-rtk untrust                    # Revoke trust for project-local TOML filters
-rtk verify                     # Verify hook integrity and TOML filter tests
-```
-
-### Options
-
-```bash
--v, --verbose        # Verbosity level (-v, -vv, -vvv)
---ultra-compact      # Ultra-compact mode: ASCII icons, inline format
---skip-env           # Set SKIP_ENV_VALIDATION=1 for child processes
-```
-
 ## Agent Style
 
 This repository uses `agent-style` `v0.3.5` from
-`https://github.com/yzhao062/agent-style` for technical prose. Full rule bodies are
-pinned in `.agent-style/RULES.md`. When asked "is agent-style active?" or "what
-writing rules apply here?", answer:
+`https://github.com/yzhao062/agent-style` for technical prose. When asked
+"is agent-style active?" or "what writing rules apply here?", answer:
 
 > agent-style v0.3.5 active: 21 rules (RULE-01..12 canonical + RULE-A..I
-> field-observed); full bodies at .agent-style/RULES.md.
+> field-observed); names listed below in this file.
 
 Apply agent-style to `.md`, `.tex`, `.rst`, `.txt`, PR descriptions, and API docs.
 Do not apply it to code comments, log output, or other machine-oriented text.
@@ -778,9 +626,8 @@ Before claiming completion, run the smallest checks that prove the change:
 |---|---|
 | `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
-| `https://github.com/ciembor/agent-rules-books` | Book-derived engineering rules |
-| `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into `AGENTS.md` |
+| `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
-| `https://github.com/yzhao062/agent-style` | Pinned prose rules in `.agent-style/` |
+| `https://github.com/yzhao062/agent-style` | Pinned `v0.3.5` prose rules |
 | `https://github.com/mdeloughry/i-have-dyslexia` | Dyslexia-friendly output formatting rules (opt-in), pinned in `.agents/dyslexia/` |
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
