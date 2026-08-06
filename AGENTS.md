@@ -153,7 +153,7 @@ exact `line:content` use the native Grep tool.
 | Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk kubectl get pods`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
 | Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env`, `rtk pipe` |
-| Meta/analytics | `rtk gain`, `rtk gain --history`, `rtk gain --session`, `rtk config`, `rtk telemetry`, `rtk learn`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Meta/analytics | `rtk gain`, `rtk gain --history`, `rtk gain --graph`, `rtk config`, `rtk telemetry`, `rtk learn`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
 | Hooks | `rtk hook claude`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk init`, `rtk trust`, `rtk untrust`, `rtk verify` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
