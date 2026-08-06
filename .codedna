@@ -42,6 +42,14 @@ agent_sessions:
     changed: [GEMINI.md, AGENTS.md, CLAUDE.md, README.md, .agents/dyslexia/i-have-dyslexia.md, .codedna]
     visited: [AGENTS.md, CLAUDE.md, GEMINI.md, README.md, .codedna, .agents/dyslexia/i-have-dyslexia.md]
     message: "Removed GEMINI.md (was load-bearing: no-Skill/Agent/hook tool map, manual CodeDNA ledger contract, rg/find search table, dyslexia opt-in pointer). Fixed 10 file-reference sites: AGENTS.md intro list, companion table, how-to-use step 2+4, do-not-symlink note, CodeGraph fallback; CLAUDE.md do-not-symlink line, search-table pointer, hook note; README.md layout row; dyslexia harness-memory list. Inlined the rg/find search table into AGENTS.md CodeGraph section so the canonical file stays self-contained. Left RTK.md 'Gemini CLI' concept mention intact (external tool, not a file pointer). Surviving adapter: CLAUDE.md. No source row was unique to GEMINI.md."
+  - agent: claude-fable-5
+    provider: anthropic
+    date: 2026-08-06
+    session_id: b1ade508-007b-4255-a1b5-0353399c8bfe
+    task: "Remove code-review@claude-plugins-official and claude-md-management@claude-plugins-official from the docs (project-scoped plugins no longer installed)"
+    changed: [AGENTS.md, .codedna]
+    visited: [AGENTS.md, CLAUDE.md, README.md, .codedna]
+    message: "Docs-only removal. Deleted both rows from the Installed Plugins table and both bullets from Plugin Boundaries in AGENTS.md. Kept the ECC code-reviewer agent reference (AGENTS.md Code Review Standards) and the superpowers-receiving/requesting-code-review skills (owned by the still-installed superpowers plugin) -- neither is a pointer to the removed plugins. No .claude/settings.json exists in the repo to edit; the plugin table is documentation of the user-level plugin cache. Plugin list now: caveman, codedna, superpowers, agent-skills."
 
 
 

@@ -184,8 +184,6 @@ the Claude Code agent surface; treat them as context for other agents.
 | `codedna@codedna` | user | Source map annotations, session ledger, `codedna` CLI |
 | `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
 | `agent-skills@addy-agent-skills` | user | Addy Osmani engineering workflow skills |
-| `code-review@claude-plugins-official` | project | Structured code review flows |
-| `claude-md-management@claude-plugins-official` | project | CLAUDE.md file operations |
 
 ### Plugin Boundaries
 
@@ -202,8 +200,6 @@ the Claude Code agent surface; treat them as context for other agents.
   `agent-skills@addy-agent-skills`. Use the Skill tool if the current surface exposes
   them; otherwise read the tracked `.agents/skills/<name>/SKILL.md` file as project
   guidance.
-- **code-review**: structured review flows for diffs and PRs.
-- **claude-md-management**: CLAUDE.md file operations and maintenance.
 
 ## Context Window Management
 
