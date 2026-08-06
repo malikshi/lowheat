@@ -14,6 +14,23 @@ duplicate its content.
 | `README.md` | Project bootstrap and layout |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
 
+### How to use this file
+
+1. Read the Operating Contract and Command Style first — they apply to every task.
+2. For a specific task, read the relevant section: Coding Style and CodeDNA for
+   source changes; Testing Requirements, Git Workflow, and Code Review Standards
+   for delivery; Agent Style for prose.
+3. Read the matching adapter: `CLAUDE.md` for Claude Code.
+4. Use RTK for shell commands per the Command Style section.
+
+### Programming-style notes
+
+Some guidance comes from the upstream Claude Code template and was
+intentionally adapted:
+
+- `AGENTS.md` remains the source of truth. `CLAUDE.md` stays as an adapter
+  rather than a symlink — each tool has different capabilities and fallbacks.
+
 ## Operating Contract
 
 This contract adapts guidance from `https://github.com/jbarbier/CLAUDE.md` (an
@@ -21,8 +38,10 @@ influence, not a live bootstrap dependency), plus Karpathy behavioral guidelines
 from `https://github.com/multica-ai/andrej-karpathy-skills`. Bias toward caution;
 use judgment on trivial tasks.
 
-- **Complete real fixes** that are in reach. Don't leave work with a workaround,
-  loose plan, or follow-up note when finishing now is safer and practical.
+- **Complete real fixes.** Don't leave work with a workaround, loose plan, or
+  follow-up note when finishing now is safer and practical. Tests passing is
+  necessary evidence, not sufficient — think through the failure modes and what
+  would break if the assumption is wrong.
 - **Search before building.** Check existing project code, standard libraries, and
   proven dependencies before creating a new abstraction or helper.
 - **Split deterministic work from reasoning work.** Use scripts, tests, formatters,
@@ -35,8 +54,11 @@ use judgment on trivial tasks.
   project guidance.
 - **Codify repeated work.** By the third time a manual flow is needed, turn it into a
   script, skill, hook, or documented workflow.
-- **Tie changes to visible evidence:** test result, config check, log line, metric,
-  diff inspection, or other concrete validation proving the claim.
+- **Verify with the smallest check that proves the change.** Tie claims to visible
+  evidence: test result, config check, log line, metric, diff inspection. Features
+  and bug fixes need deterministic tests; LLM, prompt, and ranking behavior needs
+  an eval or documented manual rubric; config and docs changes need syntax, diff,
+  link, and marker checks.
 - **Report final status honestly** as one of `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`,
   or `NEEDS_CONTEXT`, with evidence supporting the status.
 - **Think before coding** (Karpathy §1). State assumptions explicitly. If multiple
@@ -48,40 +70,11 @@ use judgment on trivial tasks.
 - **Surgical changes** (Karpathy §3). Touch only what you must. Don't "improve" adjacent
   code. Match existing style. Remove only orphans your changes created — don't touch
   pre-existing dead code. Test: every changed line traces back to the user's request.
-- **Goal-driven execution** (Karpathy §4). Define verifiable success criteria.
-  "Add validation" → "write tests with invalid inputs, then make them pass." For
-  multi-step tasks, state a brief: `1. [Step] → verify: [check]`. Strong criteria let
-  you loop independently; weak criteria ("make it work") require constant
-  clarification.
-
-### How to use this file with a new agent
-
-1. Read this file to understand the contract, CodeDNA, and the annotation protocol.
-2. Read the matching adapter: `CLAUDE.md` for Claude Code.
-3. Use RTK for shell commands per the Command Style section.
-
-### Programming-style notes
-
-Some guidance comes from the upstream Claude Code template and was
-intentionally adapted:
-
-- `AGENTS.md` remains the source of truth. `CLAUDE.md` stays as an adapter
-  rather than a symlink — each tool has different capabilities and fallbacks.
-- Automatic commit and push are **disabled**. The upstream template recommends it,
-  but this repository requires explicit approval before `git commit` or `git push`.
-
-## Behavior Contract Details
-
-- **Understand before declaring work complete.** Tests passing is necessary evidence
-  for code changes, but it isn't sufficient — think about failure modes, what would
-  break if the assumption is wrong.
-- **Use the smallest verification that proves the change.** Features and bug fixes
-  need deterministic tests where the repository has a viable test surface. LLM,
-  prompt, and ranking behavior need an eval or documented manual rubric. Config and
-  docs changes need syntax, diff, link, and marker checks.
-- **Name the outcome before broad work.** For features, identify the metric,
-  workflow step, user-visible behavior, or operational trace that should improve.
-  If you can't state it, stop and clarify the requirement.
+- **Goal-driven execution** (Karpathy §4). Name the outcome before broad work — the
+  metric, workflow step, user-visible behavior, or operational trace that should
+  improve. Define verifiable success criteria and state a brief:
+  `1. [Step] → verify: [check]`. Strong criteria let you loop independently; weak
+  criteria ("make it work") require constant clarification.
 - **Prefer boring technology.** Use standard-library features, existing project
   helpers, and established dependencies before adding new tools. Add a new
   dependency only when it is clearly better than the existing path.
@@ -186,10 +179,10 @@ Lower sensitivity tasks (single edits, docs, simple fixes) tolerate higher utili
 
 ## Coding Style (adapted from ECC)
 
-The following six sections adapt the **Everything Claude Code** rule packs
-(`https://github.com/affaan-m/ECC`) — strong defaults for agents that build
-software directly. Read them as starting posture, not universal law; relax what
-your task or agent surface does not need.
+The following sections adapt the core principles of the **Everything Claude
+Code** rule packs (`https://github.com/affaan-m/ECC`) — strong defaults for
+agents that build software directly. Read them as starting posture, not
+universal law; relax what your task or agent surface does not need.
 
 ### Immutability (CRITICAL)
 
@@ -259,15 +252,11 @@ Before any commit:
 - Validate required secrets at startup.
 - Rotate any exposed secrets.
 
-### Security Review Triggers
-
-Stop and invoke **security-reviewer** when touching: authentication or authorization code, user input, database queries, file-system operations, external API calls, cryptographic operations, payment or financial code.
-
 ### Security Response Protocol
 
 1. Stop immediately.
-2. Invoke **security-reviewer** agent.
-3. Fix CRITICAL issues before continuing.
+2. Identify the exposed secret, credential, or entry point.
+3. Fix the vulnerability before continuing.
 4. Rotate any exposed secrets.
 5. Review the codebase for similar issues.
 
@@ -289,10 +278,9 @@ Test types (all required):
 
 ### Troubleshooting Failures
 
-1. Invoke **tdd-guide** agent.
-2. Test isolation check.
-3. Verify mocks.
-4. Fix the implementation — not the tests, unless the test is wrong.
+1. Verify test isolation — each test runs independently of others.
+2. Verify mocks — mock assumptions match real behavior.
+3. Fix the implementation — not the tests, unless the test is wrong.
 
 ### Test Structure (AAA Pattern)
 
@@ -309,6 +297,22 @@ Arrange / Act / Assert. Use descriptive names explaining the behavior under test
 ```
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`. Attribution disabled globally via `~/.claude/settings.json`.
+
+### Session trailers
+
+At the end of every session that modified files, record the work in the commit.
+When you create the commit (explicit user approval required per Command Style),
+add these trailers:
+
+```
+AI-Agent:    <model-id>
+AI-Provider: <provider>
+AI-Session:  <session_id>
+AI-Visited:  <comma-separated list of files read>
+AI-Message:  <one-line summary of what was found or left open>
+```
+
+Git is the authoritative audit log; do not keep a separate ledger file.
 
 ### Pull Request Workflow
 
@@ -357,10 +361,6 @@ Before marking code complete:
 | MEDIUM   | Maintainability concern                  | INFO — consider fixing.  |
 | LOW      | Style or minor suggestion                | NOTE — optional.         |
 
-### Agents
-
-Use **code-reviewer** for general quality, **security-reviewer** for OWASP Top 10, plus per-language reviewers (`python-reviewer`, `go-reviewer`, `rust-reviewer`, `typescript-reviewer`, …).
-
 ### Approval Criteria
 
 - **Approve**: no CRITICAL or HIGH issues.
@@ -377,11 +377,11 @@ Use **code-reviewer** for general quality, **security-reviewer** for OWASP Top 1
    - Exa only when the first two are insufficient.
    - Search package registries (npm, PyPI, crates.io, …).
    - Prefer forking portable solutions over hand-rolled code.
-1. **Plan First** — invoke **planner** agent; identify dependencies and risks; break into phases.
-2. **TDD Approach** — invoke **tdd-guide** agent; RED → GREEN → IMPROVE; verify 80%+ coverage.
-3. **Code Review** — invoke **code-reviewer** agent; address CRITICAL and HIGH; fix MEDIUM when practical.
+1. **Plan First** — identify dependencies and risks; break into phases.
+2. **TDD Approach** — RED → GREEN → IMPROVE; verify 80%+ coverage.
+3. **Code Review** — self-review against the Code Review Standards checklist;
+   address CRITICAL and HIGH; fix MEDIUM when practical.
 4. **Commit & Push** — conventional-commits format; comprehensive PR summary. This repository requires **explicit user approval** before `git commit` or `git push`.
-5. **Pre-Review Checks** — CI/CD green, no merge conflicts, branch up to date.
 
 ## CodeDNA
 
@@ -502,22 +502,9 @@ new `agent:` line to the module header in the form `model-id | provider |
 YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
 5 entries; drop the oldest when adding a 6th. Full history is in git.
 
-**Session end protocol.** At the end of every session that modifies files,
-record the work in the git commit rather than a ledger file. When you create the
-commit (which requires explicit user approval per Command Style), add these
-trailers:
-
-```
-<imperative summary of changes>
-
-AI-Agent:    <model-id>
-AI-Provider: <provider>
-AI-Session:  <session_id>
-AI-Visited:  <comma-separated list of files read>
-AI-Message:  <one-line summary of what was found or left open>
-```
-
-Git is the source of truth for history and verification.
+**Session end protocol.** At the end of every session that modifies files, record
+the work in the git commit with the session trailers defined under Git Workflow;
+do not keep a separate ledger file.
 
 ## Agent Style
 
