@@ -497,22 +497,19 @@ decisions that need stronger design rules. Load only the relevant book guidance:
 
 Do not load all full book files globally.
 
-## Hooks (Claude Code)
+## CodeDNA
 
-Project hooks are defined in `.claude/settings.json`. Hook scripts live under `tools/`.
-
-| Hook | Script | Purpose |
-|---|---|---|
-| `SessionStart` | `tools/claude_hook_session_start.sh` | Session banner; reads `.codedna` module count; emits RTK reminder |
-| `PreToolUse` (Bash) | `rtk hook claude` | Rewrites raw shell commands into RTK equivalents |
-| `PreToolUse` (Write\|Edit) | `tools/claude_hook_pretooluse.sh` | Reminds agent to check CodeDNA annotations before editing source |
-| `PostToolUse` (Write\|Edit) | `tools/claude_hook_codedna.sh` | Validates CodeDNA headers after writes; emits L2 Rules: reminders |
-| `Stop` | `tools/claude_hook_stop.sh` | Blocks completion until `.codedna` has an `agent_sessions` entry when tracked or untracked project files changed |
-
-### Hook script details
-
-**`claude_hook_session_start.sh`** — emits a JSON banner with project name and module
-count so the agent reads `.codedna` before editing source files.
+- Treat `.codedna` as the repo-local source map and session ledger.
+- When tracked or untracked project files are changed, `.codedna` must include a
+  matching `agent_sessions` entry in the diff. The Stop hook blocks completion
+  otherwise.
+- Before editing source files, check the nearest CodeDNA header for module purpose,
+  exports, `used_by`, rules, and agent notes.
+- After source changes, keep CodeDNA annotations current. Add or update module
+  headers and public-function `Rules:` docstrings for behavior, constraints, and
+  edge cases that changed.
+- At session end, append an `agent_sessions` entry to `.codedna` with: `agent`,
+  `provider`, `date`, `session_id`, `task`, `changed`, `visited`, `message`.
 
 ### CodeDNA reading protocol
 
@@ -539,42 +536,7 @@ Every new Python source file **must begin** with a CodeDNA module docstring (see
 
 ### Session-start history
 
-At session start, read the last 3 `agent_sessions:` entries in `.codedna` to understand recent project history. Also emits an RTK
-reminder when `rtk` is on PATH.
-
-**`claude_hook_pretooluse.sh`** — inspects the Write/Edit payload's `file_path`. If it
-matches a source extension (`.py .ts .tsx .js .go .rs .java .kt .swift .rb .cs .php`),
-emits a reminder to read the docstring and verify CodeDNA annotations before editing.
-
-**`claude_hook_codedna.sh`** — runs `tools/validate_manifests.py` against the written
-file. Skips `__init__.py`, `conftest.py`, `.agents/skills/*`, `.claude/skills/*`,
-`.codex/*`, `migrations/`, `experiments/runs/`, `node_modules/`, `venv/`, `.venv/`.
-Emits L2 reminders for public Python functions missing `Rules:` in their docstring.
-Mode-aware: `agent` mode enforces inline `# Rules:` / `# message:` on non-trivial
-logic; `semi` mode only reminds on business-logic changes.
-
-**`claude_hook_stop.sh`** — collects changed files via `git diff --name-only HEAD`,
-`git diff --cached --name-only`, and `git ls-files --others --exclude-standard`. If
-tracked project files changed but `.codedna` has no new `session_id:` line in the diff,
-blocks completion with the list of changed files and the required `agent_sessions`
-fields. On success, prints an RTK session savings summary.
-
-## CodeDNA
-
-- Treat `.codedna` as the repo-local source map and session ledger.
-- When tracked or untracked project files are changed, `.codedna` must include a
-  matching `agent_sessions` entry in the diff. The Stop hook blocks completion
-  otherwise.
-- Before editing source files, check the nearest CodeDNA header for module purpose,
-  exports, `used_by`, rules, and agent notes.
-- After source changes, keep CodeDNA annotations current. Add or update module
-  headers and public-function `Rules:` docstrings for behavior, constraints, and
-  edge cases that changed.
-- After editing, adding, deleting, or staging Python source, run
-  `codedna init <path> --no-llm` or `codedna update <path>` on the touched path
-  before commit validation.
-- At session end, append an `agent_sessions` entry to `.codedna` with: `agent`,
-  `provider`, `date`, `session_id`, `task`, `changed`, `visited`, `message`.
+At session start, read the last 3 `agent_sessions:` entries in `.codedna` to understand recent project history.
 
 ### CodeDNA header format (Python)
 
