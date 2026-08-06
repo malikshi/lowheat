@@ -7,7 +7,7 @@ workspace contract lives in `AGENTS.md`.
 
 | Path | Purpose |
 |---|---|
-| `AGENTS.md` | Single source of truth — operating contract, Command Style, CodeDNA, agent-style, security, testing, git workflow |
+| `AGENTS.md` | Single source of truth — operating contract, Command Style, CodeDNA, security, testing, git workflow |
 | `CLAUDE.md` | Claude Code adapter: per-tool deltas only |
 | `RTK.md` | RTK command reference (root-level; installed copy: `~/.claude/RTK.md`) |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |

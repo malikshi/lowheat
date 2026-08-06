@@ -19,7 +19,7 @@ duplicate its content.
 1. Read the Operating Contract and Command Style first — they apply to every task.
 2. For a specific task, read the relevant section: Coding Style and CodeDNA for
    source changes; Testing Requirements, Git Workflow, and Code Review Standards
-   for delivery; Agent Style for prose.
+   for delivery.
 3. Read the matching adapter: `CLAUDE.md` for Claude Code.
 4. Use RTK for shell commands per the Command Style section.
 
@@ -397,7 +397,6 @@ Apply CodeDNA annotations to every source file in the project whose language
 supports comments: Python, Go, JavaScript, TypeScript, Rust, shell, and any
 other commented source language. Do not annotate documentation, plain text, or
 commentless data formats: `.md`, `.tex`, `.rst`, `.txt`, `.json`, and similar.
-Documentation and prose follow the Agent Style rules instead.
 
 ### Module header (L1)
 
@@ -506,96 +505,6 @@ YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
 the work in the git commit with the session trailers defined under Git Workflow;
 do not keep a separate ledger file.
 
-## Agent Style
-
-This repository uses `agent-style` `v0.3.5` from
-`https://github.com/yzhao062/agent-style` for technical prose. When asked
-"is agent-style active?" or "what writing rules apply here?", answer:
-
-> agent-style v0.3.5 active: 21 rules (RULE-01..12 canonical + RULE-A..I
-> field-observed); names listed below in this file.
-
-Apply agent-style to `.md`, `.tex`, `.rst`, `.txt`, PR descriptions, and API docs.
-Do not apply it to code comments, log output, or other machine-oriented text.
-
-### The 21 Rules (Names)
-
-Canonical (Strunk & White 1959, Orwell 1946, Pinker 2014, Gopen & Swan 1990):
-
-- RULE-01: Curse of knowledge.
-- RULE-02: Passive voice.
-- RULE-03: Abstract vs concrete language.
-- RULE-04: Needless words.
-- RULE-05: Dying metaphors.
-- RULE-06: Avoidable jargon.
-- RULE-07: Affirmative form.
-- RULE-08: Claim calibration.
-- RULE-09: Parallel structure.
-- RULE-10: Related words together.
-- RULE-11: Stress position.
-- RULE-12: Long sentences, varied length.
-
-Field-observed (maintainer observation of LLM output, 2022–2026):
-
-- RULE-A: Bullet-point overuse.
-- RULE-B: Em and en dashes as casual punctuation.
-- RULE-C: Consecutive same-starts.
-- RULE-D: Transition-word overuse.
-- RULE-E: Paragraph-closing summary sentences.
-- RULE-F: Inconsistent terms / abbreviation redefinition.
-- RULE-G: Sentence-case section headings.
-- **RULE-H: Handwavy claims and fabricated citations (critical).**
-- RULE-I: Contractions in formal technical prose.
-
-### Writing Defaults
-
-- Use clear, scientifically accessible language.
-- Keep meaningful technical detail and factual accuracy.
-- Preserve Markdown, LaTeX, and reStructuredText formats unless asked otherwise.
-- Do not convert prose into bullet points unless the content is a real list.
-- Prefer full forms such as `it is` and `he would` in technical prose.
-- Avoid casual em dashes and en dashes. Prefer commas, semicolons, colons, or
-  parentheses.
-- Keep terms consistent. Define an abbreviation once, then use it consistently.
-- Break long or nested sentences into shorter sentences.
-- Do not overuse transition words such as "Additionally", "Furthermore", or
-  "Moreover".
-
-### Escape Hatch
-
-> "Break any of these rules sooner than say anything outright barbarous." — George
-> Orwell, "Politics and the English Language" (1946), Rule 6. Rules are guides to
-> clarity, not ends in themselves.
-
-### Dyslexia-Friendly Output (opt-in)
-
-Dyslexia-friendly output formatting is available on request. It restructures a
-response for faster decoding: headline first, short sentences, one bold anchor per
-line, numbered processes, whitespace between ideas. It never simplifies content.
-Every fact, caveat, and technical term stays; only the shape changes.
-
-This formatting is **opt-in**. It does not change default output. Apply it only
-when the user explicitly asks with one of these triggers:
-
-- `/i-have-dyslexia` (Claude Code plugin/skill surface)
-- "dyslexia fit", "fit", "fit my dyslexia" (runs the personalization interview)
-- an explicit request to follow dyslexia formatting
-
-Precedence when active:
-
-- Dyslexia rules supersede the agent-style prose defaults above for that response
-  (for example bold-anchor-per-line overrides the bullet and transition-word
-  guidance). This is intentional and scoped to the active response only.
-- Rule 4 (never simplify the content) is absolute. Structure carries the load;
-  content is never dropped.
-- Safety carve-outs still hold: never reformat error messages, code, or logs, and
-  confirm destructive actions before formatting for brevity.
-- A `## My profile` block, if the interview wrote one, overrides individual rules.
-
-When inactive, output stays on the agent-style defaults above. Full rule bodies and
-the "dyslexia fit" interview are pinned in `.agents/dyslexia/i-have-dyslexia.md`.
-Read that file on demand; do not load it into context globally.
-
 ## Verification
 
 Before claiming completion, run the smallest checks that prove the change:
@@ -615,6 +524,4 @@ Before claiming completion, run the smallest checks that prove the change:
 | `https://github.com/obra/superpowers` | Superpowers plugin |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
-| `https://github.com/yzhao062/agent-style` | Pinned `v0.3.5` prose rules |
-| `https://github.com/mdeloughry/i-have-dyslexia` | Dyslexia-friendly output formatting rules (opt-in), pinned in `.agents/dyslexia/` |
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
