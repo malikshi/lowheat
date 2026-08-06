@@ -29,11 +29,12 @@ session picks them up:
 |---|---|---|
 | `AGENTS.md` | project root (this repo already has it) | Cross-agent source of truth — operating contract, Command Style, CodeDNA, git workflow |
 | `CLAUDE.md` | project root (this repo already has it) | Claude Code adapter: per-tool deltas, hooks, tool usage |
-| `RTK.md` | `~/.claude/RTK.md` | RTK command reference — the CLI proxy that compresses shell output |
+| `RTK.md` | `~/.claude/RTK.md` (global) or project root | RTK command reference — the CLI proxy that compresses shell output |
 
 `AGENTS.md` and `CLAUDE.md` live at the project root and are picked up
 automatically. `RTK.md` is installed globally so every project inherits the
-token-optimization rules.
+token-optimization rules, or copied to the project root to scope it to a single
+project.
 
 ### Direct download (curl)
 
@@ -51,10 +52,18 @@ curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/AGENTS.md -o 
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/CLAUDE.md -o CLAUDE.md
 ```
 
-**RTK.md** → `~/.claude/RTK.md` (global)
+**RTK.md** → two options:
+
+Global (all projects) → `~/.claude/RTK.md`
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o ~/.claude/RTK.md
+```
+
+Project-local (this project only) → `RTK.md` in the project root
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o RTK.md
 ```
 
 ### Required plugin / skill
