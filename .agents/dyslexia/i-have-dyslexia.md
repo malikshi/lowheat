@@ -121,7 +121,7 @@ The reader can say **"dyslexia fit"**, **"fit"**, **"fit my dyslexia"**, or invo
 ### Saving the profile
 
 1. **Record overrides only.** Skip answers that match the default. The block stays small. Upstream default changes still flow through.
-2. **Write** the block where it loads every session: the top of this file if the reader owns it, or the harness memory file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/...`) if the rules came from a plugin. If the agent cannot write files, print the block for the reader to paste.
+2. **Write** the block where it loads every session: the top of this file if the reader owns it, or the harness memory file (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/...`) if the rules came from a plugin. If the agent cannot write files, print the block for the reader to paste.
 3. **Format** the block like this:
 
 ```markdown

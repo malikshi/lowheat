@@ -1,7 +1,7 @@
 # Agent Instructions
 
 This repository operates as a multi-agent workspace. This file is the **cross-agent
-source of truth**. Agent-specific files (`CLAUDE.md`, `GEMINI.md`)
+source of truth**. Agent-specific files (`CLAUDE.md`)
 are adapters — they add tool-specific deltas but must not
 duplicate the tables below.
 
@@ -10,7 +10,6 @@ Read these companion surfaces when relevant:
 | File | Role |
 |---|---|
 | `CLAUDE.md` | Claude Code adapter: hook scripts, plugins, skill paths, agent-style import |
-| `GEMINI.md` | Gemini adapter: fallbacks for tools unavailable outside Claude Code |
 | `RTK.md` | Token-efficient CLI proxy command reference |
 | `.codedna` | Source map and session ledger (always read before editing source) |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
@@ -61,19 +60,18 @@ use judgment on trivial tasks.
 
 1. Read `AGENTS.md` first to understand the contract, CodeGraph, CodeDNA, and the
    hook-ledger protocol.
-2. Read the matching adapter: `CLAUDE.md` for Claude Code, `GEMINI.md` for Gemini.
+2. Read the matching adapter: `CLAUDE.md` for Claude Code.
 3. Use RTK for shell commands per the Command Style section.
 4. Use CodeGraph tools for structural code questions when available, or the
-   `rg`/`find` fallbacks named in `GEMINI.md` when not.
+   `rg`/`find` fallbacks below when not.
 
 ### Programming-style notes
 
 Some guidance comes from the upstream Claude Code template and was
 intentionally adapted:
 
-- `AGENTS.md` remains the source of truth. `CLAUDE.md`, `GEMINI.md`
-  stay as adapters rather than symlinks — each tool has different capabilities
-  and fallbacks.
+- `AGENTS.md` remains the source of truth. `CLAUDE.md` stays as an adapter
+  rather than a symlink — each tool has different capabilities and fallbacks.
 - Automatic commit and push are **disabled**. The upstream template recommends it,
   but this repository requires explicit approval before `git commit` or `git push`.
 
@@ -164,7 +162,16 @@ Rules:
 **Tool availability note.** Two MCP servers expose the `codegraph_*` family: `codegraph`
 (the direct binary) and `caveman-shrink` (an `npx` wrapper around the same binary).
 **They are equivalent** — use whichever prefix your agent surface exposes. If neither
-is available, fall back to `rg`/`find` per the Gemini search table in `GEMINI.md`.
+is available, fall back to plain search:
+
+| Task | Command |
+|---|---|
+| Find symbol definition | `rg "func FunctionName" --type go` or `rg "type StructName" --type go` |
+| Find callers | `rg "FunctionName(" --type go` |
+| Find file | `find . -name "*.go" \| xargs rg "pattern"` |
+| Check imports | `rg "import" path/to/file.go` |
+| Find Python symbol | `rg "def function_name" --type py` or `rg "class ClassName" --type py` |
+| Find Python callers | `rg "function_name(" --type py` |
 
 ## Installed Plugins (Claude Code)
 

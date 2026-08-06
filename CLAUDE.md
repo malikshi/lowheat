@@ -17,8 +17,7 @@ plus the Karpathy behavioral guidelines adopted from
 simplicity first, surgical changes, and goal-driven execution.
 
 **Do not replace this adapter with the upstream template, and do not symlink
-`AGENTS.md` and `GEMINI.md`** unless the project owner explicitly requests that
-migration.
+`AGENTS.md`** unless the project owner explicitly requests that migration.
 
 ## Material differences from AGENTS.md
 
@@ -39,7 +38,7 @@ The following entries are specific to the Claude Code surface and do not appear 
 - CodeGraph MCP tools (`codegraph_*`) are available. Two MCP servers (`codegraph`
   and `caveman-shrink`) both expose the `codegraph_*` family; they are equivalent,
   so either tool prefix is fine. When neither is available, fall back to the
-  `rg`/`find` search table in `GEMINI.md`.
+  `rg`/`find` search table in the CodeGraph section of `AGENTS.md`.
 
 ### Tools
 
@@ -77,8 +76,7 @@ Full contract is in `AGENTS.md`. This block lists the per-hook Claude runtime:
 | `PostToolUse` | `Write\|Edit` | `tools/claude_hook_codedna.sh` | Validates CodeDNA headers; emits L2 `Rules:` reminders |
 | `Stop` | — | `tools/claude_hook_stop.sh` | Blocks completion until `.codedna` has an `agent_sessions` entry when tracked or untracked project files changed; prints RTK session savings on success |
 
-These hooks are **Claude Code-specific**. `GEMINI.md` restates the
-CodeDNA session-ledger contract as a manual responsibility.
+These hooks are **Claude Code-specific**.
 
 When tracked or untracked project files are changed, update `.codedna` with an
 `agent_sessions` entry before the final response. The Stop hook blocks completion
@@ -121,36 +119,16 @@ Before claiming completion, run the smallest checks that prove the change:
 <!-- BEGIN agent-style v0.3.5 -->
 ## Agent Style
 
-This repository uses `agent-style` `v0.3.5` from
-`https://github.com/yzhao062/agent-style` for technical prose. Full rule bodies are
-pinned in `.agent-style/RULES.md` and imported via `@.agent-style/claude-code.md`
-from `AGENTS.md`. When asked "is agent-style active?" or "what writing
-rules apply here?", answer:
+Agent Style is canonical in `AGENTS.md` under `## Agent Style`. Full rule bodies are
+pinned in `.agent-style/RULES.md`; read on demand, do not load globally. When asked
+"is agent-style active?" or "what writing rules apply here?", answer:
 
 > agent-style v0.3.5 active: 21 rules (RULE-01..12 canonical + RULE-A..I
 > field-observed); full bodies at .agent-style/RULES.md.
 
-The 21 rules (RULE-01 through RULE-12 canonical + RULE-A through RULE-I
-field-observed) cover passive voice, needless words, claim calibration,
-transition-word overuse, and handwavy claims. Apply them to `.md`, `.tex`, `.rst`,
-`.txt`, PR descriptions, and API docs. Do not apply them to code comments, log
-output, or other machine-oriented text.
-
-Writing defaults for this agent surface:
-
-- Use clear, scientifically accessible language.
-- Keep meaningful technical detail and factual accuracy.
-- Preserve Markdown, LaTeX, and reStructuredText formats unless asked otherwise.
-- Do not convert prose into bullet points unless the content is a real list.
-- Prefer full forms such as `it is` and `he would` in technical prose.
-- Avoid casual em dashes and en dashes. Prefer commas, semicolons, colons, or
-  parentheses.
-- Keep terms consistent. Define an abbreviation once, then use it consistently.
-- Break long or nested sentences into shorter sentences.
-- Do not overuse transition words such as "Additionally", "Furthermore", or
-  "Moreover".
-
-Do not load `.agent-style/RULES.md` into context globally. Reference it on demand.
+This adapter adds no prose rules; it only routes to the canonical section. Apply the
+rules to `.md`, `.tex`, `.rst`, `.txt`, PR descriptions, and API docs; not to code
+comments, log output, or other machine-oriented text.
 <!-- END agent-style -->
 
 ## Dyslexia-Friendly Output (opt-in)
