@@ -470,7 +470,7 @@ Run the smallest check that proves the change before claiming completion:
 | `CLAUDE.md` | Claude Code adapter: per-tool deltas only; inherits everything else from this file |
 | `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
 | `README.md` | Project bootstrap and layout |
-| `.claude/settings.json` | Permissions, hooks, enabled plugins |
+| `.claude/settings.local.json` | Local, machine-specific Claude Code grants (untracked; user-global config lives in `~/.claude/settings.json`) |
 
 ### Installed plugins
 

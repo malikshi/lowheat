@@ -10,7 +10,7 @@ workspace contract lives in `AGENTS.md`.
 | `AGENTS.md` | Single source of truth — operating contract, Command Style, CodeDNA, security, testing, git workflow |
 | `CLAUDE.md` | Claude Code adapter: per-tool deltas only |
 | `RTK.md` | RTK command reference (root-level; installed copy: `~/.claude/RTK.md`) |
-| `.claude/settings.json` | Permissions, hooks, enabled plugins |
+| `.claude/settings.local.json` | Local Claude Code grants (untracked; user-global config lives in `~/.claude/settings.json`) |
 | `LICENSE` | Apache-2.0 |
 
 ## Bootstrapping
@@ -20,9 +20,9 @@ git clone <repo> lowheat
 cd lowheat
 ```
 
-Hooks and plugins configure themselves from `.claude/settings.json`. CodeDNA is a
-hand-applied annotation convention with no binary, validator, or ledger file — see
-the CodeDNA section in `AGENTS.md`.
+Hooks and plugins configure themselves from the user-global
+`~/.claude/settings.json`. CodeDNA is a hand-applied annotation convention with
+no binary, validator, or ledger file — see the CodeDNA section in `AGENTS.md`.
 
 ## Operating contract
 
