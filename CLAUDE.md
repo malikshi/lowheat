@@ -2,7 +2,7 @@
 
 This file is the **Claude Code adapter**. It records only Claude-specific deltas
 and must not duplicate the cross-agent contract in `AGENTS.md`. For the operating
-contract, plugins, skills, RTK, CodeGraph, source repositories, and writing rules,
+contract, plugins, skills, RTK, source repositories, and writing rules,
 read `AGENTS.md` first.
 
 This project uses Claude Code directly. It does not use external shared bootstrap
@@ -35,10 +35,6 @@ The following entries are specific to the Claude Code surface and do not appear 
   Installed Plugins sections of `AGENTS.md` for the full catalogue and boundaries.
 - Use plugin skills through the `Skill` tool surface when available; otherwise read
   the tracked `.agents/skills/<name>/SKILL.md` file for project guidance.
-- CodeGraph MCP tools (`codegraph_*`) are available. Two MCP servers (`codegraph`
-  and `caveman-shrink`) both expose the `codegraph_*` family; they are equivalent,
-  so either tool prefix is fine. When neither is available, fall back to the
-  `rg`/`find` search table in the CodeGraph section of `AGENTS.md`.
 - CodeDNA is a hand-applied annotation convention — there is no binary, validator,
   hook, or `.codedna` ledger. See the CodeDNA section of `AGENTS.md` for the
   protocol; git is the authoritative audit log.
@@ -140,10 +136,7 @@ not duplicate the rules here.
 Same table as `AGENTS.md`; this file links rather than duplicates it:
 
 - `https://github.com/rtk-ai/rtk` — RTK CLI and command reference
-- `https://github.com/JuliusBrussee/caveman` — Caveman plugin and cavecrew skills
-- `https://github.com/colbymchenry/codegraph` — CodeGraph MCP server
 - `https://github.com/obra/superpowers` — Superpowers plugin
-- `https://github.com/addyosmani/agent-skills` — Addy Osmani engineering skills
 - `https://github.com/ciembor/agent-rules-books` — Book-derived engineering rules
 - `https://github.com/jbarbier/CLAUDE.md` — Operating-contract influence
 - `https://github.com/multica-ai/andrej-karpathy-skills` — Karpathy behavioral guidelines

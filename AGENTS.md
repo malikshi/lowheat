@@ -12,7 +12,6 @@ Read these companion surfaces when relevant:
 | `CLAUDE.md` | Claude Code adapter: hook scripts, plugins, skill paths, agent-style import |
 | `RTK.md` | Token-efficient CLI proxy command reference |
 | `.claude/settings.json` | Permissions, hooks, enabled plugins |
-| `.mcp.json` or `.claude/mcp.json` | MCP server definitions (two servers expose `codegraph_*` family: `codegraph`, `caveman-shrink` — equivalent) |
 | `.agent-style/` | Pinned prose rules imported by Claude Code |
 
 ## Operating Contract
@@ -57,12 +56,10 @@ use judgment on trivial tasks.
 
 ### How to use this file with a new agent
 
-1. Read `AGENTS.md` first to understand the contract, CodeGraph, CodeDNA, and the
+1. Read `AGENTS.md` first to understand the contract, CodeDNA, and the
    annotation protocol.
 2. Read the matching adapter: `CLAUDE.md` for Claude Code.
 3. Use RTK for shell commands per the Command Style section.
-4. Use CodeGraph tools for structural code questions when available, or the
-   `rg`/`find` fallbacks below when not.
 
 ### Programming-style notes
 
@@ -133,45 +130,6 @@ intentionally adapted:
   repository rule overrides any upstream templates that suggest automatic commit and
   push behavior.
 
-## CodeGraph
-
-This project runs a CodeGraph MCP server (`codegraph_*` tools) — a tree-sitter-parsed
-knowledge graph of symbols, edges, and files. Use CodeGraph for structural questions:
-
-| Question | Tool | Notes |
-|---|---|---|
-| Where is `X` defined? | `codegraph_search` | Quick symbol → file:line lookup |
-| What calls `Y`? | `codegraph_callers` | Upstream dependency trail |
-| What does `Y` call? | `codegraph_callees` | Downstream call graph |
-| What would break if `Z` changed? | `codegraph_impact` | Breadth/depth-aware affected set |
-| Show signature + source for `Y` | `codegraph_node` | Full body, includeCode=true |
-| Show several related symbols | `codegraph_explore` | Read-equivalent; best first call for "how does this work" |
-| List indexed files | `codegraph_files` | Filter/pattern/group |
-| Check index health | `codegraph_status` | Files/nodes/edges counts |
-
-Rules:
-
-- For architecture and "how does this work" questions, start with `codegraph_explore`
-  when source bodies are needed.
-- For specific symbol lookups, start with `codegraph_search`.
-- Do not grep first for symbols or call relationships. Use grep only for literal
-  strings, log messages, comments, or when the specific file is already known.
-- If CodeGraph reports a pending sync on edited files, read the files directly.
-
-**Tool availability note.** Two MCP servers expose the `codegraph_*` family: `codegraph`
-(the direct binary) and `caveman-shrink` (an `npx` wrapper around the same binary).
-**They are equivalent** — use whichever prefix your agent surface exposes. If neither
-is available, fall back to plain search:
-
-| Task | Command |
-|---|---|
-| Find symbol definition | `rg "func FunctionName" --type go` or `rg "type StructName" --type go` |
-| Find callers | `rg "FunctionName(" --type go` |
-| Find file | `find . -name "*.go" \| xargs rg "pattern"` |
-| Check imports | `rg "import" path/to/file.go` |
-| Find Python symbol | `rg "def function_name" --type py` or `rg "class ClassName" --type py` |
-| Find Python callers | `rg "function_name(" --type py` |
-
 ## Installed Plugins (Claude Code)
 
 The following Claude Code plugins are installed and enabled. These are specific to
@@ -179,22 +137,13 @@ the Claude Code agent surface; treat them as context for other agents.
 
 | Plugin | Scope | Purpose |
 |---|---|---|
-| `caveman@caveman` | user | Compressed communication, cavecrew agents, commit/review/stats skills |
 | `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
-| `agent-skills@addy-agent-skills` | user | Addy Osmani engineering workflow skills |
 
 ### Plugin Boundaries
 
-- **Caveman**: compressed agent communication. Use when token efficiency matters and is
-  explicitly triggered. Cavecrew agents (`builder`, `investigator`, `reviewer`)
-  available via `.claude/skills/cavecrew`.
 - **Superpowers**: workflow skills for structured development. Use when the request
   matches a Superpowers skill pattern (planning, TDD, debugging, parallel work,
   verification).
-- **Agent Skills**: engineering workflow skills installed via
-  `agent-skills@addy-agent-skills`. Use the Skill tool if the current surface exposes
-  them; otherwise read the tracked `.agents/skills/<name>/SKILL.md` file as project
-  guidance.
 
 ## Context Window Management
 
@@ -417,80 +366,6 @@ Use **code-reviewer** for general quality, **security-reviewer** for OWASP Top 1
 5. **Pre-Review Checks** — CI/CD green, no merge conflicts, branch up to date.
 
 ## Project Skills
-
-### Claude Code Skills (`.claude/skills/`)
-
-Skills in `.claude/skills/` are symlinks into `.agents/skills/`:
-
-| Skill | Purpose |
-|---|---|
-| `agent-rules-books` | Book-derived architecture, refactoring, legacy-code, reliability, DDD, enterprise-pattern guidance |
-| `cavecrew` | Multi-agent crew (`builder`, `investigator`, `reviewer`) |
-| `caveman` | Core compressed communication skill |
-| `caveman-commit` | Token-efficient commit workflow |
-| `caveman-compress` | Token-efficient output compression |
-| `caveman-help` | Caveman usage reference |
-| `caveman-review` | Token-efficient review workflow |
-| `caveman-stats` | Token savings analytics |
-
-### Addy Osmani Engineering Skills (`.agents/skills/`)
-
-Installed via `agent-skills@addy-agent-skills`:
-
-- `api-and-interface-design` — API design patterns
-- `browser-testing-with-devtools` — DevTools-based browser testing
-- `ci-cd-and-automation` — CI/CD pipeline patterns
-- `code-review-and-quality` — Code review practices
-- `code-simplification` — Simplifying complex code
-- `context-engineering` — Context window optimization
-- `debugging-and-error-recovery` — Systematic debugging
-- `deprecation-and-migration` — Deprecation and migration workflows
-- `documentation-and-adrs` — Documentation and architecture decision records
-- `doubt-driven-development` — Questioning assumptions before implementing
-- `frontend-ui-engineering` — Frontend UI work
-- `git-workflow-and-versioning` — Git workflow guidance
-- `idea-refine` — Refining ideas into implementation
-- `incremental-implementation` — Step-by-step implementation
-- `interview-me` — Interview-style requirement gathering
-- `performance-optimization` — Performance profiling and optimization
-- `planning-and-task-breakdown` — Planning and task decomposition
-- `security-and-hardening` — Security review and hardening
-- `shipping-and-launch` — Release and launch workflows
-- `source-driven-development` — Working from source code
-- `spec-driven-development` — Working from specifications
-- `test-driven-development` — TDD workflow
-- `using-agent-skills` — How to discover and use agent skills
-
-### Superpowers Workflow Skills (`.agents/skills/superpowers-*`)
-
-Provided by `superpowers@claude-plugins-official`, tracked in `.agents/skills/`:
-
-- `superpowers-brainstorming` — Design exploration and implementation
-- `superpowers-dispatching-parallel-agents` — Parallel independent tasks
-- `superpowers-executing-plans` — Execute written plans with review checkpoints
-- `superpowers-finishing-a-development-branch` — Merge/PR/cleanup decisions
-- `superpowers-receiving-code-review` — Handle review feedback rigorously
-- `superpowers-requesting-code-review` — Request structured review
-- `superpowers-subagent-driven-development` — Subagent orchestration
-- `superpowers-systematic-debugging` — Root-cause analysis
-- `superpowers-test-driven-development` — TDD workflow
-- `superpowers-using-git-worktrees` — Git worktree workflows
-- `superpowers-using-superpowers` — Meta-skill
-- `superpowers-verification-before-completion` — Verify before claiming done
-- `superpowers-writing-plans` — Plan authoring
-- `superpowers-writing-skills` — Create/edit skills
-
-### Book-Derived Guidance (`.agents/skills/agent-rules-books/`)
-
-Sourced from `ciembor/agent-rules-books`. For architecture, refactoring, legacy-code,
-domain-driven (DDD), data-intensive design, enterprise patterns, or code-quality
-decisions that need stronger design rules. Load only the relevant book guidance:
-
-1. `references/mini/<rule-set>.mini.md` first
-2. `references/nano/<rule-set>.nano.md` only under tight context
-3. `references/full/<rule-set>.md` only when mini is insufficient
-
-Do not load all full book files globally.
 
 ## CodeDNA
 
@@ -902,10 +777,7 @@ Before claiming completion, run the smallest checks that prove the change:
 | Source | Purpose |
 |---|---|
 | `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
-| `https://github.com/JuliusBrussee/caveman` | Caveman plugin and cavecrew skills |
-| `https://github.com/colbymchenry/codegraph` | CodeGraph MCP server |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
-| `https://github.com/addyosmani/agent-skills` | Addy Osmani engineering skills |
 | `https://github.com/ciembor/agent-rules-books` | Book-derived engineering rules |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into `AGENTS.md` |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
