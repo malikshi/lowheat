@@ -1,135 +1,145 @@
 # Agent Instructions
 
 This repository operates as a multi-agent workspace. This file is the single,
-self-contained instruction surface. It is the **cross-agent source of truth**:
-agent adapters (such as `CLAUDE.md`) add tool-specific deltas but must not
-duplicate its content.
+self-contained instruction surface and the **cross-agent source of truth**.
+Agent adapters (such as `CLAUDE.md`) add tool-specific deltas only; they never
+duplicate this file.
 
-## Companion Surfaces
+## How to use this file
 
-| File | Role |
+Read the Operating Principles and the Work Loop once — they apply to every task.
+Then use the table to find the section you need, and follow it literally.
+
+| When you are… | Read |
 |---|---|
-| `CLAUDE.md` | Claude Code adapter: per-tool deltas only; inherits everything else from this file |
-| `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
-| `README.md` | Project bootstrap and layout |
-| `.claude/settings.json` | Permissions, hooks, enabled plugins |
+| Starting any task | Operating Principles → Work Loop |
+| Running a command | Command Style |
+| Writing or editing code | Coding Style → CodeDNA |
+| Writing a test | Testing Requirements |
+| Touching auth, secrets, user input, or data | Security Guidelines |
+| About to commit | Git Workflow (Session trailers are mandatory) |
+| Done with a change | Definition of Done → Verification |
+| Unclear, blocked, or ambiguous | Operating Principles → Confusion Protocol |
 
-### How to use this file
+Do not read the whole file into context for a small task. Load the sections that
+apply, follow them, and move on.
 
-1. Read the Operating Contract and Command Style first — they apply to every task.
-2. For a specific task, read the relevant section: Coding Style and CodeDNA for
-   source changes; Testing Requirements, Git Workflow, and Code Review Standards
-   for delivery.
-3. Read the matching adapter: `CLAUDE.md` for Claude Code.
-4. Use RTK for shell commands per the Command Style section.
-
-### Programming-style notes
-
-Some guidance comes from the upstream Claude Code template and was
-intentionally adapted:
-
-- `AGENTS.md` remains the source of truth. `CLAUDE.md` stays as an adapter
-  rather than a symlink — each tool has different capabilities and fallbacks.
-
-## Operating Contract
+## Operating Principles
 
 This contract adapts guidance from `https://github.com/jbarbier/CLAUDE.md` (an
-influence, not a live bootstrap dependency), plus Karpathy behavioral guidelines
+influence, not a live bootstrap dependency) and Karpathy behavioral guidelines
 from `https://github.com/multica-ai/andrej-karpathy-skills`. Bias toward caution;
 use judgment on trivial tasks.
 
-- **Complete real fixes.** Don't leave work with a workaround, loose plan, or
-  follow-up note when finishing now is safer and practical. Tests passing is
-  necessary evidence, not sufficient — think through the failure modes and what
-  would break if the assumption is wrong.
-- **Search before building.** Check existing project code, standard libraries, and
-  proven dependencies before creating a new abstraction or helper.
-- **Split deterministic work from reasoning work.** Use scripts, tests, formatters,
-  schema checks, targeted shell commands, repeatable facts, file lookups, parsing,
-  counting, transformations, validation.
-- **Curate context deliberately.** Load the relevant contract, CodeDNA entry, source
-  files, tests, examples. Do not dump unrelated files into context.
-- **Use skills when the task matches an installed skill.** If a repo-local skill is
-  unavailable through the current tool surface, read its tracked `SKILL.md` for
-  project guidance.
-- **Codify repeated work.** By the third time a manual flow is needed, turn it into a
-  script, skill, hook, or documented workflow.
-- **Verify with the smallest check that proves the change.** Tie claims to visible
-  evidence: test result, config check, log line, metric, diff inspection. Features
-  and bug fixes need deterministic tests; LLM, prompt, and ranking behavior needs
-  an eval or documented manual rubric; config and docs changes need syntax, diff,
-  link, and marker checks.
-- **Report final status honestly** as one of `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`,
-  or `NEEDS_CONTEXT`, with evidence supporting the status.
-- **Think before coding** (Karpathy §1). State assumptions explicitly. If multiple
-  interpretations exist, present them — don't pick silently. If a simpler approach
-  exists, say so. If unclear, stop and ask.
-- **Simplicity first** (Karpathy §2). No speculative features, no abstractions for
-  single-use code, no error handling for impossible scenarios. If 200 lines could be
-  50, rewrite. Ask: "Would a senior engineer call this overcomplicated?"
-- **Surgical changes** (Karpathy §3). Touch only what you must. Don't "improve" adjacent
-  code. Match existing style. Remove only orphans your changes created — don't touch
-  pre-existing dead code. Test: every changed line traces back to the user's request.
-- **Goal-driven execution** (Karpathy §4). Name the outcome before broad work — the
-  metric, workflow step, user-visible behavior, or operational trace that should
-  improve. Define verifiable success criteria and state a brief:
-  `1. [Step] → verify: [check]`. Strong criteria let you loop independently; weak
-  criteria ("make it work") require constant clarification.
-- **Prefer boring technology.** Use standard-library features, existing project
-  helpers, and established dependencies before adding new tools. Add a new
-  dependency only when it is clearly better than the existing path.
-- **Keep architecture parallel-friendly** without forcing a `services/` rewrite. New
-  subsystems should have clear ownership, contracts, tests, and docs. Follow the
-  current repository layout unless the task explicitly includes restructuring.
-- **Fan out independent work only when boundaries are clear.** Use isolated sessions,
-  worktrees, or subagents for independent units; coordinate through contracts and
-  avoid overlapping write sets.
-- **Apply the confusion protocol for high-stakes ambiguity.** Stop, name the
-  ambiguity, present two or three real options with trade-offs, and ask before
-  proceeding. This applies to destructive operations, contradictory requirements,
-  unclear production impact, and competing architectures.
-- **Treat background jobs and backfills as operations, not fire-and-forget tasks.**
-  For data-changing jobs, snapshot or document the rollback path first, monitor
-  progress from a deterministic state, and produce a before/after report with file
-  paths and metrics. Ask before snapshotting if data volume is large or production
-  impact is unclear.
-- **Report restart needs as changes.** If a service, bot, daemon, shell session, or
-  browser needs a restart, list the exact command for the human to run. Never run
-  `sudo` restarts yourself unless explicitly authorized.
+### Think before coding
+
+State assumptions explicitly. If multiple interpretations exist, present them —
+do not pick silently. If a simpler approach exists, say so. If unclear, stop and
+ask. Never start writing code when the requirement is vague; name the outcome
+first: the metric, workflow step, user-visible behavior, or operational trace
+that should improve. If you cannot state what "done" looks like, you are not
+ready to start.
+
+### Do the smallest thing that works
+
+- **Simplicity first.** No speculative features, no abstractions for single-use
+  code, no error handling for impossible scenarios. If 200 lines could be 50,
+  rewrite. Ask: "Would a senior engineer call this overcomplicated?"
+- **Search before building.** Check existing project code, standard libraries,
+  and proven dependencies before creating a new abstraction or helper. Prefer
+  boring technology; add a dependency only when it is clearly better than the
+  existing path.
+- **Surgical changes.** Touch only what you must. Do not "improve" adjacent
+  code. Match existing style. Remove only orphans your changes created; never
+  touch pre-existing dead code. Every changed line must trace back to the
+  request.
+
+### Verify, don't assume
+
+- **Split deterministic work from reasoning work.** Use scripts, tests,
+  formatters, schema checks, and targeted shell commands for repeatable facts:
+  file lookups, parsing, counting, transformations, validation.
+- **Tie every claim to visible evidence** — a test result, config check, log
+  line, metric, or diff inspection. Features and bug fixes need deterministic
+  tests; LLM, prompt, and ranking behavior needs an eval or documented manual
+  rubric; config and docs changes need syntax, diff, link, and marker checks.
+- **Report final status honestly** as one of `DONE`, `DONE_WITH_CONCERNS`,
+  `BLOCKED`, or `NEEDS_CONTEXT`, with the evidence that supports it.
+
+### Complete real fixes
+
+Do not leave work as a workaround, loose plan, or follow-up note when finishing
+now is safer and practical. Tests passing is necessary evidence, not sufficient:
+think through the failure modes and what would break if the assumption is wrong.
+
+### Curate context deliberately
+
+Load the relevant contract, CodeDNA entry, source files, tests, and examples.
+Do not dump unrelated files into context. Use skills when the task matches an
+installed skill; if a repo-local skill is unavailable through the current tool
+surface, read its tracked `SKILL.md` for project guidance.
+
+### Codify repeated work
+
+By the third time a manual flow is needed, turn it into a script, skill, hook,
+or documented workflow.
+
+### Confusion protocol
+
+For high-stakes ambiguity — destructive operations, contradictory requirements,
+unclear production impact, competing architectures — stop, name the ambiguity,
+present two or three real options with trade-offs, and ask before proceeding.
+
+### Operations discipline
+
+- **Background jobs and backfills are operations, not fire-and-forget.**
+  Snapshot or document the rollback path first, monitor from a deterministic
+  state, produce a before/after report with file paths and metrics. Ask before
+  snapshotting if data volume is large or production impact is unclear.
+- **Report restart needs as changes.** If a service, bot, daemon, shell
+  session, or browser needs a restart, list the exact command for the human to
+  run. Never run `sudo` restarts yourself unless explicitly authorized.
 - **Preserve safety boundaries.** Never commit secrets, destructive commands,
   production mutations, force pushes, hook bypasses, binaries, or model weights
   without explicit approval and a rollback plan.
+- **Fan out independent work only when boundaries are clear.** Use isolated
+  sessions, worktrees, or subagents for independent units; coordinate through
+  contracts and avoid overlapping write sets.
+- **Keep architecture parallel-friendly.** New subsystems have clear
+  ownership, contracts, tests, and docs. Follow the current repository layout
+  unless the task explicitly includes restructuring.
 
 ## Command Style
 
-- Wrap shell commands through **RTK**. RTK supports `git`, `go`, `pytest`, `ruff`,
-  `npm`, `cargo`, `docker`, `kubectl`, `psql`, `curl`, `ls`, `tree`, `find`, `grep`,
-  `read`, `wc`, `json`, `env`, `deps`, `log`, and many more. Run `rtk --help` to
-  confirm support before reaching for a raw command.
-- The mapping is transparent: `git status` becomes `rtk git status`, `cat file.py`
-  becomes `rtk read file.py`, `python3 -m pytest -q` becomes `rtk pytest -q`. Treat any
-  command missing from `rtk --help` as unsupported.
+- Wrap shell commands through **RTK**. RTK supports `git`, `go`, `pytest`,
+  `ruff`, `npm`, `cargo`, `docker`, `kubectl`, `psql`, `curl`, `ls`, `tree`,
+  `find`, `grep`, `read`, `wc`, `json`, `env`, `deps`, `log`, and many more.
+  Run `rtk --help` to confirm support before reaching for a raw command.
+- The mapping is transparent: `git status` becomes `rtk git status`,
+  `cat file.py` becomes `rtk read file.py`, `python3 -m pytest -q` becomes
+  `rtk pytest -q`. Treat any command missing from `rtk --help` as unsupported.
 - Fall back to raw commands only when RTK is not installed, the subcommand is
-  unsupported, or output must be machine-parsed without compression. See `RTK.md` for
-  the full command catalogue or `rtk discover` for missed-savings hints.
-- **PreToolUse is behavior, not a broken wrapper.** The PreToolUse hook rewrites a
-  raw Bash `grep` into `rtk grep`, so a raw shell `grep` returns compressed output.
-  That is expected; use the `Grep` tool instead when you need exact `line:content`
-  for an edit.
-- Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`, pass the
-  target path as an argument, or set the tool working directory.
+  unsupported, or output must be machine-parsed without compression. See
+  `RTK.md` for the full command catalogue or `rtk discover` for missed-savings
+  hints.
+- **PreToolUse is behavior, not a broken wrapper.** The PreToolUse hook
+  rewrites a raw Bash `grep` into `rtk grep`, so a raw shell `grep` returns
+  compressed output. That is expected; use the `Grep` tool instead when you
+  need exact `line:content` for an edit.
+- Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`,
+  pass the target path as an argument, or set the tool working directory.
 - **Never run `git commit` or `git push` without explicit user approval.** This
-  repository rule overrides any upstream templates that suggest automatic commit and
-  push behavior.
+  repository rule overrides any upstream templates that suggest automatic
+  commit and push behavior.
 
 ### RTK quick reference
 
 RTK is a token-optimized CLI proxy (60–90% token savings). Full catalogue:
 `RTK.md` or `~/.claude/RTK.md`, and `rtk --help`.
 
-**Grep is lossy by design.** `rtk grep` and `rtk rg` group matches by file, strip
-whitespace, and truncate lines. Correct for surveys and rough counts; for exact
-`line:content` use the native Grep tool.
+**Grep is lossy by design.** `rtk grep` and `rtk rg` group matches by file,
+strip whitespace, and truncate lines. Correct for surveys and rough counts; for
+exact `line:content` use the native Grep tool.
 
 | Area | Commands |
 |---|---|
@@ -147,148 +157,125 @@ whitespace, and truncate lines. Correct for surveys and rough counts; for exact
 | Hooks | `rtk hook claude`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk init`, `rtk trust`, `rtk untrust`, `rtk verify` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
-## Installed Plugins (Claude Code)
+## The Work Loop
 
-| Plugin | Scope | Purpose |
-|---|---|---|
-| `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
+This is the canonical way every task is delivered. It is the difference between
+a junior firing code and a senior shipping a change: each step ends with a
+verification point before the next begins.
 
-Use the Skill tool when a Superpowers skill matches the task; otherwise read the
-tracked `SKILL.md` for project guidance.
+1. **Understand.** Read the request twice. State the problem, the *why* behind
+   it, and the acceptance criteria.
+   → Verify: you can say what "done" looks like.
+2. **Read first.** Read the files you will touch, their CodeDNA headers, and
+   their tests. Never propose changes to code you have not read.
+   → Verify: you know what exists before you add anything.
+3. **Plan the smallest change.** Name the risks and the revert path. For
+   multi-step tasks, state a brief: `1. [Step] → verify: [check]`.
+   → Verify: the plan fits the request and nothing else.
+4. **Implement with TDD.** RED → GREEN → IMPROVE per Testing Requirements.
+   Work in small increments; verify each step before starting the next.
+   → Verify: the targeted tests pass, not just the suite.
+5. **Self-review the diff.** Run the Definition of Done checklist on your own
+   work before anyone else sees it.
+   → Verify: every changed line traces back to the request.
+6. **Prove it.** Run the smallest check that proves the change per the
+   Verification section.
+   → Verify: evidence exists for every claim you will make.
+7. **Report and record.** Report status honestly; if files changed, commit with
+   the session trailers under Git Workflow.
 
-## Context Window Management
+If any step fails, stop and fix the root cause — do not work around it, do not
+declare done.
 
-Avoid last 20% of context window for:
-- Large-scale refactoring
-- Feature implementation spanning multiple files
-- Debugging complex interactions
+## Engineering Standards
 
-Lower sensitivity tasks (single edits, docs, simple fixes) tolerate higher utilization.
+### Definition of Done
 
-## Workflow and Knowledge Capture
+Before any change is complete, self-review, committed, or merged, every item
+must hold:
 
-- **Workflow Surface Policy** — `skills/` is canonical. `commands/` is legacy.
-  New workflow contributions land in `skills/` first. `commands/` only for
-  migration shims or cross-harness parity.
-- **Knowledge Capture** — Put captured knowledge in the right place:
-  - Personal debugging notes, preferences, temporary context → memory
-  - Team/project knowledge (architecture decisions, API changes, runbooks) →
-    the project's existing docs structure
-  - If an existing doc already captures the information, do not duplicate it
-  - If no obvious location exists, ask before creating a new top-level file
+- [ ] Readable, well-named identifiers; no magic numbers (named constants)
+- [ ] Functions focused (<50 lines); files cohesive (<800 lines); no nesting
+  deeper than 4 levels
+- [ ] Errors handled explicitly at every level; nothing silently swallowed
+- [ ] No hardcoded secrets or credentials; user input validated at every
+  boundary
+- [ ] No leftover debug statements; no dead code introduced
+- [ ] Tests exist for new functionality; coverage meets the 80% minimum
+- [ ] The change is the smallest that satisfies the request
+- [ ] Evidence for the change exists per the Verification section
 
-## Coding Style (adapted from ECC)
+### Coding Style (adapted from ECC)
 
-The following sections adapt the core principles of the **Everything Claude
-Code** rule packs (`https://github.com/affaan-m/ECC`) — strong defaults for
-agents that build software directly. Read them as starting posture, not
+Core principles, adapted from the **Everything Claude Code** rule packs
+(`https://github.com/affaan-m/ECC`). Read them as starting posture, not
 universal law; relax what your task or agent surface does not need.
 
-### Immutability (CRITICAL)
-
-Create new objects; never mutate in place — `update(orig, field, val)` returns a new copy; `modify(...)` in-place is rejected. Immutable data prevents hidden side effects, simplifies debugging, enables safe concurrency.
-
-### Core Principles
-
 - **KISS** — simplest solution that works; clarity over cleverness.
-- **DRY** — extract repeated logic; introduce abstractions only when repetition is real.
-- **YAGNI** — no speculative features; start simple, refactor when pressure is real.
+- **DRY** — extract repeated logic; introduce abstractions only when repetition
+  is real.
+- **YAGNI** — no speculative features; start simple, refactor when pressure is
+  real.
+- **Immutability (CRITICAL)** — create new objects; never mutate in place.
+  `update(orig, field, val)` returns a new copy; `modify(...)` in-place is
+  rejected. Immutable data prevents hidden side effects, simplifies debugging,
+  and enables safe concurrency.
+- **File organization** — many small files over few large files: 200–400 lines
+  typical, 800 max, high cohesion, low coupling, organized by feature/domain,
+  not by type.
+- **Error handling** — handle errors explicitly at every level. User-facing
+  messages in UI code; detailed context server-side. Never silently swallow.
+- **Input validation** — validate at every system boundary; schema-based where
+  available; fast fail with clear messages. All external data is untrusted.
+- **Naming conventions** — variables/functions: `camelCase`; booleans:
+  `is`/`has`/`should`/`can` prefix; interfaces/types/components: `PascalCase`;
+  constants: `UPPER_SNAKE_CASE`; tests: `snake_case` describing the behavior
+  under test.
 
-### File Organization
+### Testing Requirements
 
-Many small files over few large files: 200–400 lines typical, 800 max, high cohesion, low coupling, organized by feature/domain not by type.
-
-### Error Handling
-
-Handle errors explicitly at every level. User-facing messages in UI code. Detailed context server-side. **Never** silently swallow.
-
-### Input Validation
-
-Validate at every system boundary. Schema-based where available. Fast fail with clear messages. All external data is untrusted.
-
-### Naming Conventions
-
-- Variables/functions: `camelCase` with descriptive names.
-- Booleans: `is`/`has`/`should`/`can` prefix.
-- Interfaces/types/components: `PascalCase`.
-- Constants: `UPPER_SNAKE_CASE`.
-- Tests: snake_case describing the behavior under test.
-
-### Code Smells to Avoid
-
-- **Deep nesting** — prefer early returns once conditions stack.
-- **Magic numbers** — named constants for thresholds, delays, limits.
-- **Long functions** — split at 50 lines; each piece gets one responsibility.
-
-### Quality Checklist
-
-Before marking work complete:
-- [ ] Readable, well-named identifiers.
-- [ ] Functions focused (<50 lines).
-- [ ] Files cohesive (<800 lines).
-- [ ] No deeper than 4 nesting levels.
-- [ ] Errors handled explicitly.
-- [ ] No hardcoded values; use constants or config.
-- [ ] Immutable patterns enforced.
-
-## Security Guidelines
-
-### Mandatory Security Checks
-
-Before any commit:
-- [ ] No hardcoded secrets (API keys, passwords, tokens).
-- [ ] All user inputs validated.
-- [ ] SQL injection prevention (parameterized queries).
-- [ ] XSS prevention (sanitized HTML).
-- [ ] CSRF protection enabled.
-- [ ] Authentication/authorization verified.
-- [ ] Rate limiting on appropriate surfaces.
-- [ ] Error messages do not leak sensitive data.
-
-### Secret Management
-
-- **Never** hardcode secrets.
-- Environment variables or a secret manager.
-- Validate required secrets at startup.
-- Rotate any exposed secrets.
-
-### Security Response Protocol
-
-1. Stop immediately.
-2. Identify the exposed secret, credential, or entry point.
-3. Fix the vulnerability before continuing.
-4. Rotate any exposed secrets.
-5. Review the codebase for similar issues.
-
-## Testing Requirements
-
-### Minimum Test Coverage: 80%
-
-Test types (all required):
+**Minimum coverage: 80%.** All three test types are required:
 1. **Unit tests** — individual functions, utilities, components.
 2. **Integration tests** — API endpoints, database operations.
 3. **E2E tests** — critical user flows (framework chosen per language).
 
-### Test-Driven Development (Mandatory)
-
-1. Write test first (RED) — must fail.
-2. Write minimal implementation (GREEN) — must pass.
+**Test-Driven Development (mandatory):**
+1. Write the test first (RED) — it must fail.
+2. Write the minimal implementation (GREEN) — it must pass.
 3. Refactor (IMPROVE).
 4. Verify coverage (80%+).
 
-### Troubleshooting Failures
+**Test structure:** AAA pattern — Arrange / Act / Assert — with descriptive
+names explaining the behavior under test.
 
+**When tests fail, troubleshoot in order:**
 1. Verify test isolation — each test runs independently of others.
 2. Verify mocks — mock assumptions match real behavior.
 3. Fix the implementation — not the tests, unless the test is wrong.
 
-### Test Structure (AAA Pattern)
+### Security Guidelines
 
-Arrange / Act / Assert. Use descriptive names explaining the behavior under test.
+**Mandatory checks before any commit:**
+- [ ] No hardcoded secrets (API keys, passwords, tokens)
+- [ ] All user inputs validated
+- [ ] SQL injection prevention (parameterized queries)
+- [ ] XSS prevention (sanitized HTML)
+- [ ] CSRF protection enabled
+- [ ] Authentication/authorization verified
+- [ ] Rate limiting on appropriate surfaces
+- [ ] Error messages do not leak sensitive data
+
+**Secret management:** never hardcode secrets. Use environment variables or a
+secret manager; validate required secrets at startup; rotate any exposed
+secrets.
+
+**Security response protocol:** on exposure, stop immediately. Identify the
+exposed secret, credential, or entry point. Fix the vulnerability before
+continuing. Rotate any exposed secrets. Review the codebase for similar issues.
 
 ## Git Workflow
 
-### Commit Message Format
+### Commit message format
 
 ```
 <type>: <description>
@@ -296,7 +283,8 @@ Arrange / Act / Assert. Use descriptive names explaining the behavior under test
 <optional body>
 ```
 
-Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`. Attribution disabled globally via `~/.claude/settings.json`.
+Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
+Attribution is disabled globally via `~/.claude/settings.json`.
 
 ### Session trailers
 
@@ -314,9 +302,8 @@ AI-Message:  <one-line summary of what was found or left open>
 
 Git is the authoritative audit log; do not keep a separate ledger file.
 
-### Pull Request Workflow
+### Pull requests
 
-When creating PRs:
 1. Analyze full commit history — not just the latest commit.
 2. Use `git diff [base-branch]...HEAD` to see all changes.
 3. Draft a comprehensive PR summary.
@@ -325,63 +312,22 @@ When creating PRs:
 
 ## Code Review Standards
 
-### When to Review
+Review is mandatory after writing or modifying code, before any commit to
+shared branches, when security-sensitive code changes, and before merging.
+Pre-review requirements: all automated checks (CI/CD) passing, no merge
+conflicts, branch up to date with target.
 
-Mandatory triggers:
-- After writing or modifying code.
-- Before any commit to shared branches.
-- When security-sensitive code is changed.
-- When architectural changes are made.
-- Before merging pull requests.
+**Severity levels:**
 
-Pre-review requirements:
-- All automated checks (CI/CD) passing.
-- Merge conflicts resolved.
-- Branch up to date with target branch.
+| Level | Meaning | Action |
+|---|---|---|
+| CRITICAL | Security vulnerability or data loss risk | BLOCK — must fix first |
+| HIGH | Bug or significant quality issue | WARN — should fix first |
+| MEDIUM | Maintainability concern | INFO — consider fixing |
+| LOW | Style or minor suggestion | NOTE — optional |
 
-### Review Checklist
-
-Before marking code complete:
-- [ ] Readable and well-named.
-- [ ] Functions focused (<50 lines).
-- [ ] Files cohesive (<800 lines).
-- [ ] No deep nesting (>4 levels).
-- [ ] Errors handled explicitly.
-- [ ] No hardcoded secrets or credentials.
-- [ ] No leftover debug statements.
-- [ ] Tests exist for new functionality.
-- [ ] Test coverage meets 80% minimum.
-
-### Review Severity Levels
-
-| Level    | Meaning                                  | Action                   |
-|----------|------------------------------------------|--------------------------|
-| CRITICAL | Security vulnerability or data loss risk | BLOCK — must fix first.  |
-| HIGH     | Bug or significant quality issue         | WARN — should fix first. |
-| MEDIUM   | Maintainability concern                  | INFO — consider fixing.  |
-| LOW      | Style or minor suggestion                | NOTE — optional.         |
-
-### Approval Criteria
-
-- **Approve**: no CRITICAL or HIGH issues.
-- **Warning**: only HIGH issues remain.
-- **Block**: CRITICAL issues found.
-
-## Development Workflow
-
-### Feature Implementation Workflow
-
-0. **Research & Reuse** — mandatory first:
-   - GitHub code search (`gh search repos`, `gh search code`).
-   - Library docs via Context7 or vendor sources.
-   - Exa only when the first two are insufficient.
-   - Search package registries (npm, PyPI, crates.io, …).
-   - Prefer forking portable solutions over hand-rolled code.
-1. **Plan First** — identify dependencies and risks; break into phases.
-2. **TDD Approach** — RED → GREEN → IMPROVE; verify 80%+ coverage.
-3. **Code Review** — self-review against the Code Review Standards checklist;
-   address CRITICAL and HIGH; fix MEDIUM when practical.
-4. **Commit & Push** — conventional-commits format; comprehensive PR summary. This repository requires **explicit user approval** before `git commit` or `git push`.
+**Approval criteria:** approve when no CRITICAL or HIGH issues remain; warn
+when only HIGH issues remain; block on any CRITICAL issue.
 
 ## CodeDNA
 
@@ -501,20 +447,56 @@ new `agent:` line to the module header in the form `model-id | provider |
 YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
 5 entries; drop the oldest when adding a 6th. Full history is in git.
 
-**Session end protocol.** At the end of every session that modifies files, record
-the work in the git commit with the session trailers defined under Git Workflow;
-do not keep a separate ledger file.
+**Session end protocol.** At the end of every session that modifies files,
+record the work in the git commit with the session trailers defined under Git
+Workflow; do not keep a separate ledger file.
 
 ## Verification
 
-Before claiming completion, run the smallest checks that prove the change:
+Run the smallest check that proves the change before claiming completion:
 
-- For config or docs edits, run syntax checks or targeted grep checks.
-- For Python source edits, run the relevant `rtk pytest`
-  targets.
-- For Go source edits, run `rtk go build ./...` and `rtk go vet ./...`.
-- For browser-facing work, verify with a real browser when possible.
+- For config or docs edits: syntax checks or targeted grep checks.
+- For Python source edits: the relevant `rtk pytest` targets.
+- For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
+- For browser-facing work: verify with a real browser when possible.
 - Report any check that could not run and why.
+
+## Environment
+
+### Companion surfaces
+
+| File | Role |
+|---|---|
+| `CLAUDE.md` | Claude Code adapter: per-tool deltas only; inherits everything else from this file |
+| `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
+| `README.md` | Project bootstrap and layout |
+| `.claude/settings.json` | Permissions, hooks, enabled plugins |
+
+### Installed plugins
+
+| Plugin | Scope | Purpose |
+|---|---|---|
+| `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
+
+Use the Skill tool when a Superpowers skill matches the task; otherwise read
+the tracked `SKILL.md` for project guidance.
+
+### Context window management
+
+Avoid the last 20% of the context window for large-scale refactoring, feature
+implementation spanning multiple files, and debugging complex interactions.
+Lower-sensitivity tasks (single edits, docs, simple fixes) tolerate higher
+utilization.
+
+### Knowledge capture
+
+Put captured knowledge in the right place:
+
+- Personal debugging notes, preferences, temporary context → memory
+- Team/project knowledge (architecture decisions, API changes, runbooks) → the
+  project's existing docs structure
+- If an existing doc already captures the information, do not duplicate it
+- If no obvious location exists, ask before creating a new top-level file
 
 ## Source Repositories
 
