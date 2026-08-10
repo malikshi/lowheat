@@ -37,7 +37,7 @@ in `AGENTS.md`. Everything else is inherited from that file.
 | **Grep / Glob** | Pattern and file search. Use `Grep` for exact matches; `rtk grep`/`rtk rg` is lossy by design. |
 | **Skill** | Invoke installed skills from the catalogue in `AGENTS.md`. |
 | **Agent** | Spawn sub-agents for isolated or parallel work. |
-| **WebFetch / WebSearch** | External research within ECC guidelines. |
+| **WebFetch / WebSearch** | External research, grounded in authoritative current sources per Verify, don't assume in `AGENTS.md`. |
 
 ### Hooks
 
