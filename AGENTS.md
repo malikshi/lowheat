@@ -33,18 +33,21 @@ use judgment on trivial tasks.
 
 ### Think before coding
 
-State assumptions explicitly. If multiple interpretations exist, present them —
-do not pick silently. If a simpler approach exists, say so. If unclear, stop and
-ask. Never start writing code when the requirement is vague; name the outcome
-first: the metric, workflow step, user-visible behavior, or operational trace
-that should improve. If you cannot state what "done" looks like, you are not
-ready to start.
+State assumptions explicitly and distinguish verified facts from uncertainty.
+If multiple interpretations exist, present them — do not pick silently. If a
+simpler approach exists, say so. Challenge weak assumptions candidly. Ask
+questions only when a decision is materially ambiguous, risky, or requires
+approval. Never start writing code when the requirement is vague; name the
+outcome first: the metric, workflow step, user-visible behavior, or operational
+trace that should improve. If you cannot state what "done" looks like, you are
+not ready to start.
 
 ### Do the smallest thing that works
 
 - **Simplicity first.** No speculative features, no abstractions for single-use
-  code, no error handling for impossible scenarios. If 200 lines could be 50,
-  rewrite. Ask: "Would a senior engineer call this overcomplicated?"
+  code, no error handling for impossible scenarios. Keep changes focused and
+  avoid low-signal tests. If 200 lines could be 50, rewrite. Ask: "Would a
+  senior engineer call this overcomplicated?"
 - **Search before building.** Check existing project code, standard libraries,
   and proven dependencies before creating a new abstraction or helper. Prefer
   boring technology; add a dependency only when it is clearly better than the
@@ -60,24 +63,29 @@ ready to start.
   formatters, schema checks, and targeted shell commands for repeatable facts:
   file lookups, parsing, counting, transformations, validation.
 - **Tie every claim to visible evidence** — a test result, config check, log
-  line, metric, or diff inspection. Features and bug fixes need deterministic
-  tests; LLM, prompt, and ranking behavior needs an eval or documented manual
-  rubric; config and docs changes need syntax, diff, link, and marker checks.
+  line, metric, diff inspection, or important source link. Ground research in
+  authoritative, current sources and name gaps or uncertainty. Features and bug
+  fixes need deterministic tests; LLM, prompt, and ranking behavior needs an
+  eval or documented manual rubric; config and docs changes need syntax, diff,
+  link, and marker checks.
 - **Report final status honestly** as one of `DONE`, `DONE_WITH_CONCERNS`,
   `BLOCKED`, or `NEEDS_CONTEXT`, with the evidence that supports it.
 
 ### Complete real fixes
 
-Do not leave work as a workaround, loose plan, or follow-up note when finishing
-now is safer and practical. Tests passing is necessary evidence, not sufficient:
-think through the failure modes and what would break if the assumption is wrong.
+Preserve the user's original goal and constraints. Do not leave work as a
+workaround, loose plan, or follow-up note when finishing now is safer and
+practical. Tests passing is necessary evidence, not sufficient: verify the
+actual result before claiming completion, and think through the failure modes
+and what would break if the assumption is wrong.
 
 ### Curate context deliberately
 
 Load the relevant contract, CodeDNA entry, source files, tests, and examples.
 Do not dump unrelated files into context. Use skills when the task matches an
-installed skill; if a repo-local skill is unavailable through the current tool
-surface, read its tracked `SKILL.md` for project guidance.
+installed skill; when explaining something to the user, use the Visualize skill
+when it is available and relevant. If a repo-local skill is unavailable through
+the current tool surface, read its tracked `SKILL.md` for project guidance.
 
 ### Codify repeated work
 
@@ -99,12 +107,14 @@ present two or three real options with trade-offs, and ask before proceeding.
 - **Report restart needs as changes.** If a service, bot, daemon, shell
   session, or browser needs a restart, list the exact command for the human to
   run. Never run `sudo` restarts yourself unless explicitly authorized.
-- **Preserve safety boundaries.** Never commit secrets, destructive commands,
-  production mutations, force pushes, hook bypasses, binaries, or model weights
-  without explicit approval and a rollback plan.
+- **Preserve safety boundaries.** Preserve unrelated work. Never commit
+  secrets, destructive commands, production mutations, force pushes, hook
+  bypasses, binaries, or model weights without explicit approval and a rollback
+  plan.
 - **Fan out independent work only when boundaries are clear.** Use isolated
-  sessions, worktrees, or subagents for independent units; coordinate through
-  contracts and avoid overlapping write sets.
+  sessions, worktrees, or subagents only for genuinely independent units;
+  coordinate through contracts, avoid overlapping write sets, and synthesize
+  findings before reporting.
 - **Keep architecture parallel-friendly.** New subsystems have clear
   ownership, contracts, tests, and docs. Follow the current repository layout
   unless the task explicitly includes restructuring.
@@ -458,8 +468,10 @@ Run the smallest check that proves the change before claiming completion:
 - For config or docs edits: syntax checks or targeted grep checks.
 - For Python source edits: the relevant `rtk pytest` targets.
 - For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
-- For browser-facing work: verify with a real browser when possible.
-- Report any check that could not run and why.
+- For browser-facing or user-facing work: test observable behavior and verify
+  with the real interface when possible.
+- Report any check that could not run and why. Report meaningful blockers,
+  outcomes, and evidence without noisy progress narration.
 
 ## Environment
 
