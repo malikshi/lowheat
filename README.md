@@ -9,7 +9,8 @@ workspace contract lives in `AGENTS.md`.
 |---|---|
 | `AGENTS.md` | Single source of truth — operating contract, Command Style, CodeDNA, security, testing, git workflow |
 | `RTK.md` | RTK command reference (root-level; installed copy: `~/.claude/RTK.md`) |
-| `LICENSE` | Apache-2.0 |
+| `.agents/skills/agents-contract/` | Repo-local skill encoding the AGENTS.md contract as executable steps |
+| `LICENSE` | MIT |
 
 ## Bootstrapping
 
@@ -20,17 +21,19 @@ cd lowheat
 
 ## Installation
 
-Two files power the contract. Copy them into your environment so every agent
-session picks them up:
+Two files plus a repo-local skill power the contract. Copy them into your
+environment so every agent session picks them up:
 
 | File | Copy to | Purpose |
 |---|---|---|
 | `AGENTS.md` | project root (this repo already has it) | Cross-agent source of truth — operating contract, Command Style, CodeDNA, git workflow |
 | `RTK.md` | `~/.claude/RTK.md` (global) or project root | RTK command reference — the CLI proxy that compresses shell output |
+| `.agents/skills/agents-contract/` | project root (this repo already has it) | Repo-local skill encoding the AGENTS.md contract as executable steps |
 
-`AGENTS.md` lives at the project root and is picked up automatically. `RTK.md`
-is installed globally so every project inherits the token-optimization rules, or
-copied to the project root to scope it to a single project.
+`AGENTS.md` and the `.agents/skills/` skill directory live at the project root
+and are picked up automatically. `RTK.md` is installed globally so every
+project inherits the token-optimization rules, or copied to the project root to
+scope it to a single project.
 
 ### Direct download (curl)
 
