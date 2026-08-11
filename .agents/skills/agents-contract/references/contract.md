@@ -3,6 +3,19 @@
 The full cross-agent contract. Read the section relevant to your step; the
 SKILL.md body points at this file by anchor.
 
+| When you are… | Read |
+|---|---|
+| Starting any task | Operating Principles → Work Loop |
+| Running a command | Command Style |
+| Writing or editing code | Coding Style → CodeDNA |
+| Writing a test | Testing Requirements |
+| Touching auth, secrets, user input, or data | Security Guidelines |
+| About to commit | Git Workflow (Session trailers are mandatory) |
+| Reviewing or merging code | Code Review Standards |
+| Changing docs or config | Verification |
+| Done with a change | Definition of Done → Verification |
+| Unclear, blocked, or ambiguous | Operating Principles → Confusion Protocol |
+
 ## Operating Principles
 
 This contract adapts guidance from `jbarbier/CLAUDE.md` and Karpathy behavioral
@@ -65,7 +78,8 @@ judgment on trivial tasks.
     coordinate through contracts, avoid overlapping write sets, and synthesize
     findings before reporting.
   - Keep architecture parallel-friendly. New subsystems have clear ownership,
-    contracts, tests, and docs.
+    contracts, tests, and docs. Follow the current repository layout unless
+    the task explicitly includes restructuring.
 
 ## Command Style
 

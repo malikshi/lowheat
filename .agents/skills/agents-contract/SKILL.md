@@ -1,15 +1,15 @@
 ---
 name: agents-contract
-description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Definition of Done, CodeDNA annotations, testing/security standards, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, committing changes, or following the cross-agent contract.
+description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Definition of Done, CodeDNA annotations, testing/security standards, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, committing changes, wrapping shell commands through RTK, or following the cross-agent contract.
 ---
 
 # Agents Contract — Operating Contract Execution
 
 This skill executes the repository's cross-agent operating contract defined in
-`AGENTS.md`. It encodes the Work Loop, engineering standards, CodeDNA protocol,
-and git workflow as executable steps. The full contract text lives in
-`references/contract.md`; the RTK command catalogue lives in
-`references/commands.md`. Read them when the steps below need detail.
+`AGENTS.md`. It encodes the Operating Principles, the Work Loop, engineering
+standards, CodeDNA protocol, and git workflow as executable steps. The full
+contract text lives in `references/contract.md`; the RTK command catalogue
+lives in `references/commands.md`. Read them when the steps below need detail.
 
 ## 1. Start a task — the Work Loop
 
