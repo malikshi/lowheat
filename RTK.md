@@ -326,7 +326,5 @@ rtk untrust          # Revoke trust for project-local TOML filters
 rtk verify           # Verify hook integrity and TOML filter tests
 ```
 
-> `rtk init` targets **Claude Code by default** and has no `--command-code` flag
-> in installed `rtk 0.44.2`; Command Code integration is done manually via
-> `AGENTS.md` + this file. `--agent` values: claude, cursor, windsurf, cline,
-> kilocode, antigravity, kimi, pi, hermes, droid.
+> `rtk init` targets **Claude Code by default**. `--agent` values: claude, cursor,
+> windsurf, cline, kilocode, antigravity, kimi, pi, hermes, droid.
