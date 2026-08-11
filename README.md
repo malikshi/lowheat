@@ -8,9 +8,7 @@ workspace contract lives in `AGENTS.md`.
 | Path | Purpose |
 |---|---|
 | `AGENTS.md` | Single source of truth — operating contract, Command Style, CodeDNA, security, testing, git workflow |
-| `CLAUDE.md` | Claude Code adapter: per-tool deltas only |
 | `RTK.md` | RTK command reference (root-level; installed copy: `~/.claude/RTK.md`) |
-| `.claude/settings.local.json` | Local Claude Code grants (untracked; user-global config lives in `~/.claude/settings.json`) |
 | `LICENSE` | Apache-2.0 |
 
 ## Bootstrapping
@@ -22,19 +20,17 @@ cd lowheat
 
 ## Installation
 
-Three files power the contract. Copy them into your environment so every agent
+Two files power the contract. Copy them into your environment so every agent
 session picks them up:
 
 | File | Copy to | Purpose |
 |---|---|---|
 | `AGENTS.md` | project root (this repo already has it) | Cross-agent source of truth — operating contract, Command Style, CodeDNA, git workflow |
-| `CLAUDE.md` | project root (this repo already has it) | Claude Code adapter: per-tool deltas, hooks, tool usage |
 | `RTK.md` | `~/.claude/RTK.md` (global) or project root | RTK command reference — the CLI proxy that compresses shell output |
 
-`AGENTS.md` and `CLAUDE.md` live at the project root and are picked up
-automatically. `RTK.md` is installed globally so every project inherits the
-token-optimization rules, or copied to the project root to scope it to a single
-project.
+`AGENTS.md` lives at the project root and is picked up automatically. `RTK.md`
+is installed globally so every project inherits the token-optimization rules, or
+copied to the project root to scope it to a single project.
 
 ### Direct download (curl)
 
@@ -44,12 +40,6 @@ Prefer cloning (above) for the full repo; to pull individual files without git:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/AGENTS.md -o AGENTS.md
-```
-
-**CLAUDE.md** → project root
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/CLAUDE.md -o CLAUDE.md
 ```
 
 **RTK.md** → two options:
@@ -74,7 +64,7 @@ The contract references one plugin for workflow skills:
 claude plugin install superpowers@claude-plugins-official
 ```
 
-`superpowers` provides the workflow skills referenced in `AGENTS.md` — TDD,
+`superpowers` (source: [`github.com/obra/superpowers`](https://github.com/obra/superpowers)) provides the workflow skills referenced in `AGENTS.md` — TDD,
 planning, debugging, parallel work, and verification. Verify it's active:
 
 ```bash

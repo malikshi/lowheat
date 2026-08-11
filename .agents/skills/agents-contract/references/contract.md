@@ -348,16 +348,13 @@ Run the smallest check that proves the change before claiming completion:
 
 | File | Role |
 |---|---|
-| `CLAUDE.md` | Claude Code adapter: per-tool deltas only; inherits everything else from this file |
 | `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
-| `README.md` | Project bootstrap and layout |
-| `.claude/settings.local.json` | Local, machine-specific Claude Code grants (untracked; user-global config lives in `~/.claude/settings.json`) |
 
-### Installed plugins
+### Installed plugins / skills
 
-| Plugin | Scope | Purpose |
+| Plugin / skill | Source | Purpose |
 |---|---|---|
-| `superpowers@claude-plugins-official` | user | Workflow skills (TDD, planning, debugging, parallel, verification) |
+| `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
 
 Use the Skill tool when a Superpowers skill matches the task; otherwise read
 the tracked `SKILL.md` for project guidance.
