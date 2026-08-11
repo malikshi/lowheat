@@ -16,6 +16,8 @@ Then use the table to find the section you need, and follow it literally.
 | Writing a test | Testing Requirements |
 | Touching auth, secrets, user input, or data | Security Guidelines |
 | About to commit | Git Workflow (Session trailers are mandatory) |
+| Reviewing or merging code | Code Review Standards |
+| Changing docs or config | Verification |
 | Done with a change | Definition of Done → Verification |
 | Unclear, blocked, or ambiguous | Operating Principles → Confusion Protocol |
 
