@@ -81,9 +81,10 @@ and what would break if the assumption is wrong.
 
 Load the relevant contract, CodeDNA entry, source files, tests, and examples.
 Do not dump unrelated files into context. Use skills when the task matches an
-installed skill; when explaining something to the user, use the Visualize skill
-when it is available and relevant. If a repo-local skill is unavailable through
-the current tool surface, read its tracked `SKILL.md` for project guidance.
+installed skill. When explaining something to the user, visualize it — prefer
+diagrams, tables, or code blocks over prose where that aids understanding.
+If a repo-local skill is unavailable through the current tool surface, read its
+tracked `SKILL.md` for project guidance.
 
 ### Codify repeated work
 
