@@ -393,7 +393,7 @@ Run the smallest check that proves the change before claiming completion:
 
 | File | Role |
 |---|---|
-| `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
+| `RTK.md` | Token-efficient CLI proxy command reference |
 
 ### Installed plugins / skills
 

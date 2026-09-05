@@ -1,7 +1,7 @@
 # RTK Command Catalogue
 
 RTK is a token-optimized CLI proxy (60–90% token savings). Full reference:
-`RTK.md` in the repo root or `~/.claude/RTK.md`, and `rtk --help`.
+`RTK.md` in the repo root, and `rtk --help`.
 
 ## When to wrap and when to run raw
 

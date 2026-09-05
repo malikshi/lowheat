@@ -146,7 +146,7 @@ present two or three real options with trade-offs, and ask before proceeding.
 ### RTK quick reference
 
 RTK is a token-optimized CLI proxy (60–90% token savings). Full catalogue:
-`RTK.md` or `~/.claude/RTK.md`, and `rtk --help`.
+`RTK.md` and `rtk --help`.
 
 **Grep is lossy by design.** `rtk grep` and `rtk rg` group matches by file,
 strip whitespace, and truncate lines. Correct for surveys and rough counts; for
@@ -480,7 +480,7 @@ Run the smallest check that proves the change before claiming completion:
 
 | File | Role |
 |---|---|
-| `RTK.md` | Token-efficient CLI proxy command reference (installed copy: `~/.claude/RTK.md`) |
+| `RTK.md` | Token-efficient CLI proxy command reference |
 
 ### Installed plugins / skills
 

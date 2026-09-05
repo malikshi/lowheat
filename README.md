@@ -8,7 +8,7 @@ workspace contract lives in `AGENTS.md`.
 | Path | Purpose |
 |---|---|
 | `AGENTS.md` | Single source of truth — operating contract, Command Style, CodeDNA, security, testing, git workflow |
-| `RTK.md` | RTK command reference (root-level; installed copy: `~/.claude/RTK.md`) |
+| `RTK.md` | RTK command reference (root-level) |
 | `.agents/skills/agents-contract/` | Repo-local skill encoding the AGENTS.md contract as executable steps |
 | `LICENSE` | MIT |
 
@@ -27,13 +27,12 @@ environment so every agent session picks them up:
 | File | Copy to | Purpose |
 |---|---|---|
 | `AGENTS.md` | project root (this repo already has it) | Cross-agent source of truth — operating contract, Command Style, CodeDNA, git workflow |
-| `RTK.md` | `~/.claude/RTK.md` (global) or project root | RTK command reference — the CLI proxy that compresses shell output |
+| `RTK.md` | project root (this repo already has it) | RTK command reference — the CLI proxy that compresses shell output |
 | `.agents/skills/agents-contract/` | project root (this repo already has it) | Repo-local skill encoding the AGENTS.md contract as executable steps |
 
 `AGENTS.md` and the `.agents/skills/` skill directory live at the project root
-and are picked up automatically. `RTK.md` is installed globally so every
-project inherits the token-optimization rules, or copied to the project root to
-scope it to a single project.
+and are picked up automatically. `RTK.md` sits at the project root so this
+project inherits the token-optimization rules.
 
 ### Direct download (curl)
 
@@ -45,15 +44,7 @@ Prefer cloning (above) for the full repo; to pull individual files without git:
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/AGENTS.md -o AGENTS.md
 ```
 
-**RTK.md** → two options:
-
-Global (all projects) → `~/.claude/RTK.md`
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o ~/.claude/RTK.md
-```
-
-Project-local (this project only) → `RTK.md` in the project root
+**RTK.md** → project root
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o RTK.md

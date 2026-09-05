@@ -1,7 +1,7 @@
 # RTK — Rust Token Killer
 
 Token-optimized CLI proxy. Prefix shell commands with `rtk` for 60-90% token
-savings on dev operations. Full reference: `rtk --help` or `~/.claude/RTK.md`.
+savings on dev operations. Full reference: `rtk --help`.
 
 ## The one rule: compress noise, preserve signal
 
