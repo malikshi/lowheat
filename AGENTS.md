@@ -517,3 +517,5 @@ Put captured knowledge in the right place:
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
+
+@RTK.md

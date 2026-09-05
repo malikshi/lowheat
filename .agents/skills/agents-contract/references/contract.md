@@ -81,6 +81,36 @@ judgment on trivial tasks.
     contracts, tests, and docs. Follow the current repository layout unless
     the task explicitly includes restructuring.
 
+## The Work Loop
+
+This is the canonical way every task is delivered. It is the difference between
+a junior firing code and a senior shipping a change: each step ends with a
+verification point before the next begins.
+
+1. **Understand.** Read the request twice. State the problem, the *why* behind
+   it, and the acceptance criteria.
+   → Verify: you can say what "done" looks like.
+2. **Read first.** Read the files you will touch, their CodeDNA headers, and
+   their tests. Never propose changes to code you have not read.
+   → Verify: you know what exists before you add anything.
+3. **Plan the smallest change.** Name the risks and the revert path. For
+   multi-step tasks, state a brief: `1. [Step] → verify: [check]`.
+   → Verify: the plan fits the request and nothing else.
+4. **Implement with TDD.** RED → GREEN → IMPROVE per Testing Requirements.
+   Work in small increments; verify each step before starting the next.
+   → Verify: the targeted tests pass, not just the suite.
+5. **Self-review the diff.** Run the Definition of Done checklist on your own
+   work before anyone else sees it.
+   → Verify: every changed line traces back to the request.
+6. **Prove it.** Run the smallest check that proves the change per the
+   Verification section.
+   → Verify: evidence exists for every claim you will make.
+7. **Report and record.** Report status honestly; if files changed, commit with
+   the session trailers under Git Workflow.
+
+If any step fails, stop and fix the root cause — do not work around it, do not
+declare done.
+
 ## Command Style
 
 - Wrap shell commands through **RTK** (`git status` → `rtk git status`, `cat
