@@ -128,6 +128,8 @@ rtk golangci-lint run          # Go linting with compact output
 rtk npm test                   # npm run with filtered output
 rtk npx tsc --noEmit           # npx routes known tools to compact filters
 rtk pnpm test                  # pnpm with ultra-compact output
+rtk bun test                   # Bun runtime with compact output
+rtk bunx                       # bunx passthrough + auto-filter
 rtk jest                       # Jest with compact output
 rtk vitest                     # Vitest with compact output
 rtk tsc --noEmit               # TypeScript compiler with grouped errors
@@ -137,6 +139,7 @@ rtk prettier --check .         # Prettier format checker
 rtk format .                   # Universal format checker
 rtk playwright test            # Playwright E2E with compact output
 rtk prisma generate            # Prisma with compact output
+rtk ctest                      # CTest with compact output
 ```
 
 ### Python Development
@@ -148,6 +151,7 @@ rtk ruff format --check .      # Ruff format check with compact output
 rtk mypy .                     # Type checking with grouped errors
 rtk pip list                   # Pip list with compact output (auto-detects uv)
 rtk uv run <cmd>               # uv run with compact output (preserves uv-managed env)
+rtk deno test                  # Deno runtime with compact output
 ```
 
 ### Rust, Ruby, .NET, And Android
@@ -161,6 +165,7 @@ rtk dotnet test                # .NET commands with compact output
 rtk gradlew test               # Android Gradle wrapper with compact output
 rtk sbt test                   # SBT (Scala Build Tool) with compact output
 rtk mvn test                   # Maven with compact output (test, package, deploy…)
+rtk mvnd test                  # Maven Daemon (mvnd) with compact output — same filters as rtk mvn
 ```
 
 ### PHP Development
@@ -169,6 +174,7 @@ rtk mvn test                   # Maven with compact output (test, package, deplo
 rtk php artisan list           # PHP runner with compact artisan/syntax output
 rtk phpunit                    # PHPUnit test runner with compact output
 rtk phpstan analyze            # PHPStan analyzer with compact output
+rtk phpt                       # PHP run-tests.php (.phpt) with compact output
 rtk pest                       # Pest test runner with compact output
 rtk paratest                   # ParaTest parallel test runner with compact output
 rtk ecs                        # EasyCodingStandard code style fixer with compact output
