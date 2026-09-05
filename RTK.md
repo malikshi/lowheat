@@ -3,86 +3,104 @@
 Token-optimized CLI proxy. Prefix shell commands with `rtk` for 60-90% token
 savings on dev operations. Full reference: `rtk --help`.
 
-## The one rule: compress noise, preserve signal
+## The one rule: decide by intent, never by size
 
 RTK compresses **shell command output** before it enters the context window.
 Used well it cuts tokens on noisy commands *and* sharpens context (less noise →
-better reasoning). Used badly — compressing output you actually needed — it hides
-detail and forces re-runs that cost *more* than they save.
+better reasoning). Used badly — compressing output you actually needed — it
+hides detail and forces re-runs that cost *more* than they save.
 
-Wrapping *everything* is counterproductive. A diff you need to apply, JSON you
-need to parse, a streaming log that RTK buffers to a hang — these cost more
-tokens in re-runs than they save. The skill is knowing **when** to wrap:
+You cannot know an output's size before the command runs, so **size is never a
+decision input**. Pick the mode once, *before* running, based only on what you
+will do with the output:
 
-- 🟢 **Compress freely** — large, noisy, low-stakes output you only skim:
-  `rtk ls`, `rtk git status`, `rtk git log`, `rtk docker ps`, `rtk pip list`,
-  and big test/build runs (`rtk cargo test`, or `rtk err <cmd>` — RTK keeps
-  the failures and drops the green).
-- 🟡 **Default mode only** — worth compressing because it's big, but you need
-  the failures: use plain `rtk` (which keeps errors/diffs), never
-  `--ultra-compact`/aggressive.
-- 🔴 **Keep full fidelity** — run raw; compression risks dropping what you need.
+| You will… | Mode | Why |
+|---|---|---|
+| Skim for signal — status, logs, listings, test/build runs | `rtk <cmd>` | compresses noise, keeps errors, diffs, and exit codes |
+| Apply or parse exact output — a diff/patch, JSON, CSV, `--format` | **raw** | compression corrupts structure and exact bytes |
+| Read or search a file with line numbers | **native Read/Grep tools** | lossless; never shell for this |
+| Follow output that grows — `tail -f`, watch, live logs | **raw** | RTK buffers, so it can hang |
+| Judge pass/fail | `rtk <cmd>` | RTK preserves exit codes and, on failure, its tee fallback keeps full output; if a verdict is ever unclear, confirm raw or with `rtk proxy <cmd>` |
+
+That is the whole decision: **wrap what you skim, keep exact what you need
+exact.** One command, one mode, chosen up front — no measuring, no double run.
+
+### Lossy modes are opt-in
 
 Plain `rtk <cmd>` keeps the signal — errors, diffs, stack traces, exit codes —
 and strips only noise. `--ultra-compact`, `rtk read … -l aggressive`, and
-`rtk smart` (2-line summary) are **lossy** — opt-in only for skimming something
-huge and unimportant, never your default.
+`rtk smart` (2-line summary) are **lossy**: they discard detail on purpose.
+Reach for them only to skim something huge and unimportant, never as a default.
 
 > **`-u` doesn't work.** RTK's own README still lists a `-u` short form for
 > `--ultra-compact`; it was removed upstream and using it fails outright. Use the
 > long flag.
 
-### 🔴 Keep full fidelity — run raw (no `rtk`)
+### The fallback is one-way
 
-| Situation | Do this | Why |
-|---|---|---|
-| A diff/patch you'll apply | `git diff`, `git show` **raw** | exact bytes and line numbers matter |
-| Output you'll parse (JSON, `--format`) | run raw; use `rtk json file` only to *explore* structure | compression can corrupt structure |
-| Small output (≲30 lines) | run raw | nothing to save, real risk |
-| Secrets / credentials / exact config | run raw | never reason about a lossy view |
-| A file you'll **edit** | native Read tool | lossless + line numbers; bypasses RTK anyway |
-| You need everything, just this once | `rtk proxy <cmd>` | passthrough + still tracks savings |
+If a wrapped view hid something you needed, re-run **raw once** — that pair is
+a net loss, so note the command type and stop wrapping it (`rtk discover`
+surfaces exactly this). The reverse — raw first, then wrapping — is never
+worth it: raw output is exact, so there is nothing left to recover.
 
-When unsure, start raw. Lean context comes from cutting *noise*, not *signal*.
+## Fidelity zones (mnemonic)
 
-### Harness safety — don't let it break the tool call
+- 🟢 **Wrap freely** — noisy, low-stakes output you'll only skim: `rtk ls`,
+  `rtk git status`, `rtk git log`, `rtk docker ps`, `rtk pip list`, and big
+  test/build runs (`rtk cargo test`, `rtk err <cmd>`, `rtk pytest`).
+- 🔴 **Run raw** — exact bytes, line numbers, or structure matter:
+  - A diff/patch you'll apply (`git diff`, `git show` raw)
+  - Output you'll parse or redirect (JSON, `--format`) — use `rtk json file`
+    only to *explore* structure
+  - Secrets / credentials / exact config
+  - Streaming/follow output (`-f`, `tail -f`, a growing log)
+  - Any command you'll feed into a pipe or file for later use
+- ⚪ **Native tools first** — for reading and searching files, use the
+  harness's own Read/Grep/Glob tools instead of `rtk read/grep/find`: lossless,
+  line numbers, and they bypass RTK entirely. Reserve `rtk` for shell commands.
 
-- **Don't wrap streaming/follow output** (`-f`, `tail -f`, a growing log): RTK
-  buffers output to filter it, so it can hang the command. Run these raw.
-- **When a pass/fail verdict matters** (tests, CI gates), trust the command's raw
-  exit code. If you can't tell whether the `rtk` view preserved it, re-run raw or
-  use `rtk proxy <cmd>`.
-- **Piped output** → RTK can substitute its compressed summary for the real
-  content on a non-TTY pipe (e.g. a redirected `grep` writing a line-count
+## Harness notes — works with or without hooks
+
+RTK ships hook processors for Claude Code, Codex, Copilot, Gemini, OpenCode,
+Cursor, and others (`rtk init --agent <name>`). The rules above hold either
+way; hooks only change *who* applies them:
+
+- **With hooks installed**, a raw shell command may be rewritten to its `rtk`
+  form and come back compressed — that is expected, not a broken wrapper. When
+  you need exact `line:content` anyway, use the native Grep tool; hooks don't
+  touch it.
+- **Without hooks**, apply the intent rule yourself: wrap for skim, stay raw
+  for exact.
+- **Piped output is unsafe to compress**: RTK can substitute a compressed
+  summary on a non-TTY pipe (e.g. a redirected `grep` writing a line-count
   summary instead of the matches — RTK
   [#1282](https://github.com/rtk-ai/rtk/issues/1282), a correctness bug). Run
   anything you'll parse or redirect raw. RTK has also emitted ANSI codes into
   piped output before (RTK
   [#1409](https://github.com/rtk-ai/rtk/issues/1409), fixed) — set `NO_COLOR=1`
   defensively if escape codes leak through.
-- **Prefer the native file/search tools** over `rtk ls/grep/find/read` — they're
-  lossless, give line numbers, and don't pass through RTK anyway.
-
-## When to use RTK
-
-- **Prefer RTK-wrapped commands** by default for noisy, low-stakes output.
-- **Bypass RTK** when raw output is required, RTK is unavailable, or RTK cannot
-  run the command.
-- Use the command names exposed by `rtk --help` and the compatibility forms
-  validated in this file.
-- If a command is listed below, call it through RTK first. If a command is not
-  listed, use `rtk proxy <cmd>` when you want raw output tracked for savings, or
-  `rtk run <cmd>` when you need completely raw execution with no filtering or
-  tracking.
+- **Failures are never lost**: when a command fails, RTK's tee fallback saves
+  the full output to a log, so error detail survives compression on the cases
+  that matter.
 
 ### Grep is lossy by design
 
 `rtk grep` and `rtk rg` group matches by file, strip whitespace, and truncate
 lines. That is correct for surveys ("which files mention X", rough counts), but
 it loses exact `line:content`. When you need a precise line number or the full
-matching line (for example, to feed an edit), use the Grep tool instead. The
-PreToolUse hook rewrites a raw Bash `grep` into `rtk grep`, so a raw shell grep
-also returns the compressed form; that is expected, not a broken wrapper.
+matching line (for example, to feed an edit), use the native Grep tool — it
+bypasses RTK entirely.
+
+## When to use RTK — quick rules
+
+- **Wrap by default** for output you'll only read for signal.
+- **Skip RTK** when you'll apply, parse, redirect, or edit from the output, or
+  when RTK is unavailable — fall back to raw without ceremony.
+- Prefer the forms listed under Commands; for anything unlisted, plain
+  `rtk <cmd>` still filters. Use `rtk proxy <cmd>` to run raw while tracking
+  savings, or `rtk run <cmd>` for fully raw execution with no tracking.
+- Check `rtk --help` when in doubt; treat commands missing from it as
+  unsupported and run them raw.
 
 ## Commands
 
@@ -106,7 +124,7 @@ rtk diff                       # Ultra-condensed diff (only changed lines)
 ```bash
 rtk git status                 # Compact git status
 rtk git log --oneline -10      # Compact log (default: last 10)
-rtk git diff                   # Ultra-condensed diff (only changed lines)
+rtk git diff                   # Skim a review diff (raw for applying/parsing)
 rtk git show <commit>          # Compact commit view
 rtk git blame <file>           # Compact blame output
 rtk gt stack                   # Graphite stacked PR commands, when gt is installed
@@ -264,9 +282,7 @@ in context. Optimize for net.
 - **High `--history` savings on noisy commands** → working as intended; keep
   going.
 - **Low or zero savings on a command** (visible in `--history`, or surfaced by
-  `rtk discover`) → it's a poor fit; run it raw and stop wrapping it. And when a
-  command *fails*, RTK's tee fallback has already saved the full output — so you
-  never lose error detail on the cases that matter.
+  `rtk discover`) → it's a poor fit; run it raw and stop wrapping it.
 - **You re-ran a command raw right after its `rtk` version** → that pair was a
   net *loss*. Note the command type and stop compressing it.
 - **`rtk discover`** surfaces high-volume, noisy commands worth wrapping — a far
@@ -283,10 +299,16 @@ rtk go test ./... -run TestName -v
 rtk pytest -q -k test_name
 ```
 
-### Review changes before commit
+### Review changes before commit (skim → wrap)
 ```bash
 rtk git diff
 rtk git diff --cached
+```
+
+### Apply or export a diff (exact → raw)
+```bash
+git diff > change.patch        # raw: bytes must be exact
+git apply change.patch
 ```
 
 ### Search for a symbol or pattern
@@ -294,6 +316,7 @@ rtk git diff --cached
 rtk grep "func HandleRequest" --type go
 rtk grep "TODO|FIXME" --type go
 rtk rg "func HandleRequest" --type go
+# Need exact line:content for an edit? Use the native Grep tool instead.
 ```
 
 ### Check project health

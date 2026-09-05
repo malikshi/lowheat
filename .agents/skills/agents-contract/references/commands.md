@@ -5,21 +5,37 @@ RTK is a token-optimized CLI proxy (60–90% token savings). Full reference:
 
 ## When to wrap and when to run raw
 
-- 🟢 **Compress freely** — large, noisy, low-stakes output you only skim:
-  `rtk ls`, `rtk git status`, `rtk git log`, `rtk docker ps`, `rtk pip list`,
-  and big test/build runs (`rtk test <cmd>`, `rtk err <cmd>` — RTK keeps the
-  failures and drops the green).
-- 🟡 **Plain `rtk <cmd>` only** (never `--ultra-compact`) — big output where
-  errors, diffs, and exit codes still matter; plain mode keeps them.
-- 🔴 **Run raw** — diffs/patch output you'll apply, output you'll parse or
-  redirect (JSON, `--format`), small output (≲30 lines), secrets/credentials,
-  streaming logs (`tail -f`, growing files — RTK buffers and can hang).
-- When unsure, start raw. `rtk proxy <cmd>` runs raw but tracks savings;
-  `rtk run <cmd>` runs raw with no filtering or tracking.
-- `--ultra-compact`, `rtk read -l aggressive`, and `rtk smart` are **lossy** —
-  opt in only for skimming something huge and unimportant.
-- **`-u` doesn't work.** The short form of `--ultra-compact` was removed
-  upstream; use the long flag.
+Decide by intent, never by size — you cannot know an output's size before
+running, so never measure. Pick the mode once, up front:
+
+- 🟢 **Wrap by default** — output you'll only skim for signal (status, logs,
+  listings, test/build runs): plain `rtk <cmd>` compresses noise and keeps
+  errors, diffs, and exit codes. Never `--ultra-compact` on output where
+  failures matter.
+- 🔴 **Run raw** — you'll apply, parse, redirect, or need exact bytes/line
+  numbers: diffs you'll apply (`git diff`, `git show`), JSON/`--format` to
+  parse (use `rtk json file` only to explore structure), secrets/credentials,
+  streaming output (`tail -f`, growing logs — RTK buffers and can hang).
+- ⚪ **Native tools first** — for reading and searching files, use the
+  harness's own Read/Grep/Glob tools: lossless, line numbers, bypass RTK.
+
+The fallback is one-way: if a wrapped view hid something you needed, re-run
+raw once — that pair is a net loss, so stop wrapping that command. The reverse
+(raw then wrap) is never worth it. `rtk proxy <cmd>` runs raw but tracks
+savings; `rtk run <cmd>` runs raw with no filtering or tracking.
+
+Hooks (`rtk init --agent`: Claude Code, Codex, Copilot, Gemini, OpenCode,
+Cursor, …) may rewrite raw shell commands to their `rtk` form and compress the
+output — expected, not a broken wrapper. Piped/non-TTY output is unsafe to
+compress (RTK #1282): run anything you'll parse or redirect raw, and set
+`NO_COLOR=1` defensively if ANSI codes leak (#1409). On failure RTK's tee
+fallback keeps the full output.
+
+`--ultra-compact`, `rtk read -l aggressive`, and `rtk smart` are **lossy** —
+opt in only for skimming something huge and unimportant.
+
+**`-u` doesn't work.** The short form of `--ultra-compact` was removed
+upstream; use the long flag.
 
 **Grep is lossy by design.** `rtk grep` and `rtk rg` group matches by file,
 strip whitespace, and truncate lines. Correct for surveys and rough counts; for

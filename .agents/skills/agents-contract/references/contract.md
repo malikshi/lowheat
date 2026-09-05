@@ -116,9 +116,11 @@ declare done.
 - Wrap shell commands through **RTK** (`git status` → `rtk git status`, `cat
   file.py` → `rtk read file.py`, `python3 -m pytest -q` → `rtk pytest -q`).
   Run `rtk --help` to confirm support before reaching for a raw command; treat
-  any command missing from `rtk --help` as unsupported. Fall back to raw
-  commands only when RTK is not installed, the subcommand is unsupported, or
-  output must be machine-parsed without compression.
+  any command missing from `rtk --help` as unsupported. Decide by intent, never
+  by size: wrap by default; run raw only when you need exact bytes or
+  parseable structure (diffs you'll apply, JSON to parse, streaming output);
+  fall back to raw whenever RTK is not installed or the subcommand is
+  unsupported.
 - **PreToolUse is behavior, not a broken wrapper.** The hook rewrites a raw
   Bash `grep` into `rtk grep`, so a raw shell `grep` returns compressed
   output. That is expected; use the `Grep` tool when you need exact
@@ -129,9 +131,11 @@ declare done.
   repository rule overrides any upstream templates that suggest automatic
   commit and push behavior.
 - **RTK quick reference:** full catalogue in `commands.md`; `rtk --help` for
-  live options. `rtk grep`/`rtk rg` is lossy by design — group matches by
-  file, strip whitespace, truncate lines — correct for surveys and rough
-  counts, not exact `line:content`.
+  live options. Prefer the native Read/Grep tools over `rtk read/grep/find`
+  for file access. If a wrapped view hid something you needed, re-run raw once
+  and stop wrapping that command. `rtk grep`/`rtk rg` is lossy by design —
+  group matches by file, strip whitespace, truncate lines — correct for
+  surveys and rough counts, not exact `line:content`.
 
 ## Engineering Standards
 

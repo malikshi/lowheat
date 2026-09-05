@@ -129,10 +129,14 @@ present two or three real options with trade-offs, and ask before proceeding.
 - The mapping is transparent: `git status` becomes `rtk git status`,
   `cat file.py` becomes `rtk read file.py`, `python3 -m pytest -q` becomes
   `rtk pytest -q`. Treat any command missing from `rtk --help` as unsupported.
-- Fall back to raw commands only when RTK is not installed, the subcommand is
-  unsupported, or output must be machine-parsed without compression. See
-  `RTK.md` for the full command catalogue or `rtk discover` for missed-savings
-  hints.
+- Decide by intent, never by size: wrap by default (`rtk <cmd>` compresses
+  noise, keeps errors and exit codes), run raw only when you need exact bytes,
+  line numbers, or parseable structure (diffs to apply, JSON to parse,
+  streaming output), and prefer the native Read/Grep tools for file access. If
+  a wrapped view hid something you needed, re-run raw once and stop wrapping
+  that command. Fall back to raw whenever RTK is not installed or the
+  subcommand is unsupported. See `RTK.md` for the full command catalogue or
+  `rtk discover` for missed-savings hints.
 - **PreToolUse is behavior, not a broken wrapper.** The PreToolUse hook
   rewrites a raw Bash `grep` into `rtk grep`, so a raw shell `grep` returns
   compressed output. That is expected; use the `Grep` tool instead when you
@@ -165,8 +169,8 @@ exact `line:content` use the native Grep tool.
 | Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk kubectl get pods`, `rtk oc get pods`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
 | Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env`, `rtk pipe` |
-| Meta/analytics | `rtk gain`, `rtk gain --history`, `rtk gain --graph`, `rtk cc-economics`, `rtk config`, `rtk telemetry`, `rtk learn`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
-| Hooks | `rtk hook claude`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk init`, `rtk trust`, `rtk untrust`, `rtk verify` |
+| Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk telemetry`, `rtk learn`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Hooks | `rtk init` (default Claude Code; `--codex`, `--copilot`, `--gemini`, `--opencode`, `--agent cursor`), `rtk hook claude`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk trust`, `rtk untrust`, `rtk verify` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
 ## The Work Loop
