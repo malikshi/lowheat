@@ -32,10 +32,10 @@ exact `line:content` use the native Grep tool.
 | Core navigation | `rtk ls`, `rtk tree`, `rtk read <file>`, `rtk smart <file>`, `rtk find -name "*.go"`, `rtk grep "p" path`, `rtk rg "p" path`, `rtk wc <file>`, `rtk diff` |
 | Git | `rtk git status`, `rtk git log --oneline -10`, `rtk git diff`, `rtk git show <commit>`, `rtk git blame <file>`, `rtk gt stack` |
 | Go | `rtk go build ./...`, `rtk go test ./...`, `rtk go vet ./...`, `rtk go mod tidy`, `rtk golangci-lint run` |
-| JS/frontend | `rtk npm test`, `rtk npx tsc --noEmit`, `rtk pnpm test`, `rtk jest`, `rtk vitest`, `rtk tsc --noEmit`, `rtk next build`, `rtk lint .`, `rtk prettier --check .`, `rtk format .`, `rtk playwright test`, `rtk prisma generate` |
-| Python | `rtk pytest -q`, `rtk ruff check .`, `rtk ruff format --check .`, `rtk mypy .`, `rtk pip list`, `rtk uv run <cmd>` |
-| Rust/Ruby/.NET/Android | `rtk cargo test`, `rtk rake test`, `rtk rubocop`, `rtk rspec`, `rtk dotnet test`, `rtk gradlew test`, `rtk sbt test`, `rtk mvn test` |
-| PHP | `rtk php artisan list`, `rtk phpunit`, `rtk phpstan analyze`, `rtk pest`, `rtk paratest`, `rtk ecs`, `rtk pint` |
+| JS/frontend | `rtk npm test`, `rtk npx tsc --noEmit`, `rtk pnpm test`, `rtk bun test`, `rtk bunx`, `rtk jest`, `rtk vitest`, `rtk tsc --noEmit`, `rtk next build`, `rtk lint .`, `rtk prettier --check .`, `rtk format .`, `rtk playwright test`, `rtk prisma generate`, `rtk ctest` |
+| Python | `rtk pytest -q`, `rtk ruff check .`, `rtk ruff format --check .`, `rtk mypy .`, `rtk pip list`, `rtk uv run <cmd>`, `rtk deno test` |
+| Rust/Ruby/.NET/Android | `rtk cargo test`, `rtk rake test`, `rtk rubocop`, `rtk rspec`, `rtk dotnet test`, `rtk gradlew test`, `rtk sbt test`, `rtk mvn test`, `rtk mvnd test` |
+| PHP | `rtk php artisan list`, `rtk phpunit`, `rtk phpstan analyze`, `rtk phpt`, `rtk pest`, `rtk paratest`, `rtk ecs`, `rtk pint` |
 | GitHub | `rtk gh pr list`, `rtk gh pr view <number>`, `rtk gh issue list`, `rtk gh run list`, `rtk glab mr list` |
 | Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk kubectl get pods`, `rtk oc get pods`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
 | Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
