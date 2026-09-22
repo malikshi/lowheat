@@ -113,29 +113,15 @@ declare done.
 
 ## Command Style
 
-- Wrap shell commands through **RTK** (`git status` → `rtk git status`, `cat
-  file.py` → `rtk read file.py`, `python3 -m pytest -q` → `rtk pytest -q`).
-  Run `rtk --help` to confirm support before reaching for a raw command; treat
-  any command missing from `rtk --help` as unsupported. Decide by intent, never
-  by size: wrap by default; run raw only when you need exact bytes or
-  parseable structure (diffs you'll apply, JSON to parse, streaming output);
-  fall back to raw whenever RTK is not installed or the subcommand is
-  unsupported.
-- **PreToolUse is behavior, not a broken wrapper.** The hook rewrites a raw
-  Bash `grep` into `rtk grep`, so a raw shell `grep` returns compressed
-  output. That is expected; use the `Grep` tool when you need exact
+- Run shell commands directly (`git status`, `cat file.py`,
+  `python3 -m pytest -q`).
+- Prefer the native Read/Grep tools for file access when you need exact
   `line:content` for an edit.
 - Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`,
   pass the target path as an argument, or set the tool working directory.
 - **Never run `git commit` or `git push` without explicit user approval.** This
   repository rule overrides any upstream templates that suggest automatic
   commit and push behavior.
-- **RTK quick reference:** full catalogue in `commands.md`; `rtk --help` for
-  live options. Prefer the native Read/Grep tools over `rtk read/grep/find`
-  for file access. If a wrapped view hid something you needed, re-run raw once
-  and stop wrapping that command. `rtk grep`/`rtk rg` is lossy by design —
-  group matches by file, strip whitespace, truncate lines — correct for
-  surveys and rough counts, not exact `line:content`.
 
 ## Engineering Standards
 
@@ -384,20 +370,14 @@ Workflow; do not keep a separate ledger file.
 Run the smallest check that proves the change before claiming completion:
 
 - For config or docs edits: syntax checks or targeted grep checks.
-- For Python source edits: the relevant `rtk pytest` targets.
-- For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
+- For Python source edits: the relevant `pytest` targets.
+- For Go source edits: `go build ./...` and `go vet ./...`.
 - For browser-facing or user-facing work: test observable behavior and verify
   with the real interface when possible.
 - Report any check that could not run and why. Report meaningful blockers,
   outcomes, and evidence without noisy progress narration.
 
 ## Environment
-
-### Companion surfaces
-
-| File | Role |
-|---|---|
-| `RTK.md` | Token-efficient CLI proxy command reference |
 
 ### Installed plugins / skills
 
@@ -429,7 +409,6 @@ Put captured knowledge in the right place:
 
 | Source | Purpose |
 |---|---|
-| `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |

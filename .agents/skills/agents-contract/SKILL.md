@@ -1,6 +1,6 @@
 ---
 name: agents-contract
-description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Definition of Done, CodeDNA annotations, testing/security standards, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, committing changes, wrapping shell commands through RTK, or following the cross-agent contract.
+description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Definition of Done, CodeDNA annotations, testing/security standards, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, committing changes, or following the cross-agent contract.
 ---
 
 # Agents Contract — Operating Contract Execution
@@ -8,8 +8,7 @@ description: Execute tasks using the repository's operating contract from AGENTS
 This skill executes the repository's cross-agent operating contract defined in
 `AGENTS.md`. It encodes the Operating Principles, the Work Loop, engineering
 standards, CodeDNA protocol, and git workflow as executable steps. The full
-contract text lives in `references/contract.md`; the RTK command catalogue
-lives in `references/commands.md`. Read them when the steps below need detail.
+contract text lives in `references/contract.md`. Read it when the steps below need detail.
 
 ## 1. Start a task — the Work Loop
 
@@ -112,8 +111,8 @@ line and keep only the last 5 entries.
 Run the smallest check that proves the change before claiming completion:
 
 - Config/docs edits: syntax checks or targeted grep checks.
-- Python: the relevant `rtk pytest` targets.
-- Go: `rtk go build ./...` and `rtk go vet ./...`.
+- Python: the relevant `pytest` targets.
+- Go: `go build ./...` and `go vet ./...`.
 - Browser/user-facing work: test observable behavior, verify with the real
   interface when possible.
 - Report any check that could not run and why. Report final status honestly as
@@ -130,6 +129,6 @@ Task: "add a `get_config()` helper to src/config.py".
    verify: header + Rules present.`
 4. **Implement with TDD** — test first (RED), minimal impl (GREEN), refactor.
 5. **Self-review** — run the DoD checklist (size, errors, secrets, coverage).
-6. **Prove it** — `rtk pytest src/config_test.py`.
+6. **Prove it** — `pytest src/config_test.py`.
 7. **Report and record** — status + commit with session trailers (approval
    first).
