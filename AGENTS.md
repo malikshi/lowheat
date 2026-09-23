@@ -11,6 +11,7 @@ Then use the table to find the section you need, and follow it literally.
 | When you are… | Read |
 |---|---|
 | Starting any task | Operating Principles → Work Loop |
+| Sizing a task | Operating Principles → Task sizing |
 | Running a command | Command Style |
 | Writing or editing code | Coding Style → CodeDNA |
 | Writing a test | Testing Requirements |
@@ -27,9 +28,32 @@ apply, follow them, and move on.
 ## Operating Principles
 
 This contract adapts guidance from `https://github.com/jbarbier/CLAUDE.md` (an
-influence, not a live bootstrap dependency) and Karpathy behavioral guidelines
-from `https://github.com/multica-ai/andrej-karpathy-skills`. Bias toward caution;
-use judgment on trivial tasks.
+influence, not a live bootstrap dependency), Karpathy behavioral guidelines
+from `https://github.com/multica-ai/andrej-karpathy-skills`, and ECC rule packs
+from `https://github.com/affaan-m/ECC`. Bias toward caution; use judgment on
+trivial tasks.
+
+### Task sizing
+
+Scale the ceremony to the change, and say the call out loud. State the size in
+one line when starting any non-trivial task; a wrong mode is only correctable
+if the choice is visible.
+
+- **small** — typo, copy change, styling value, config tweak, rename, any
+  one-or-two-file mechanical edit with no behavior change. Solo. Run only the
+  checks that cover what was touched. A non-behavioral change needs no new
+  test.
+- **medium** — localized behavior change or bug fix inside one module. Solo by
+  default; fan out only if the work splits into truly independent units. Run
+  the touched module's tests. Bug fixes ship the regression test.
+- **large** — new feature, cross-module or contract change, architecture work,
+  anything judgment-heavy (design, approach, UX). Full protocol: plan first,
+  full test + eval suites for every module touched, consider fan-out.
+
+When torn between two sizes, pick the smaller one and say so. Escalate the
+moment the change turns out bigger than triaged, and print the updated call
+with what changed it. The final report restates what was actually run so the
+triage call can be judged after the fact.
 
 ### Think before coding
 
@@ -39,10 +63,16 @@ simpler approach exists, say so. Challenge weak assumptions candidly. Ask
 questions only when a decision is materially ambiguous, risky, or requires
 approval. Never start writing code when the requirement is vague; name the
 outcome first: the metric, workflow step, user-visible behavior, or operational
-trace that should improve. If you cannot state what "done" looks like, you are
-not ready to start.
+trace that should improve. "It works" is not an outcome — if you cannot state
+what gets measurably better and how you will see it, that is a Confusion
+Protocol stop. If you cannot state what "done" looks like, you are not ready
+to start.
 
 ### Do the smallest thing that works
+
+The smallest change that **fully** works. Completeness is the floor;
+minimalism is the ceiling. Never compress by lowering the bar, and never pad
+by gold-plating.
 
 - **Simplicity first.** No speculative features, no abstractions for single-use
   code, no error handling for impossible scenarios. Keep changes focused and
@@ -53,21 +83,30 @@ not ready to start.
   boring technology; add a dependency only when it is clearly better than the
   existing path.
 - **Surgical changes.** Touch only what you must. Do not "improve" adjacent
-  code. Match existing style. Remove only orphans your changes created; never
-  touch pre-existing dead code. Every changed line must trace back to the
-  request.
+  code. Match existing style. Remove only orphans your changes created; if you
+  notice pre-existing dead code, mention it — do not delete it. Every changed
+  line must trace back to the request.
 
 ### Verify, don't assume
 
-- **Split deterministic work from reasoning work.** Use scripts, tests,
-  formatters, schema checks, and targeted shell commands for repeatable facts:
-  file lookups, parsing, counting, transformations, validation.
+- **Split deterministic work from reasoning work.** If the same question asked
+  twice would produce the same correct answer by definition, it is
+  deterministic work — do it with scripts, tests, formatters, schema checks,
+  and targeted shell commands for repeatable facts: file lookups, parsing,
+  counting, transformations, validation. If you catch yourself doing
+  arithmetic, date math, or structured parsing inside a reasoning step, stop
+  and script it.
 - **Tie every claim to visible evidence** — a test result, config check, log
   line, metric, diff inspection, or important source link. Ground research in
   authoritative, current sources and name gaps or uncertainty. Features and bug
   fixes need deterministic tests; LLM, prompt, and ranking behavior needs an
   eval or documented manual rubric; config and docs changes need syntax, diff,
   link, and marker checks.
+- **Verify every example you ship.** Anything a reader will copy and run — a
+  command, a prompt, a number, a link — gets checked by you before it ships.
+  Run it, rather than reasoning about it. Anything you could not verify is
+  stated as unverified, with what would settle it. Never launder an unchecked
+  claim into confident prose.
 - **Report final status honestly** as one of `DONE`, `DONE_WITH_CONCERNS`,
   `BLOCKED`, or `NEEDS_CONTEXT`, with the evidence that supports it.
 
@@ -116,6 +155,11 @@ present two or three real options with trade-offs, and ask before proceeding.
   sessions, worktrees, or subagents only for genuinely independent units;
   coordinate through contracts, avoid overlapping write sets, and synthesize
   findings before reporting.
+- **Delegation completion contract.** Your final message is the deliverable.
+  If you delegate, you own collection: wait for results, integrate them, then
+  report. Never end a turn while spawned work is still running — a spawned
+  task is not a completed task, and fire-and-forget delegation orphans its
+  results. Decompose only when the work cannot fit in one context.
 - **Keep architecture parallel-friendly.** New subsystems have clear
   ownership, contracts, tests, and docs. Follow the current repository layout
   unless the task explicitly includes restructuring.
@@ -170,8 +214,8 @@ Before any change is complete, self-review, committed, or merged, every item
 must hold:
 
 - [ ] Readable, well-named identifiers; no magic numbers (named constants)
-- [ ] Functions focused (<50 lines); files cohesive (<800 lines); no nesting
-  deeper than 4 levels
+- [ ] Functions focused (<50 lines); files cohesive (800-line soft ceiling);
+  no nesting deeper than 4 levels
 - [ ] Errors handled explicitly at every level; nothing silently swallowed
 - [ ] No hardcoded secrets or credentials; user input validated at every
   boundary
@@ -196,16 +240,20 @@ universal law; relax what your task or agent surface does not need.
   rejected. Immutable data prevents hidden side effects, simplifies debugging,
   and enables safe concurrency.
 - **File organization** — many small files over few large files: 200–400 lines
-  typical, 800 max, high cohesion, low coupling, organized by feature/domain,
-  not by type.
+  typical, 800-line soft ceiling, high cohesion, low coupling, organized by
+  feature/domain, not by type. Test, generated, and vendored files may exceed
+  the ceiling when their size is justified by their role.
 - **Error handling** — handle errors explicitly at every level. User-facing
   messages in UI code; detailed context server-side. Never silently swallow.
 - **Input validation** — validate at every system boundary; schema-based where
   available; fast fail with clear messages. All external data is untrusted.
-- **Naming conventions** — variables/functions: `camelCase`; booleans:
-  `is`/`has`/`should`/`can` prefix; interfaces/types/components: `PascalCase`;
-  constants: `UPPER_SNAKE_CASE`; tests: `snake_case` describing the behavior
-  under test.
+- **Naming conventions** — language-independent rule first: names say what the
+  thing holds or does, without a comment. Where the language or framework has
+  an idiom (Go, Rust, Python casing; framework prefixes), the idiom wins over
+  the defaults below. Defaults where no idiom applies: variables/functions
+  `camelCase`; booleans `is`/`has`/`should`/`can` prefix;
+  interfaces/types/components `PascalCase`; constants `UPPER_SNAKE_CASE`;
+  tests `snake_case` describing the behavior under test.
 
 ### Testing Requirements
 
@@ -213,6 +261,15 @@ universal law; relax what your task or agent surface does not need.
 1. **Unit tests** — individual functions, utilities, components.
 2. **Integration tests** — API endpoints, database operations.
 3. **E2E tests** — critical user flows (framework chosen per language).
+
+**Two test lanes, different budgets.** What you *write* follows the rules
+below; what you *run* is scoped by Task sizing — the full suite is for large
+and contract changes, the touched module's tests for everything else.
+- **Gate tests** — deterministic, local, fast. Run on every change; never
+  flaky.
+- **Periodic evals** — paid or slow, quality-measuring (LLM, ranking, or
+  long-running suites). Run before ship and on a schedule; allowed to be
+  non-deterministic but must have a pass threshold.
 
 **Test-Driven Development (mandatory):**
 1. Write the test first (RED) — it must fail.
@@ -247,6 +304,11 @@ secrets.
 **Security response protocol:** on exposure, stop immediately. Identify the
 exposed secret, credential, or entry point. Fix the vulnerability before
 continuing. Rotate any exposed secrets. Review the codebase for similar issues.
+
+**STOP triggers — route to a security review before proceeding** when the
+change touches: authentication or authorization, user input handling, database
+queries, file system operations, external API calls, cryptographic operations,
+or payment/financial code.
 
 ## Git Workflow
 
@@ -298,7 +360,7 @@ conflicts, branch up to date with target.
 |---|---|---|
 | CRITICAL | Security vulnerability or data loss risk | BLOCK — must fix first |
 | HIGH | Bug or significant quality issue | WARN — should fix first |
-| MEDIUM | Maintainability concern | INFO — consider fixing |
+| MEDIUM | Maintainability concern, including an unexplained source file over the soft 800-line ceiling | INFO — consider fixing |
 | LOW | Style or minor suggestion | NOTE — optional |
 
 **Approval criteria:** approve when no CRITICAL or HIGH issues remain; warn
@@ -451,10 +513,13 @@ the tracked `SKILL.md` for project guidance.
 
 ### Context window management
 
-Avoid the last 20% of the context window for large-scale refactoring, feature
-implementation spanning multiple files, and debugging complex interactions.
-Lower-sensitivity tasks (single edits, docs, simple fixes) tolerate higher
-utilization.
+The context window is your main control surface over the model. Treat it as a
+deliberate input: load the relevant contract section, files, and examples;
+leave the noise out. Avoid the last 20% of the context window for large-scale
+refactoring, feature implementation spanning multiple files, and debugging
+complex interactions. Lower-sensitivity tasks (single edits, docs, simple
+fixes) tolerate higher utilization. When a task goes sideways, the first
+question is what was in the window, rather than assuming the model failed.
 
 ### Knowledge capture
 

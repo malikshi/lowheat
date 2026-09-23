@@ -42,18 +42,30 @@ it and do not declare done.
 
 Apply on every task, not just code changes:
 
+- **Task sizing.** Scale ceremony to the change and say the call out loud:
+  **small** (mechanical, no behavior change — solo, touched checks only, no
+  new test), **medium** (localized behavior change — solo, touched module's
+  tests, regression test for fixes), **large** (feature, cross-module, or
+  judgment-heavy — full protocol, full suites, consider fan-out). When torn,
+  pick the smaller and say so; escalate with an updated call if the change
+  outgrows the triage.
 - **Think before coding.** State assumptions; distinguish verified facts from
   uncertainty. If multiple interpretations exist, present them — do not pick
   silently. Name what "done" looks like (metric, workflow step, user-visible
-  behavior) before writing code.
-- **Smallest thing that works.** No speculative features or single-use
-  abstractions. Search existing code, stdlib, and proven deps before building;
-  prefer boring technology. Surgical changes only: match existing style, touch
-  only what the request requires, every changed line traces back to it.
+  behavior) before writing code; "it works" is not an outcome.
+- **Smallest thing that works.** The smallest change that *fully* works —
+  completeness is the floor, minimalism the ceiling. No speculative features
+  or single-use abstractions. Search existing code, stdlib, and proven deps
+  before building; prefer boring technology. Surgical changes only: match
+  existing style, touch only what the request requires, mention pre-existing
+  dead code rather than deleting it, every changed line traces back to it.
 - **Verify, don't assume.** Split deterministic work (scripts, tests,
-  formatters, targeted shell) from reasoning work. Tie every claim to visible
-  evidence (test result, log line, diff). Features/fixes need deterministic
-  tests; LLM/prompt/ranking behavior needs an eval or manual rubric.
+  formatters, targeted shell) from reasoning work — if the same question
+  asked twice gives the same answer by definition, script it. Tie every claim
+  to visible evidence (test result, log line, diff). Verify every example you
+  ship by running it; state anything unverified as unverified.
+  Features/fixes need deterministic tests; LLM/prompt/ranking behavior needs
+  an eval or manual rubric.
 - **Complete real fixes.** Preserve the user's goal; don't leave a workaround
   when finishing now is safer. Tests passing is necessary, not sufficient —
   verify the actual result and think through failure modes.
@@ -69,6 +81,10 @@ Apply on every task, not just code changes:
   rollback first, monitor from a deterministic state, report before/after.
   Never run `sudo` restarts — list the command for the human. Never commit
   secrets, force-push, or mutate prod without explicit approval + rollback.
+- **Delegation completion contract.** Your final message is the deliverable.
+  If you delegate, you own collection: wait for results, integrate them, then
+  report. Never end a turn while spawned work is still running. Decompose
+  only when the work cannot fit in one context.
 
 ## 3. Command style
 
@@ -110,28 +126,38 @@ line and keep only the last 5 entries.
 ## 5. Engineering standards
 
 - **Definition of Done** — before any change is complete: readable well-named
-  identifiers; functions <50 lines; files <800 lines; nesting <4 levels; errors
-  handled explicitly; no hardcoded secrets; input validated at every boundary;
-  no debug statements or dead code; tests exist (80% coverage minimum); change
-  is the smallest that satisfies the request; evidence exists per Verification.
+  identifiers; functions <50 lines; files within the 800-line soft ceiling;
+  nesting <4 levels; errors handled explicitly; no hardcoded secrets; input
+  validated at every boundary; no debug statements or dead code; tests exist
+  (80% coverage minimum); change is the smallest that satisfies the request;
+  evidence exists per Verification.
 - **Coding style** — KISS, DRY, YAGNI; immutability (create new objects, never
-  mutate in place); many small files (200–400 lines, 800 max) organized by
-  feature; naming: `camelCase` variables, `is/has/should/can` booleans,
-  `PascalCase` types, `UPPER_SNAKE_CASE` constants, `snake_case` tests.
-- **Testing** — 80% coverage minimum across unit, integration, and E2E; TDD
-  mandatory (RED → GREEN → IMPROVE); AAA test structure with descriptive names.
-  When tests fail, troubleshoot in order: test isolation → mocks → the
+  mutate in place); many small files (200–400 lines, 800-line soft ceiling —
+  test/generated/vendored files may exceed it when justified) organized by
+  feature; naming: names describe what the thing does without a comment, and
+  language idiom (Go, Rust, Python casing) wins over the defaults — variables
+  `camelCase`, booleans `is/has/should/can`, types `PascalCase`, constants
+  `UPPER_SNAKE_CASE`, tests `snake_case`.
+- **Testing** — 80% coverage minimum across unit, integration, and E2E; two
+  lanes: gate tests (fast, local, every change, never flaky) vs periodic
+  evals (paid/slow, before ship, pass threshold); run what Task sizing calls
+  for, the full suite only for large or contract changes. TDD mandatory
+  (RED → GREEN → IMPROVE); AAA test structure with descriptive names. When
+  tests fail, troubleshoot in order: test isolation → mocks → the
   implementation (not the tests, unless the test is wrong).
 - **Security** — before any commit: no hardcoded secrets, input validation,
   SQLi/XSS/CSRF protection, auth verified, rate limiting, no sensitive data in
-  error messages. On exposure: stop, identify, fix, rotate, review.
+  error messages. STOP triggers — route to security review when the change
+  touches auth, user input, DB queries, file ops, external APIs, crypto, or
+  payments. On exposure: stop, identify, fix, rotate, review.
 
 ## 6. Code review
 
 - Review is mandatory after writing/modifying code, before commits to shared
   branches, on security-sensitive changes, and before merging.
 - Pre-review: automated checks passing, no merge conflicts, branch up to date.
-- Severity: CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO; LOW = NOTE.
+- Severity: CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an
+  unexplained file over the soft 800-line ceiling); LOW = NOTE.
 - Approve only when no CRITICAL or HIGH issues remain; block on any CRITICAL.
 
 ## 7. Git workflow with session trailers
@@ -171,8 +197,11 @@ Run the smallest check that proves the change before claiming completion:
 
 - Use the Skill tool when a `superpowers` skill matches the task; otherwise
   read the tracked `SKILL.md` for project guidance.
-- Avoid the last 20% of the context window for large multi-file refactors or
-  complex debugging; single edits and docs tolerate higher utilization.
+- The context window is your main control surface: load the relevant contract
+  section, files, and examples; leave the noise out. Avoid the last 20% of the
+  context window for large multi-file refactors or complex debugging; single
+  edits and docs tolerate higher utilization. When a task goes sideways, ask
+  what was in the window first.
 - Capture knowledge in the right place: personal notes → memory; team/project
   knowledge → the project's existing docs. Never duplicate what's already
   documented; ask before creating a new top-level file.
