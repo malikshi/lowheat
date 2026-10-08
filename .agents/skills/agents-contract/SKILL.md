@@ -123,14 +123,24 @@ never remove `exports:` symbols (they are contracts); after editing, check
 `used_by:` targets especially `[cascade]`-tagged ones; append a new `agent:`
 line and keep only the last 5 entries.
 
+**CodeDNA is the only comment content.** No comment content outside CodeDNA may
+exist in source files — no explanatory prose, no restated names, no
+commented-out code, no `TODO`/`FIXME` markers, no section dividers. In Python
+the permitted content lives in the module and function docstrings; no other
+docstring prose is allowed. Constraints go in `rules:`/`Rules:`; open items go
+in `message:`. Delete every non-CodeDNA comment in the code you touch — the one
+exception to the Surgical-changes rule and the trace-back requirement. Tool
+directives and license headers (`//go:build`, linter pragmas, type-ignore
+comments, SPDX lines) are exempt — they are code, not comments.
+
 ## 5. Engineering standards
 
 - **Definition of Done** — before any change is complete: readable well-named
   identifiers; functions <50 lines; files within the 800-line soft ceiling;
   nesting <4 levels; errors handled explicitly; no hardcoded secrets; input
-  validated at every boundary; no debug statements or dead code; tests exist
-  (80% coverage minimum); change is the smallest that satisfies the request;
-  evidence exists per Verification.
+  validated at every boundary; no debug statements or dead code; no comments
+  outside CodeDNA annotations; tests exist (80% coverage minimum); change is
+  the smallest that satisfies the request; evidence exists per Verification.
 - **Coding style** — KISS, DRY, YAGNI; immutability (create new objects, never
   mutate in place); many small files (200–400 lines, 800-line soft ceiling —
   test/generated/vendored files may exceed it when justified) organized by

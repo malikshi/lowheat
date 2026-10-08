@@ -15,7 +15,7 @@ Then use the table to find the section you need, and follow it literally.
 | Starting any task | Operating Principles → Work Loop |
 | Sizing a task | Operating Principles → Task sizing |
 | Running a command | Command Style |
-| Writing or editing code | Coding Style → CodeDNA |
+| Writing or editing code | Coding Style + CodeDNA |
 | Writing a test | Testing Requirements |
 | Touching auth, secrets, user input, or data | Security Guidelines |
 | About to commit | Git Workflow (Session trailers are mandatory) |
@@ -222,6 +222,7 @@ must hold:
 - [ ] No hardcoded secrets or credentials; user input validated at every
   boundary
 - [ ] No leftover debug statements; no dead code introduced
+- [ ] No comments outside CodeDNA annotations
 - [ ] Tests exist for new functionality; coverage meets the 80% minimum
 - [ ] The change is the smallest that satisfies the request
 - [ ] Evidence for the change exists per the Verification section
@@ -375,6 +376,17 @@ CodeDNA is a source-annotation convention adapted from
 It does not use the `codedna` binary, a validator, git hooks, or a `.codedna`
 ledger file. Git is the authoritative audit log. Agents apply and maintain
 these annotations by hand while reading and editing code.
+
+**CodeDNA is the only comment content.** No comment content outside CodeDNA may
+exist in source files — no explanatory prose, no restated names, no
+commented-out code, no `TODO`/`FIXME` markers, no section dividers. L1 fields,
+L2 `Rules:` blocks, and inline `Rules:`/`message:` are the complete permitted
+set; in Python these live in the module and function docstrings, and no other
+docstring prose is allowed. Constraints go in `rules:`/`Rules:`; open items go
+in `message:`. Delete every non-CodeDNA comment in the code you touch — this is
+the one exception to the Surgical-changes rule and the trace-back requirement.
+Tool directives and license headers (`//go:build`, linter pragmas, type-ignore
+comments, SPDX lines) are exempt — they are code, not comments.
 
 ### Scope
 
