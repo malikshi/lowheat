@@ -114,7 +114,9 @@ shell). Do **not** annotate `.md`, `.json`, plain text, or commentless formats.
   session_id | what you did`), optional `message:` beneath `agent:`.
 - **L2 function annotation** — every public function carries a `Rules:` block
   in its docstring stating constraints, invariants, and edge cases. Omit only
-  for trivial functions with no domain constraint.
+  for trivial functions with no domain constraint. The first line may be a
+  one-line summary of what the function does, 15 words or fewer; every line
+  after it is a `Rules:` or `message:` line.
 - **Inline annotations** — `# Rules:` / `# message:` above blocks that encode a
   business rule, non-obvious transform, step-order dependency, or edge case.
   Skip simple getters, obvious control flow, standard library calls.
@@ -130,15 +132,16 @@ especially `[cascade]`-tagged ones; append a new `agent:` line and keep only
 the last 5 entries. Run
 `.agents/skills/agents-contract/scripts/codedna_check.py` after a header change
 to catch missing L1 fields, dead `used_by:` targets, `exports:` names absent
-from the file, and over-long `agent:` histories.
+from the file, and over-long `agent:` histories. When the scanned paths hold an
+`AGENTS.md`, it lints that document's Python examples against the same rules.
 
 **CodeDNA is the only comment content.** No comment content outside CodeDNA may
-exist in source files — no explanatory prose, no restated names, no
-commented-out code, no `TODO`/`FIXME` markers, no section dividers. In Python
-the permitted content lives in the module and function docstrings; no other
-docstring prose is allowed. Constraints go in `rules:`/`Rules:`; open items go
-in `message:`. Delete every non-CodeDNA comment in the code you touch — the one
-exception to the Surgical-changes rule and the trace-back requirement. Tool
+exist in source files — no explanatory prose, no commented-out code, no
+`TODO`/`FIXME` markers, no section dividers. The permitted set is a single-line
+summary of what the file or function does, the L1 fields, L2 `Rules:` blocks,
+and inline `Rules:`/`message:`. Constraints go in `rules:`/`Rules:`; open items
+go in `message:`. Delete every non-CodeDNA comment in the code you touch — the
+one exception to the Surgical-changes rule and the trace-back requirement. Tool
 directives and license headers (`//go:build`, linter pragmas, type-ignore
 comments, SPDX lines) are exempt — they are code, not comments. User-visible
 documentation strings are exempt on the same footing: CLI help text, API and

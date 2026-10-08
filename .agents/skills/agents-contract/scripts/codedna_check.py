@@ -1,18 +1,21 @@
-"""codedna_check.py — Report CodeDNA L1 header drift in annotated source files.
+"""codedna_check.py — Report CodeDNA header drift and contract-example violations.
 
-exports: main | check_file | collect_source_files | DEFAULT_IGNORED_DIRS
-used_by: tests/test_codedna_check.py → main, check_file, collect_source_files, DEFAULT_IGNORED_DIRS [cascade]
-         AGENTS.md → CodeDNA editing protocol
+exports: main | check_file | check_examples | collect_source_files | DEFAULT_IGNORED_DIRS
+used_by: tests/test_codedna_check.py → main, check_file, check_examples, collect_source_files, DEFAULT_IGNORED_DIRS [cascade]
+used_by: AGENTS.md → CodeDNA editing protocol
 related: .agents/skills/agents-contract/SKILL.md (CodeDNA section)
 rules:   Read-only — report findings and exit non-zero; never rewrite a file.
          Findings name the file and the field; the exit code carries the verdict.
-agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker and tests
+         In contract examples every docstring line after the summary repeats a field
+         label — wrapped continuations are reported, so keep values on one line.
+agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker, tests, and contract-example linting
 message: The model slot carries the harness agent profile — this harness exposes no raw model id.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import sys
 from pathlib import Path
@@ -32,6 +35,9 @@ SOURCE_SUFFIXES = (
 HEADER_LINE_LIMIT = 40
 REQUIRED_FIELDS = ("exports", "used_by", "rules", "agent")
 AGENT_HISTORY_LIMIT = 5
+L1_FIELDS = ("exports", "used_by", "related", "rules", "agent", "message")
+L2_FIELDS = ("rules", "message")
+SUMMARY_WORD_LIMIT = 15
 ARROW = "→"
 DEFAULT_IGNORED_DIRS = frozenset(
     {
@@ -59,6 +65,9 @@ _FIELD_LABEL = re.compile(
     r"^\s*(?://+|#+|\*+|!)?\s*(exports|used_by|related|rules|agent|message):\s*(.*)$"
 )
 _EXPORT_SPLIT = re.compile(r"[|,]")
+_PY_FENCE = re.compile(r"```python[ \t]*\n(.*?)```", re.DOTALL)
+_COMMENT_LABEL = re.compile(r"^#\s*(Rules|message):")
+_DOC_LABEL = re.compile(r"^\s*(exports|used_by|related|rules|Rules|agent|message):\s*(.*)$")
 _AGENT_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TYPE_WORDS = frozenset(
     {
@@ -217,6 +226,82 @@ def check_file(path: Path, root: Path) -> list[str]:
     return findings
 
 
+def _word_count(line: str) -> int:
+    """Count the tokens of a line that carry an alphanumeric character.
+
+    Rules:   Punctuation-only tokens such as the em dash of a title line are not words.
+    """
+    return sum(1 for token in line.split() if any(char.isalnum() for char in token))
+
+
+def _docstring_findings(docstring: str, allowed_fields, where: str) -> list[str]:
+    """Return findings for docstring lines outside the permitted content set.
+
+    Rules:   The first line may be a summary; every later line repeats a label from the
+             allowed field set. Wrapped continuations are reported on purpose.
+             `Rules:` and `rules:` both resolve to the same field.
+    """
+    findings: list[str] = []
+    lines = [line for line in docstring.splitlines() if line.strip()]
+    if not lines:
+        return findings
+    summary = lines[0].strip()
+    summary_words = _word_count(summary)
+    if summary_words > SUMMARY_WORD_LIMIT:
+        findings.append(
+            f"{where}: summary line holds {summary_words} words; cap is {SUMMARY_WORD_LIMIT}: {summary[:60]}"
+        )
+    for line in lines[1:]:
+        match = _DOC_LABEL.match(line)
+        if match:
+            if match.group(1).lower() in allowed_fields:
+                continue
+            findings.append(f"{where}: field `{match.group(1)}:` is not permitted here")
+            continue
+        findings.append(f"{where}: line is outside the permitted content: {line.strip()[:60]}")
+    return findings
+
+
+def _example_block_findings(block: str, where: str) -> list[str]:
+    """Return the findings for one fenced Python example.
+
+    Rules:   Comments must be CodeDNA content; a block that does not parse as Python is reported.
+    """
+    findings = [
+        f"{where}: comment is outside the permitted content: {line.strip()[:60]}"
+        for line in block.splitlines()
+        if line.strip().startswith("#") and not _COMMENT_LABEL.match(line.strip())
+    ]
+    try:
+        tree = ast.parse(block)
+    except SyntaxError as error:
+        findings.append(f"{where}: block does not parse as Python (line {error.lineno})")
+        return findings
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        docstring = ast.get_docstring(node, clean=False)
+        if docstring is None:
+            continue
+        allowed = L1_FIELDS if isinstance(node, ast.Module) else L2_FIELDS
+        findings.extend(
+            _docstring_findings(docstring, allowed, f"{where} [{getattr(node, 'name', 'module')}]")
+        )
+    return findings
+
+
+def check_examples(text: str, source: str = "AGENTS.md") -> list[str]:
+    """Return the findings for the Python examples inside a contract document.
+
+    Rules:   Lint every fenced python block — examples are the artifact agents copy, so
+             they obey the same content rules this document states.
+    """
+    findings: list[str] = []
+    for index, block in enumerate(_PY_FENCE.findall(text), start=1):
+        findings.extend(_example_block_findings(block, f"{source} example {index}"))
+    return findings
+
+
 def main(argv=None) -> int:
     """Run the checker over the given paths.
 
@@ -230,13 +315,19 @@ def main(argv=None) -> int:
     roots = [Path(item) for item in args.paths] or [Path(".")]
     root = Path(args.root)
     files = collect_source_files(roots)
+    documents = [item / "AGENTS.md" for item in roots if (item / "AGENTS.md").is_file()]
     total = 0
     for path in files:
         findings = check_file(path, root)
         for finding in findings:
             print(f"{path}: {finding}")
         total += len(findings)
-    print(f"codedna_check: {total} finding(s) in {len(files)} file(s)")
+    for document in documents:
+        findings = check_examples(document.read_text(encoding="utf-8", errors="replace"), str(document))
+        for finding in findings:
+            print(finding)
+        total += len(findings)
+    print(f"codedna_check: {total} finding(s) in {len(files)} file(s) and {len(documents)} contract(s)")
     return 1 if total else 0
 
 

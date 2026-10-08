@@ -281,13 +281,14 @@ ledger file. Git is the authoritative audit log. Agents apply and maintain
 these annotations by hand while reading and editing code.
 
 **CodeDNA is the only comment content.** No comment content outside CodeDNA may
-exist in source files — no explanatory prose, no restated names, no
-commented-out code, no `TODO`/`FIXME` markers, no section dividers. L1 fields,
-L2 `Rules:` blocks, and inline `Rules:`/`message:` are the complete permitted
-set; in Python these live in the module and function docstrings, and no other
-docstring prose is allowed. Constraints go in `rules:`/`Rules:`; open items go
-in `message:`. Delete every non-CodeDNA comment in the code you touch — this is
-the one exception to the Surgical-changes rule and the trace-back requirement.
+exist in source files — no explanatory prose, no commented-out code, no
+`TODO`/`FIXME` markers, no section dividers. The complete permitted set is a
+single-line summary of what the file or function does, the L1 fields, L2
+`Rules:` blocks, and inline `Rules:`/`message:`; in Python the summary line and
+the `Rules:` block live in the docstring. Constraints go in `rules:`/`Rules:`;
+open items go in `message:`. Delete every non-CodeDNA comment in the code you
+touch — this is the one exception to the Surgical-changes rule and the
+trace-back requirement.
 Tool directives and license headers (`//go:build`, linter pragmas, type-ignore
 comments, SPDX lines) are exempt — they are code, not comments. User-visible
 documentation strings are exempt on the same footing: CLI help text, API and
@@ -350,7 +351,9 @@ Go, TypeScript, JavaScript, or Rust leading comments:
 
 Every public function carries a `Rules:` block in its docstring or leading
 comment stating what the agent must or must not do there. Omit it only for
-trivial functions with no domain constraint.
+trivial functions with no domain constraint. The first line may be a one-line
+summary of what the function does, 15 words or fewer like the module header;
+every line after it is a `Rules:` or `message:` line.
 
 ```python
 def charge(amount_cents: int) -> None:
@@ -407,7 +410,8 @@ YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
 `.agents/skills/agents-contract/scripts/codedna_check.py` is present, run it
 after a header change: it reports missing L1 fields, `used_by:` targets that do
 not exist, `exports:` names absent from the file, and over-long `agent:`
-histories.
+histories. When the scanned paths hold an `AGENTS.md`, it also lints that
+document's Python examples against these rules.
 
 **Session end protocol.** At the end of every session that modifies files,
 record the work in the git commit with the session trailers defined under Git

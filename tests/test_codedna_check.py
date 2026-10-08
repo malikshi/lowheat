@@ -145,6 +145,47 @@ class CodednaCheckTestCase(unittest.TestCase):
         findings = self.findings_for(text)
         self.assertTrue(any("description" in finding for finding in findings), findings)
 
+    def test_contract_examples_break_no_rule(self) -> None:
+        contract = Path(__file__).resolve().parents[1] / "AGENTS.md"
+        text = contract.read_text(encoding="utf-8")
+        self.assertEqual([], self.checker.check_examples(text, "AGENTS.md"))
+
+    def test_comment_outside_the_permitted_content_is_reported(self) -> None:
+        findings = self.checker.check_examples("```python\n# just a note\nvalue = 1\n```\n", "AGENTS.md")
+        self.assertTrue(any("comment is outside" in finding for finding in findings), findings)
+
+    def test_field_not_permitted_at_this_scope_is_reported(self) -> None:
+        block = 'def charge() -> None:\n    """Charge a card.\n\n    exports: helper\n    """\n'
+        findings = self.checker.check_examples(f"```python\n{block}```\n", "AGENTS.md")
+        self.assertEqual(1, len(findings))
+        self.assertIn("is not permitted here", findings[0])
+
+    def test_prose_after_the_rules_block_is_reported(self) -> None:
+        block = (
+            'def charge() -> None:\n'
+            '    """Charge a card.\n\n'
+            "    Rules:   amounts arrive in cents.\n\n"
+            "    Extra prose that restates the code.\n"
+            '    """\n'
+        )
+        findings = self.checker.check_examples(f"```python\n{block}```\n", "AGENTS.md")
+        self.assertEqual(1, len(findings))
+        self.assertIn("Extra prose", findings[0])
+
+    def test_summary_line_over_the_word_cap_is_reported(self) -> None:
+        long_summary = " ".join(f"word{index}" for index in range(16))
+        block = f'def charge() -> None:\n    """{long_summary}.\n\n    Rules:   amounts arrive in cents.\n    """\n'
+        findings = self.checker.check_examples(f"```python\n{block}```\n", "AGENTS.md")
+        self.assertEqual(1, len(findings))
+        self.assertIn("cap is 15", findings[0])
+
+    def test_main_fails_on_a_contract_example_that_breaks_the_rules(self) -> None:
+        self.write("AGENTS.md", "```python\n# not permitted\n```\n")
+        with_violation = self.run_main()
+        self.write("AGENTS.md", "```python\n# Rules: keep the exit code honest\n```\n")
+        without_violation = self.run_main()
+        self.assertEqual((1, 0), (with_violation, without_violation))
+
     def test_main_returns_one_when_findings_exist_and_zero_when_clean(self) -> None:
         self.write("src/sample.py", CLEAN_MODULE.replace("rules:   none\n", ""))
         with_findings = self.run_main()
