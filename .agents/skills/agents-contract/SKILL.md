@@ -115,10 +115,12 @@ shell). Do **not** annotate `.md`, `.json`, plain text, or commentless formats.
   rolling history of the last 5 sessions: `model-id | provider | YYYY-MM-DD |
   session_id | what you did`), optional `message:` beneath `agent:`.
 - **L2 function annotation** — every public function carries a `Rules:` block
-  in its docstring stating constraints, invariants, and edge cases. Omit only
-  for trivial functions with no domain constraint. The first line may be a
-  one-line summary of what the function does, 15 words or fewer; every line
-  after it is a `Rules:` or `message:` line.
+  in its docstring or leading comment stating what the agent must or must not do
+  there; a function guarding auth, data, money, or an external boundary states
+  each constraint, invariant, and edge case. Omit it only for trivial functions
+  with no domain constraint. The first line may be a one-line summary of what
+  the function does, 15 words or fewer; every line after it is a `Rules:` or
+  `message:` line.
 - **Inline annotations** — `# Rules:` / `# message:` above blocks that encode a
   business rule, non-obvious transform, step-order dependency, or edge case.
   Skip simple getters, obvious control flow, standard library calls.

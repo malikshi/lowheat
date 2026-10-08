@@ -76,7 +76,7 @@ triage call can be judged after the fact.
 State assumptions explicitly and distinguish verified facts from uncertainty.
 If multiple interpretations exist, present them — do not pick silently. If a
 simpler approach exists, say so. Challenge weak assumptions candidly. Ask
-questions only when a decision is materially ambiguous, risky, or requires
+questions only when a decision is materially ambiguous or risky, or requires
 approval. Never start writing code when the requirement is vague; name the
 outcome first: the metric, workflow step, user-visible behavior, or operational
 trace that should improve. "It works" is not an outcome — if you cannot state
@@ -216,7 +216,7 @@ declare done.
 
 ### Definition of Done
 
-Before any change is complete, self-review, committed, or merged, every item
+Before any change is complete, self-reviewed, committed, or merged, every item
 must hold:
 
 - [ ] Readable, well-named identifiers; no magic numbers (named constants)
@@ -387,7 +387,7 @@ why the current state exists. Read the `Rules:` block of any function before
 writing logic in it.
 
 **Writing new files.** Begin every new source file with a complete L1 module
-header, and give every public function an L2 `Rules:` block.
+header; public functions carry the L2 block described above.
 
 **Writing good rules.** Rules must be specific and actionable. Write
 `soft-delete via deleted_at — never issue DELETE` rather than a vague line such
@@ -397,8 +397,9 @@ genuinely has no domain constraint. Every time you discover a constraint, fix a
 bug, or notice a non-obvious behavior, add it to `rules:` immediately. This is
 how you communicate with the next agent.
 
-**Writing critical functions.** Give every public function a `Rules:`
-annotation that covers its constraints, invariants, and edge cases.
+**Writing critical functions.** For a function that guards auth, data, money, or
+an external boundary, the `Rules:` block carries each constraint, invariant, and
+edge case rather than the headline rule alone.
 
 **Editing files.** Re-read `rules:`, the `agent:` history, and the `Rules:` of
 the function you are editing. Apply all file-level constraints before writing.
