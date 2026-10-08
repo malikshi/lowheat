@@ -26,8 +26,9 @@ it and do not declare done.
 3. **Plan the smallest change.** Name the risks and the revert path. For
    multi-step tasks, state a brief: `1. [Step] → verify: [check]`.
    → Verify: the plan fits the request and nothing else.
-4. **Implement with TDD.** Write the test first (RED), minimal implementation
-   (GREEN), refactor (IMPROVE). Work in small increments.
+4. **Implement with TDD.** Where Task sizing calls for a test, write it first
+   (RED), minimal implementation (GREEN), refactor (IMPROVE). Work in small
+   increments.
    → Verify: the targeted tests pass, not just the suite.
 5. **Self-review the diff.** Run the Definition of Done checklist on your own
    work before anyone else sees it; a change bound for a shared branch, a merge,
@@ -164,13 +165,15 @@ them short and factual; constraints still belong in `rules:`/`Rules:`.
   language idiom (Go, Rust, Python casing) wins over the defaults — variables
   `camelCase`, booleans `is/has/should/can`, types `PascalCase`, constants
   `UPPER_SNAKE_CASE`, tests `snake_case`.
-- **Testing** — 80% coverage minimum across unit, integration, and E2E; two
-  lanes: gate tests (fast, local, every change, never flaky) vs periodic
-  evals (paid/slow, before ship, pass threshold); run what Task sizing calls
-  for, the full suite only for large or contract changes. TDD mandatory
-  (RED → GREEN → IMPROVE); AAA test structure with descriptive names. When
-  tests fail, troubleshoot in order: test isolation → mocks → the
-  implementation (not the tests, unless the test is wrong).
+- **Testing** — Task sizing decides whether tests are written (none for a small
+  non-behavioral change, a regression test for a medium bug fix); TDD governs
+  how they are written (RED → GREEN → IMPROVE), with AAA structure and
+  descriptive names. The 80% coverage floor and the unit/integration/E2E mix
+  describe the suite, not every change. Two lanes: gate tests (fast, local,
+  every change, never flaky) vs periodic evals (paid/slow, before ship, pass
+  threshold); run what Task sizing calls for, the full suite only for large or
+  contract changes. When tests fail, troubleshoot in order: test isolation →
+  mocks → the implementation (not the tests, unless the test is wrong).
 - **Security** — before any commit: no hardcoded secrets, input validation,
   SQLi/XSS/CSRF protection, auth verified, rate limiting, no sensitive data in
   error messages. STOP triggers — the independent review in §6, security-scoped,

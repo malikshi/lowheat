@@ -195,8 +195,9 @@ verification point before the next begins.
 3. **Plan the smallest change.** Name the risks and the revert path. For
    multi-step tasks, state a brief: `1. [Step] → verify: [check]`.
    → Verify: the plan fits the request and nothing else.
-4. **Implement with TDD.** RED → GREEN → IMPROVE per Testing Requirements.
-   Work in small increments; verify each step before starting the next.
+4. **Implement with TDD.** Where Task sizing calls for a test, write it first —
+   RED → GREEN → IMPROVE, per Testing Requirements. Work in small increments;
+   verify each step before starting the next.
    → Verify: the targeted tests pass, not just the suite.
 5. **Self-review the diff.** Run the Definition of Done checklist on your own
    work before anyone else sees it; a change bound for a shared branch, a merge,
@@ -420,13 +421,19 @@ Workflow; do not keep a separate ledger file.
 
 ### Testing Requirements
 
+**Scope of these rules.** Task sizing decides whether a change writes tests at
+all: a small non-behavioral change adds none, a medium bug fix ships its
+regression test, a large change runs the full protocol. TDD governs how any test
+you write is written. The 80% floor and the three test types below describe the
+suite as a whole, not every change.
+
 **Minimum coverage: 80%.** All three test types are required:
 1. **Unit tests** — individual functions, utilities, components.
 2. **Integration tests** — API endpoints, database operations.
 3. **E2E tests** — critical user flows (framework chosen per language).
 
-**Two test lanes, different budgets.** What you *write* follows the rules
-below; what you *run* is scoped by Task sizing — the full suite is for large
+**Two test lanes, different budgets.** What you write and what you run are both
+scoped by Task sizing — the full suite is for large
 and contract changes, the touched module's tests for everything else.
 - **Gate tests** — deterministic, local, fast. Run on every change; never
   flaky.
@@ -434,7 +441,7 @@ and contract changes, the touched module's tests for everything else.
   long-running suites). Run before ship and on a schedule; allowed to be
   non-deterministic but must have a pass threshold.
 
-**Test-Driven Development (mandatory):**
+**Test-Driven Development (mandatory wherever a test is written):**
 1. Write the test first (RED) — it must fail.
 2. Write the minimal implementation (GREEN) — it must pass.
 3. Refactor (IMPROVE).
