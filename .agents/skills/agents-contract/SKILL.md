@@ -76,7 +76,7 @@ Apply on every task, not just code changes:
 - **Complete real fixes.** Preserve the user's goal; don't leave a workaround
   when finishing now is safer. Tests passing is necessary, not sufficient —
   verify the actual result and think through failure modes.
-- **Curate context.** Load only the relevant contract section, CodeDNA entries,
+- **Curate context.** Load only the relevant contract section, module headers,
   source files, and tests. Use skills when one matches; visualize explanations
   with diagrams/tables/code blocks where they aid understanding.
 - **Codify repeated work.** By the third time a manual flow is needed, turn it

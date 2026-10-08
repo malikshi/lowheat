@@ -23,7 +23,7 @@ Then use the table to find the section you need, and follow it literally.
 | Reviewing or merging code | Execution & Delivery → Code Review Standards |
 | Changing docs or config | Engineering Standards → Verification |
 | Done with a change | Engineering Standards → Definition of Done → Verification |
-| Unclear, blocked, or ambiguous | Operating Principles → Confusion Protocol |
+| Unclear, blocked, or ambiguous | Operating Principles → Confusion protocol |
 
 Do not read the whole file into context for a small task. Load the sections that
 apply, follow them, and move on.
@@ -134,7 +134,7 @@ and what would break if the assumption is wrong.
 
 ### Curate context deliberately
 
-Load the relevant contract, CodeDNA entry, source files, tests, and examples.
+Load the relevant contract, module header, source files, tests, and examples.
 Do not dump unrelated files into context. Use skills when the task matches an
 installed skill. When explaining something to the user, visualize it — prefer
 diagrams, tables, or code blocks over prose where that aids understanding.
@@ -253,9 +253,9 @@ universal law; relax what your task or agent surface does not need.
 - **YAGNI** — no speculative features; start simple, refactor when pressure is
   real.
 - **Immutability (CRITICAL)** — create new objects; never mutate in place.
-  `update(orig, field, val)` returns a new copy; `modify(...)` in-place is
-  rejected. Immutable data prevents hidden side effects, simplifies debugging,
-  and enables safe concurrency.
+  `update(orig, field, val)` returns a new copy; do not write an in-place
+  `modify(...)`. Immutable data prevents hidden side effects, simplifies
+  debugging, and enables safe concurrency.
 - **File organization** — many small files over few large files: 200–400 lines
   typical, 800-line soft ceiling, high cohesion, low coupling, organized by
   feature/domain, not by type. Test, generated, and vendored files may exceed
@@ -309,7 +309,7 @@ comment syntax. Python uses the module docstring; Go, JavaScript, TypeScript,
 and Rust use leading `//` lines; shell uses leading `#` lines. Fields appear in
 this order:
 
-- First line: `filename — <what it does, 15 words or fewer>.`
+- First line: `filename — <what it does, 15 words or fewer>`.
 - `exports:` public symbols this file provides, separated by ` | `. Use `->`
   for a return type.
 - `used_by:` consumer files that depend on this file, one per line as
