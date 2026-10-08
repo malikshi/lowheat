@@ -30,7 +30,8 @@ it and do not declare done.
    (GREEN), refactor (IMPROVE). Work in small increments.
    → Verify: the targeted tests pass, not just the suite.
 5. **Self-review the diff.** Run the Definition of Done checklist on your own
-   work before anyone else sees it.
+   work before anyone else sees it; a change bound for a shared branch, a merge,
+   or a STOP trigger also gets the independent review in §6.
    → Verify: every changed line traces back to the request.
 6. **Prove it.** Run the smallest check that proves the change per the
    Verification section (`references/contract.md#verification`).
@@ -172,18 +173,33 @@ them short and factual; constraints still belong in `rules:`/`Rules:`.
   implementation (not the tests, unless the test is wrong).
 - **Security** — before any commit: no hardcoded secrets, input validation,
   SQLi/XSS/CSRF protection, auth verified, rate limiting, no sensitive data in
-  error messages. STOP triggers — route to security review when the change
-  touches auth, user input, DB queries, file ops, external APIs, crypto, or
-  payments. On exposure: stop, identify, fix, rotate, review.
+  error messages. STOP triggers — the independent review in §6, security-scoped,
+  runs before proceeding when the change touches auth, user input, DB queries,
+  file ops, external APIs, crypto, or payments, scoped to those checks and the
+  touched surface; a CRITICAL or HIGH finding blocks the commit. On exposure:
+  stop, identify, fix, rotate, review.
 
 ## 6. Code review
 
-- Review is mandatory after writing/modifying code, before commits to shared
-  branches, on security-sensitive changes, and before merging.
-- Pre-review: automated checks passing, no merge conflicts, branch up to date.
+Two modes, each mandatory where it applies:
+
+- **Self-review** — the author applies the DoD checklist and the severity table
+  to the diff and fixes CRITICAL and HIGH findings before anyone else sees it:
+  Work Loop step 5, every change.
+- **Independent review** — a reviewer other than the author owns the verdict,
+  using a reviewer subagent where the harness provides one and a human
+  otherwise. Required for every change bound for a shared branch (pushed to a
+  shared remote, or targeted by a merge or PR — a local scratch branch is not
+  shared) or a merge, and for every change that trips the §5 STOP triggers. The
+  reviewer records the verdict, covered scope, and open risk in the PR body or
+  commit message.
+- Pre-review for independent review: automated checks passing, no merge
+  conflicts, branch up to date.
 - Severity: CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an
   unexplained file over the soft 800-line ceiling); LOW = NOTE.
-- Approve only when no CRITICAL or HIGH issues remain; block on any CRITICAL.
+- The independent reviewer approves only when no CRITICAL or HIGH issues remain,
+  warns on HIGH-only, and blocks on any CRITICAL; a security-scoped review (§5
+  STOP triggers) blocks on a HIGH finding too.
 
 ## 7. Git workflow with session trailers
 

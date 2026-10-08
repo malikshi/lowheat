@@ -197,7 +197,8 @@ verification point before the next begins.
    Work in small increments; verify each step before starting the next.
    → Verify: the targeted tests pass, not just the suite.
 5. **Self-review the diff.** Run the Definition of Done checklist on your own
-   work before anyone else sees it.
+   work before anyone else sees it; a change bound for a shared branch, a merge,
+   or a STOP trigger also gets the independent review in Code Review Standards.
    → Verify: every changed line traces back to the request.
 6. **Prove it.** Run the smallest check that proves the change per the
    Verification section.
@@ -465,10 +466,12 @@ secrets.
 exposed secret, credential, or entry point. Fix the vulnerability before
 continuing. Rotate any exposed secrets. Review the codebase for similar issues.
 
-**STOP triggers — route to a security review before proceeding** when the
-change touches: authentication or authorization, user input handling, database
-queries, file system operations, external API calls, cryptographic operations,
-or payment/financial code.
+**STOP triggers — an independent review, security-scoped, runs before
+proceeding** when the change touches: authentication or authorization, user
+input handling, database queries, file system operations, external API calls,
+cryptographic operations, or payment/financial code. Scope it with the mandatory
+checks above and the touched surface; a CRITICAL or HIGH finding blocks the
+commit. Code Review Standards defines the reviewer and the recording rule.
 
 ## Execution & Delivery
 
@@ -532,10 +535,21 @@ Git is the authoritative audit log; do not keep a separate ledger file.
 
 ### Code Review Standards
 
-Review is mandatory after writing or modifying code, before any commit to
-shared branches, when security-sensitive code changes, and before merging.
-Pre-review requirements: all automated checks (CI/CD) passing, no merge
-conflicts, branch up to date with target.
+Two review modes, and each is mandatory where it applies:
+
+- **Self-review** — the author applies the Definition of Done checklist and the
+  severity table to the diff and fixes the CRITICAL and HIGH findings before
+  anyone else sees it: Work Loop step 5, for every change.
+- **Independent review** — a reviewer other than the author owns the verdict,
+  using a reviewer subagent where the harness provides one and a human
+  otherwise. It is required for every change bound for a shared branch (pushed
+  to a shared remote, or targeted by a merge or PR — a local scratch branch is
+  not shared) or a merge, and for every change that trips the STOP triggers in
+  Security Guidelines. The reviewer records the verdict, the covered scope, and
+  any open risk in the PR body or commit message.
+
+Pre-review requirements for independent review: all automated checks (CI/CD)
+passing, no merge conflicts, branch up to date with target.
 
 **Severity levels:**
 
@@ -546,8 +560,10 @@ conflicts, branch up to date with target.
 | MEDIUM | Maintainability concern, including an unexplained source file over the soft 800-line ceiling | INFO — consider fixing |
 | LOW | Style or minor suggestion | NOTE — optional |
 
-**Approval criteria:** approve when no CRITICAL or HIGH issues remain; warn
-when only HIGH issues remain; block on any CRITICAL issue.
+**Approval criteria:** the independent reviewer approves when no CRITICAL or HIGH
+issues remain, warns when only HIGH issues remain, and blocks on any CRITICAL
+issue; a security-scoped review under the STOP triggers blocks on a HIGH finding
+too.
 
 ## Environment & Source Repositories
 
