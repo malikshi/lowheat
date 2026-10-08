@@ -10,6 +10,8 @@ workspace contract lives in `AGENTS.md`.
 | `AGENTS.md` | Canonical contract — operating principles, Work Loop, engineering standards, CodeDNA, execution & delivery, environment |
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
 | `.agents/skills/agents-contract/references/contract.md` | Verbatim mirror of `AGENTS.md` (do not edit directly — re-sync from `AGENTS.md`) |
+| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA L1 header drift checker (read-only) |
+| `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
 | `LICENSE` | MIT |
 
 ## Contract structure
@@ -18,7 +20,7 @@ workspace contract lives in `AGENTS.md`.
 
 | Section | Covers |
 |---|---|
-| How to use this file | Task → section routing table |
+| How to use this file | Task → section routing table, precedence order, staleness check |
 | Operating Principles | Task sizing, think before coding, smallest change, verify don't assume, confusion protocol, operations discipline |
 | The Work Loop | 7-step delivery loop — each step ends with a verify gate |
 | Engineering Standards | Definition of Done, Verification, Coding Style, CodeDNA, Testing Requirements, Security Guidelines |
@@ -42,7 +44,41 @@ picks them up:
 | `AGENTS.md` | project root | Cross-agent source of truth |
 | `.agents/skills/agents-contract/` | project root | Skill encoding the contract as executable steps |
 
-Both live at the project root and are picked up automatically.
+Both live at the project root and are picked up automatically. A symlink to a
+checkout works as well as a copy, and re-syncs on every `git pull`.
+
+### One canonical copy per machine
+
+Agent surfaces read instructions from fixed paths, and independent copies drift
+silently. This contract's own deployment lost a rule that way in October 2026:
+three copies were live on one machine, and two of them lacked the newest rule.
+Keep one canonical file and point the other surfaces at it.
+
+| Surface | Path it reads | Wiring |
+|---|---|---|
+| Grok Build | `~/.grok/AGENTS.md`, `<project>/AGENTS.md` | symlink to the canonical file |
+| Claude Code | `<project>/CLAUDE.md`, `~/.claude/CLAUDE.md` | one `@AGENTS.md` import line, or a symlink |
+| Cursor | `<project>/.cursor/rules/` | one `.mdc` rule that points at `AGENTS.md` |
+| Any other agent | `<project>/AGENTS.md` | copy or symlink |
+
+```bash
+mkdir -p ~/.grok ~/.claude
+ln -sfn /path/to/lowheat/AGENTS.md ~/.grok/AGENTS.md
+ln -sfn /path/to/lowheat/AGENTS.md ~/.claude/AGENTS.md
+sha256sum ~/.grok/AGENTS.md ~/.claude/AGENTS.md AGENTS.md
+```
+
+`Contract-Version:` on line 3 names the revision. A copy that shows a different
+value, or none, is stale — refresh it from the canonical file. A symlink
+resolves to the file on the checked-out branch, so point it at a checkout that
+sits on the default branch.
+
+Run the contract's own checks:
+
+```bash
+python3 .agents/skills/agents-contract/scripts/codedna_check.py
+python3 -m pytest tests
+```
 
 ### Keeping the mirror in sync
 

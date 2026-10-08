@@ -42,6 +42,11 @@ it and do not declare done.
 
 Apply on every task, not just code changes:
 
+- **Precedence.** When instruction sources disagree, the higher entry wins: the
+  harness system prompt and the user's current request, then `AGENTS.md` on
+  disk, then skill summaries, pinned copies, and mirrors of it. A copy whose
+  `Contract-Version` differs from the file's is stale — refresh it from the
+  canonical checkout, then act on the file on disk.
 - **Task sizing.** Scale ceremony to the change and say the call out loud:
   **small** (mechanical, no behavior change — solo, touched checks only, no
   new test), **medium** (localized behavior change — solo, touched module's
@@ -119,9 +124,13 @@ via deleted_at — never issue DELETE`, never `handle errors gracefully`. Use
 `rules: none` only when a file genuinely has no domain constraint.
 
 **Editing protocol:** re-read `rules:` and `agent:` history before editing;
-never remove `exports:` symbols (they are contracts); after editing, check
-`used_by:` targets especially `[cascade]`-tagged ones; append a new `agent:`
-line and keep only the last 5 entries.
+keep `exports:` accurate — a symbol leaves the list in the same commit that
+removes it, once no caller remains; after editing, check `used_by:` targets
+especially `[cascade]`-tagged ones; append a new `agent:` line and keep only
+the last 5 entries. Run
+`.agents/skills/agents-contract/scripts/codedna_check.py` after a header change
+to catch missing L1 fields, dead `used_by:` targets, `exports:` names absent
+from the file, and over-long `agent:` histories.
 
 **CodeDNA is the only comment content.** No comment content outside CodeDNA may
 exist in source files — no explanatory prose, no restated names, no
@@ -131,7 +140,10 @@ docstring prose is allowed. Constraints go in `rules:`/`Rules:`; open items go
 in `message:`. Delete every non-CodeDNA comment in the code you touch — the one
 exception to the Surgical-changes rule and the trace-back requirement. Tool
 directives and license headers (`//go:build`, linter pragmas, type-ignore
-comments, SPDX lines) are exempt — they are code, not comments.
+comments, SPDX lines) are exempt — they are code, not comments. User-visible
+documentation strings are exempt on the same footing: CLI help text, API and
+OpenAPI descriptions, and public-library docstrings are product surface. Keep
+them short and factual; constraints still belong in `rules:`/`Rules:`.
 
 ## 5. Engineering standards
 
@@ -180,12 +192,20 @@ comments, SPDX lines) are exempt — they are code, not comments.
   these trailers to the commit:
 
   ```
-  AI-Agent:    <model-id>
-  AI-Provider: <provider>
-  AI-Session:  <session_id>
-  AI-Visited:  <comma-separated list of files read>
+  AI-Agent:    <model-id | unknown>
+  AI-Provider: <provider | unknown>
+  AI-Session:  <session_id | unknown>
+  AI-Visited:  <files read, from the diff and the session read log>
+  AI-Verified: <commands run and their result, one line>
   AI-Message:  <one-line summary of what was found or left open>
   ```
+
+  The AI block is the last paragraph of the message, with no blank line inside
+  it, and any `Co-authored-by:` line goes above it — git parses trailers from
+  the final paragraph only, so a misplaced block is invisible to tooling. Check
+  with `git log -1 --format='%(trailers:key=AI-Agent,valueonly)'`: it prints the
+  agent when the block parses, and nothing when it does not. Write `unknown` for
+  a value the harness does not expose.
 
 - **Git is the authoritative audit log** — do not keep a separate ledger file.
 - **Pull requests:** analyze full commit history, diff against base,

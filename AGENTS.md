@@ -1,5 +1,7 @@
 # Agent Instructions
 
+Contract-Version: 2026-10-08
+
 This repository operates as a multi-agent workspace. This file is the single,
 self-contained instruction surface and the **cross-agent source of truth**.
 
@@ -11,6 +13,7 @@ Then use the table to find the section you need, and follow it literally.
 | When you are… | Read |
 |---|---|
 | Starting any task | Operating Principles + The Work Loop |
+| Resolving conflicting instructions | How to use this file → Precedence |
 | Sizing a task | Operating Principles → Task sizing |
 | Running a command | Execution & Delivery → Command Style |
 | Writing or editing code | Engineering Standards → Coding Style + CodeDNA |
@@ -24,6 +27,17 @@ Then use the table to find the section you need, and follow it literally.
 
 Do not read the whole file into context for a small task. Load the sections that
 apply, follow them, and move on.
+
+### Precedence
+
+When two instruction sources disagree, the higher entry wins:
+
+1. The harness system prompt and the user's current request.
+2. This file, read from disk in the project.
+3. Skill summaries, pinned copies, and mirrors of this file.
+
+A copy that lacks this file's `Contract-Version` line, or shows a different one,
+is stale. Refresh the copy from the canonical checkout, then act on this file.
 
 ## Operating Principles
 
@@ -225,7 +239,7 @@ Run the smallest check that proves the change before claiming completion:
 - Report any check that could not run and why. Report meaningful blockers,
   outcomes, and evidence without noisy progress narration.
 
-### Coding Style (adapted from ECC)
+### Coding Style
 
 Core principles, adapted from the **Everything Claude Code** rule packs
 (`https://github.com/affaan-m/ECC`). Read them as starting posture, not
@@ -273,7 +287,10 @@ docstring prose is allowed. Constraints go in `rules:`/`Rules:`; open items go
 in `message:`. Delete every non-CodeDNA comment in the code you touch — this is
 the one exception to the Surgical-changes rule and the trace-back requirement.
 Tool directives and license headers (`//go:build`, linter pragmas, type-ignore
-comments, SPDX lines) are exempt — they are code, not comments.
+comments, SPDX lines) are exempt — they are code, not comments. User-visible
+documentation strings are exempt on the same footing: CLI help text, API and
+OpenAPI descriptions, and public-library docstrings are product surface. Keep
+them short and factual; constraints still belong in `rules:`/`Rules:`.
 
 #### Scope
 
@@ -379,11 +396,16 @@ annotation that covers its constraints, invariants, and edge cases.
 **Editing files.** Re-read `rules:`, the `agent:` history, and the `Rules:` of
 the function you are editing. Apply all file-level constraints before writing.
 After editing, check `used_by:` targets, especially `[cascade]`-tagged ones.
-Never remove `exports:` symbols; they are contracts used by other files. If you
-discover a constraint or fix a bug, update `rules:` for the next agent. Append a
+Keep `exports:` accurate: a symbol leaves the list in the same commit that
+removes it, once no caller remains. If you discover a constraint or fix a bug,
+update `rules:` for the next agent. Append a
 new `agent:` line to the module header in the form `model-id | provider |
 YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
-5 entries; drop the oldest when adding a 6th. Full history is in git.
+5 entries; drop the oldest when adding a 6th. Full history is in git. When
+`.agents/skills/agents-contract/scripts/codedna_check.py` is present, run it
+after a header change: it reports missing L1 fields, `used_by:` targets that do
+not exist, `exports:` names absent from the file, and over-long `agent:`
+histories.
 
 **Session end protocol.** At the end of every session that modifies files,
 record the work in the git commit with the session trailers defined under Git
@@ -478,12 +500,21 @@ When you create the commit (explicit user approval required per Command Style),
 add these trailers:
 
 ```
-AI-Agent:    <model-id>
-AI-Provider: <provider>
-AI-Session:  <session_id>
-AI-Visited:  <comma-separated list of files read>
+AI-Agent:    <model-id | unknown>
+AI-Provider: <provider | unknown>
+AI-Session:  <session_id | unknown>
+AI-Visited:  <files read, derived from the diff and the session's read log>
+AI-Verified: <commands run and their result, one line>
 AI-Message:  <one-line summary of what was found or left open>
 ```
+
+Order matters: the AI block is the last paragraph of the message, with no blank
+line inside it, and any `Co-authored-by:` line sits above it. Git parses
+trailers from the final paragraph only, so a misplaced block is invisible to
+tooling. Confirm with
+`git log -1 --format='%(trailers:key=AI-Agent,valueonly)'` — it prints the agent
+when the block parses and prints nothing when it does not. Write `unknown` for a
+value the harness does not expose; never invent an ID.
 
 Git is the authoritative audit log; do not keep a separate ledger file.
 
