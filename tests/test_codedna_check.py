@@ -6,6 +6,7 @@ rules:   Load the checker by file path — the skill directory name is not a Pyt
 agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker tests
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | added per-language, line-number, content, and shape test classes
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
+agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | added agent-shape, SPDX-exempt, and over-cap-summary regression tests
 """
 
 from __future__ import annotations
@@ -581,6 +582,46 @@ class HeaderShapeTestCase(CodednaCheckTestCase):
         path = self.write("src/sample.go", body)
         findings = self.checker.check_file(path, self.root)
         self.assertTrue(any("agent history entry" in finding for finding in findings), findings)
+
+    def test_agent_loose_date_in_note_does_not_count_as_history(self) -> None:
+        body = GO_CLEAN.replace(
+            "// agent:   test-agent | 9router | 2026-10-08 | s_test | added sample",
+            "// agent:   https://a|b and 2027-01-01 drifted",
+        )
+        path = self.write("src/sample.go", body)
+        findings = self.checker.check_file(path, self.root)
+        matching = [finding for finding in findings if "agent history entry" in finding]
+        self.assertEqual(1, len(matching), findings)
+
+    def test_agent_loose_date_reports_once_after_shaped_entries(self) -> None:
+        body = GO_CLEAN.replace(
+            "// agent:   test-agent | 9router | 2026-10-08 | s_test | added sample",
+            "// agent:   probe | 9router | 2026-10-08 | s_probe | entry one\n// agent:   https://a|b and 2027-01-01 drifted",
+        )
+        path = self.write("src/sample.go", body)
+        findings = self.checker.check_file(path, self.root)
+        matching = [finding for finding in findings if "agent history entry" in finding]
+        self.assertEqual(1, len(matching), findings)
+
+    def test_spdx_license_line_is_exempt(self) -> None:
+        body = GO_CLEAN.replace(
+            "package sample",
+            "// SPDX-License-Identifier: MIT\n\npackage sample",
+        )
+        path = self.write("src/sample.go", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_over_long_summary_reports_word_cap_not_commented_code(self) -> None:
+        # Rules: drift probe for the summary category bug — 'for' in prose must not read as commented-out code.
+        body = GO_CLEAN.replace(
+            "func helper() int { return 1 }",
+            "// helper returns one row for all of the merchants in the ledger house cache store today.\nfunc helper() int { return 1 }",
+        )
+
+        path = self.write("src/sample.go", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("summary line holds", findings[0], findings)
 
     def test_agent_entries_past_five_with_dates_are_reported(self) -> None:
         entries = "\n".join(

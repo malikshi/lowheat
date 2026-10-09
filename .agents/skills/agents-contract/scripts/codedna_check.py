@@ -7,7 +7,8 @@ related: .agents/skills/agents-contract/SKILL.md (CodeDNA section)
 rules:   Read-only — report findings carrying line numbers; never rewrite a file; shebangs, rust doc, and per-dialect directives are exempt.
 agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker, tests, and contract-example linting
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | rewrite: line-numbered findings, 15 language profiles, comment-content scan, agent-entry shape, field order, header-window relief
-agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | fixed mask_code OR-precedence, HTML double-report, dup type_body_depth reset; dropped dead HEADER_LINE_LIMIT; --skip-content now also skips contract examples
+agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | fixed mask_code OR-precedence, HTML double-report, dup type_body_depth reset; dropped dead HEADER_LINE_LIMIT; --skip-content also skips contract examples
+agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | agent-entry shape via two-pipe regex with per-line malformed reports; SPDX directive exemption; over-cap summary gets word-cap finding, not commented-code
 message: Content scanning is line-based (no per-language parser): a permitted summary line needs a declaration below; the scan reports when unsure. In contract examples, repeat a field label on every docstring line after the summary.
 """
 
@@ -71,8 +72,8 @@ _L2_LABEL_LINE = re.compile(
 )
 _DOC_LABEL = re.compile(r"^\s*(exports|used_by|related|rules|Rules|agent|message):\s*(.*)$")
 _COMMENT_LABEL = re.compile(r"^#\s*(Rules|message):")
-_AGENT_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-_AGENT_PIPE = re.compile(r"(?<!/)\|")
+_AGENT_SHAPE = re.compile(r"(?<!/)\|[^|\n]*(?<!/)\|[^|\n]*\d{4}-\d{2}-\d{2}")
+_LOOSE_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TYPE_WORDS = frozenset(
     {
         "class",
@@ -113,6 +114,8 @@ _DIRECTIVES: dict[str, tuple[str, ...]] = {
     ".bash": ("# shellcheck",),
     ".zsh": ("# shellcheck",),
 }
+# Rules: SPDX license identifiers are code metadata in every dialect the contract scans; is_directive matches the token case-insensitively.
+_SPDX_WORD = "SPDX-License-Identifier:"
 
 
 class LanguageProfile:
@@ -162,6 +165,8 @@ class LanguageProfile:
         if self.shebang and stripped.startswith("#!"):
             return True
         lowered = stripped.lower()
+        if _SPDX_WORD.lower() in lowered:
+            return True
         return any(lowered.startswith(d) for d in self.lowered_directives)
 
 
@@ -589,14 +594,20 @@ def _used_by_findings(values: list[str], root: Path) -> list[str]:
 def _agent_findings(entries: list[str]) -> list[str]:
     """Check the agent history's entry shape and age cap.
 
-    Rules:   A continuation line belongs to the last entry and is never malformed; the 5-entry cap counts dated entries; a field with no shaped entry at all is the drift.
+    Rules:   A line without a date is a continuation and never malformed; a genuine entry carries a pipe before the date — a loose date mid-note neither counts as history nor passes unnoticed; every mimicking line reports, and a field with no shaped entry at all is the drift.
     """
     findings: list[str] = []
-    history: list[str] = []
-    for entry in entries:
-        if _AGENT_DATE.search(entry) and _AGENT_PIPE.search(entry):
-            history.append(entry)
-    if entries and not history:
+    history = [entry for entry in entries if _AGENT_SHAPE.search(entry)]
+    malformed = [
+        entry
+        for entry in entries
+        if not _AGENT_SHAPE.search(entry) and _LOOSE_DATE.search(entry)
+    ]
+    for entry in malformed:
+        findings.append(
+            f"malformed agent history entry (model | provider | date | session | note): {entry.strip()[:60]}"
+        )
+    if entries and not history and not malformed:
         findings.append(
             f"malformed agent history entry (model | provider | date | session | note): {entries[0][:60]}"
         )
@@ -644,7 +655,7 @@ def _docstring_findings(docstring: str, allowed_fields, where: str) -> list[str]
 def check_comment_content(path: Path) -> list[str]:
     """Return findings for comment lines outside the permitted CodeDNA content.
 
-    Rules:   Permitted: declaration summaries, L1 field lines, Rules:/message: lines and continuations; exemptions: tool directives, the shell shebang, and rust doc comments; line numbers address the comment's own line.
+    Rules:   Permitted: declaration summaries, L1 field lines, Rules:/message: lines and continuations; exemptions: tool directives, the shell shebang, rust doc, and SPDX license lines; line numbers address the comment's own line.
     """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -780,6 +791,11 @@ def _scan_content(profile: LanguageProfile, masked: list[str], originals: list[s
             if _word_count(inner) <= SUMMARY_WORD_LIMIT and not _TODO_MARKER.search(inner):
                 prev_label = None
                 continue
+            findings.append(
+                f"{line_no}: summary line holds {_word_count(inner)} words; cap is {SUMMARY_WORD_LIMIT}: {inner[:60]}"
+            )
+            prev_label = None
+            continue
         if _TODO_MARKER.search(inner):
             findings.append(
                 f"{line_no}: mid-stream TODO marker outside Rules:/message: — port it to a Rules block or delete: {inner[:60]}"
