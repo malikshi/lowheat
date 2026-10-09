@@ -1,23 +1,26 @@
 """codedna_check.py — Report CodeDNA header drift and out-of-contract comment content.
 
-exports: DEFAULT_IGNORED_DIRS | SOURCE_SUFFIXES | LanguageProfile | check_file | check_comment_content | check_examples | collect_source_files | main
-used_by: tests/test_codedna_check.py → main, check_file, check_comment_content, check_examples, collect_source_files, DEFAULT_IGNORED_DIRS [cascade]
+exports: DEFAULT_IGNORED_DIRS | SOURCE_SUFFIXES | TOOL_OWNED_DIRS | LanguageProfile | check_file | check_comment_content | check_examples | collect_source_files | main
+used_by: tests/test_codedna_check.py → main, check_file, check_comment_content, check_examples, collect_source_files, DEFAULT_IGNORED_DIRS, TOOL_OWNED_DIRS [cascade]
 used_by: AGENTS.md → CodeDNA editing protocol (checker mentions)
 related: .agents/skills/agents-contract/SKILL.md (CodeDNA section)
-rules:   Read-only — report findings carrying line numbers; never rewrite a file; shebangs, rust doc, and per-dialect directives are exempt.
+rules:   Read-only — report findings carrying line numbers; never rewrite a file; shebangs, rust doc, and per-dialect directives are exempt. Tool-owned directories (agent CLIs, editors, their caches) are skipped at any depth below the scanned root — they hold no project source; a file named on the command line is scanned wherever it sits; pass --exclude NAME for a runtime the list does not name yet.
 agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker, tests, and contract-example linting
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | rewrite: line-numbered findings, 15 language profiles, comment-content scan, agent-entry shape, field order, header-window relief
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | fixed mask_code OR-precedence, HTML double-report, dup type_body_depth reset; dropped dead HEADER_LINE_LIMIT; --skip-content also skips contract examples
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | agent-entry shape via two-pipe regex with per-line malformed reports; SPDX directive exemption; over-cap summary gets word-cap finding, not commented-code
-message: Content scanning is line-based (no per-language parser): a permitted summary line needs a declaration below; the scan reports when unsure. In contract examples, repeat a field label on every docstring line after the summary.
+agent:   grok-build | xai | 2026-10-09 | 01a120bc-e75a-79c3-8ab4-e055948b9a83 | skipped tool-owned dirs below the scanned root, added --exclude, scanned Python # comments via tokenize, made Python finding lines absolute, exempted shell heredoc bodies, survived binary input, and after review made a false heredoc opener fail open and the terminator match bash exactly
+message: Content scanning is line-based (no per-language parser): a permitted summary line needs a declaration below; the scan reports when unsure. In contract examples, repeat a field label on every docstring line after the summary. Known gaps: a comment block above a Python module docstring counts as header zone; a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc is reported as prose, because a missing terminator must never silence the rest of the file.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import io
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 SOURCE_SUFFIXES = (
@@ -44,25 +47,60 @@ REQUIRED_L1 = ("exports", "used_by", "rules", "agent")
 SUMMARY_WORD_LIMIT = 15
 ARROW = "→"
 EM_DASH = "—"
-DEFAULT_IGNORED_DIRS = frozenset(
+TOOL_OWNED_DIRS = frozenset(
     {
-        ".git",
-        ".hg",
-        ".svn",
-        ".venv",
-        "venv",
-        "node_modules",
-        "dist",
-        "build",
-        "vendor",
-        "target",
-        "__pycache__",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".tox",
+        ".claude",
+        ".commandcode",
+        ".codex",
+        ".cursor",
+        ".gemini",
+        ".grok",
+        ".opencode",
+        ".aider",
+        ".continue",
+        ".specstory",
+        ".windsurf",
+        ".roo",
+        ".cline",
+        ".kilocode",
+        ".crush",
+        ".qwen",
+        ".augment",
+        ".factory",
+        ".amp",
+        ".goose",
+        ".plandex",
+        ".vscode",
+        ".idea",
+        ".fleet",
+        ".zed",
+        ".history",
     }
 )
+DEFAULT_IGNORED_DIRS = (
+    frozenset(
+        {
+            ".git",
+            ".hg",
+            ".svn",
+            ".venv",
+            "venv",
+            "node_modules",
+            "dist",
+            "build",
+            "vendor",
+            "target",
+            "__pycache__",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".tox",
+        }
+    )
+    | TOOL_OWNED_DIRS
+)
+
+# Rules: a new agent CLI or editor that writes its own dot-directory belongs in TOOL_OWNED_DIRS, or the run reports findings in code the project does not own; --exclude covers one-off names.
 
 _FIELD_LINE = re.compile(
     r"^\s*(?://+|#+|\*+|!|<!--|\*/|/\*)?\s*(exports|used_by|related|rules|agent|message):\s*(.*)$"
@@ -106,7 +144,7 @@ _CODEISH_LINE = re.compile(
 )
 _DIRECTIVES: dict[str, tuple[str, ...]] = {
     ".go": ("//go:", "//export ", "//sys ", "//line ", "//cgo:", "// +build", "//nolint", "//lint:", "// Code generated"),
-    ".py": ("# type:", "# noqa", "# pylint:", "# ruff:", "# yapf:", "# fmt:", "# flake8:", "# isort:", "# mypy:"),
+    ".py": ("# type:", "# noqa", "# pylint:", "# ruff:", "# yapf:", "# fmt:", "# flake8:", "# isort:", "# mypy:", "# -*-", "# pragma:"),
     ".js": ("// eslint", "/* eslint", "// @ts-", "/* jshint", "/* global", "/*!", "//# sourceurl"),
     ".ts": ("// eslint", "/* eslint", "/// <reference", "// @ts-", "/* jshint", "/* global", "/*!"),
     ".rs": ("/// ", "//! ", "#![", "#["),
@@ -116,6 +154,15 @@ _DIRECTIVES: dict[str, tuple[str, ...]] = {
 }
 # Rules: SPDX license identifiers are code metadata in every dialect the contract scans; is_directive matches the token case-insensitively.
 _SPDX_WORD = "SPDX-License-Identifier:"
+_PY_MASKED_TOKENS = frozenset(
+    {tokenize.STRING, tokenize.COMMENT}
+    | {
+        getattr(tokenize, name)
+        for name in ("FSTRING_START", "FSTRING_MIDDLE", "FSTRING_END")
+        if hasattr(tokenize, name)
+    }
+)
+_HEREDOC_OPEN = re.compile(r"(?<!<)<<(-?)\s*\\?['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
 
 
 class LanguageProfile:
@@ -300,6 +347,105 @@ def mask_code(profile: LanguageProfile, text: str, suffix: str) -> str:
     return "".join(out)
 
 
+def _python_scan_inputs(text: str) -> tuple[str, frozenset[int]] | None:
+    """Blank Python strings and comments, and report the lines that open a comment.
+
+    Rules:   tokenize decides what is a string, so a `#` inside a docstring, template, or f-string never reads as a comment; a comment that trails code is not a comment line, matching the line-based dialects; only characters are replaced, so line structure is preserved; returns None when the file does not tokenize.
+    """
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return None
+    source_lines = text.split("\n")
+    rows = [list(row) for row in source_lines]
+    comment_lines: set[int] = set()
+    for token in tokens:
+        if token.type == tokenize.COMMENT:
+            if not source_lines[token.start[0] - 1][: token.start[1]].strip():
+                comment_lines.add(token.start[0])
+        if token.type not in _PY_MASKED_TOKENS:
+            continue
+        start_row, start_col = token.start
+        end_row, end_col = token.end
+        for row_number in range(start_row, min(end_row, len(rows)) + 1):
+            row = rows[row_number - 1]
+            first = start_col if row_number == start_row else 0
+            last = end_col if row_number == end_row else len(row)
+            for column in range(min(first, len(row)), min(last, len(row))):
+                row[column] = " "
+    return "\n".join("".join(row) for row in rows), frozenset(comment_lines)
+
+
+def _open_quote(line: str, column: int) -> str | None:
+    """Return the quote character still open at one column, or None.
+
+    Rules:   Backslashes escape outside single quotes only; a doubled quote inside single quotes reads as a close, so a marker after one still counts as an opener — the fail-open rule bounds what that costs.
+    """
+    quote: str | None = None
+    index = 0
+    while index < column:
+        char = line[index]
+        if char == "\\" and quote != "'":
+            index += 2
+            continue
+        if quote is None and char in "\"'":
+            quote = char
+        elif quote == char:
+            quote = None
+        index += 1
+    return quote
+
+
+def _shell_heredoc_openers(line: str) -> list[tuple[str, bool]]:
+    """Return the delimiter words and `<<-` flags one shell line opens, in order.
+
+    Rules:   A marker inside a quoted run is prose, and `<<<` is a herestring — treating either as a heredoc would silence real comments below it.
+    """
+    openers: list[tuple[str, bool]] = []
+    for match in _HEREDOC_OPEN.finditer(line):
+        if _open_quote(line, match.start()) is None:
+            openers.append((match.group(2), match.group(1) == "-"))
+    return openers
+
+
+def _heredoc_terminator(lines: list[str], start: int, word: str, strips_tabs: bool) -> int | None:
+    """Return the line index that closes one heredoc, or None when none exists.
+
+    Rules:   bash closes only on the bare word — leading tabs come off for `<<-` alone, and a trailing blank keeps the line in the body.
+    """
+    for index in range(start, len(lines)):
+        candidate = lines[index].lstrip("\t") if strips_tabs else lines[index]
+        if candidate == word:
+            return index
+    return None
+
+
+def _shell_heredoc_lines(text: str) -> frozenset[int]:
+    """Return the line numbers inside shell heredoc bodies.
+
+    Rules:   A heredoc body is data, so a `#` line inside one is never a comment. A body is skipped only when its terminator is found below — an opener without one (a false match on arithmetic, a herestring, or a quoted marker) must never silence the rest of the file. Bodies close in the order their openers appear.
+    """
+    lines = text.split("\n")
+    body_lines: set[int] = set()
+    closers: list[int] = []
+    for index, raw in enumerate(lines):
+        while closers and index >= closers[0]:
+            closers.pop(0)
+        if closers:
+            body_lines.add(index + 1)
+            continue
+        if raw.lstrip().startswith("#"):
+            continue
+        search_from = index + 1
+        for word, strips_tabs in _shell_heredoc_openers(raw):
+            closing = _heredoc_terminator(lines, search_from, word, strips_tabs)
+            if closing is None:
+                break
+            closers.append(closing)
+            search_from = closing + 1
+    return frozenset(body_lines)
+
+
 def header_text(path: Path, text: str) -> str:
     """Return the module header text of one source file.
 
@@ -435,10 +581,10 @@ def _read_header_fields(
     return fields, labels
 
 
-def _docstring_fields(doc: str):
-    """Map L1 labels to values inside a Python docstring.
+def _docstring_fields(doc: str, base: int):
+    """Map L1 labels to values and absolute label line numbers inside a Python docstring.
 
-    Rules:   Line numbers count docstring rows so the agent edits at the right line.
+    Rules:   The docstring's first line is file line `base`, so every finding points at the line the agent edits.
     """
     fields: dict[str, list[str]] = {}
     labels: dict[str, int] = {}
@@ -449,7 +595,7 @@ def _docstring_fields(doc: str):
         if match:
             current = match.group(1)
             fields.setdefault(current, [])
-            labels.setdefault(current, offset)
+            labels.setdefault(current, base + offset - 1)
             value = match.group(2).strip()
             if value:
                 fields[current].append(value)
@@ -474,15 +620,15 @@ def check_file(path: Path, root: Path) -> list[str]:
     profile = profile_for(path)
     lines = text.splitlines()
     entries = _header_entries(profile, lines)
+    doc_match = _PY_DOCSTRING.match(text) if path.suffix == ".py" else None
 
     if path.suffix == ".py":
-        doc_match = _PY_DOCSTRING.match(text)
         if doc_match is None:
             return ["missing L1 header"]
         doc = doc_match.group(2).splitlines()
         first_no = text[: doc_match.start(2)].count("\n") + 1
         first_text = next((row.strip() for row in doc if row.strip()), "")
-        fields, labels = _docstring_fields(doc_match.group(2))
+        fields, labels = _docstring_fields(doc_match.group(2), first_no)
     else:
         if not entries:
             return ["missing L1 header"]
@@ -502,37 +648,20 @@ def check_file(path: Path, root: Path) -> list[str]:
         )
         return findings
 
-    order: list[str] = []
-    order_no = 0
-    if path.suffix == ".py":
-        doc_match = _PY_DOCSTRING.match(text)
-        if doc_match:
-            base = text[: doc_match.start(2)].count("\n") + 1
-            for offset, raw in enumerate(doc_match.group(2).splitlines(), start=1):
-                match = _FIELD_LINE.match(raw.strip())
-                if match and match.group(1) not in order:
-                    order.append(match.group(1))
-                    order_no = order_no or base + offset
-    else:
-        for line_no, raw_entry in entries:
-            match = _FIELD_LINE.match(raw_entry.strip())
-            if match and match.group(1) not in order:
-                order.append(match.group(1))
-                order_no = order_no or line_no
+    order = [name for name in labels if name in L1_FIELDS]
     canonical_index = {name: index for index, name in enumerate(L1_FIELDS)}
-    observed = [canonical_index[name] for name in order if name in canonical_index]
+    observed = [canonical_index[name] for name in order]
     if observed != sorted(observed):
         findings.append(
-            f"{order_no}: L1 field order drifts from exports/used_by/related/rules/agent/message: {', '.join(order)}"
+            f"{next(iter(labels.values()), first_no)}: L1 field order drifts from exports/used_by/related/rules/agent/message: {', '.join(order)}"
         )
 
     for label in REQUIRED_L1:
         if label not in labels:
             findings.append(f"{first_no}: missing L1 field: {label}")
 
-    if path.suffix == ".py":
-        doc_match = _PY_DOCSTRING.match(text)
-        exports_body = text[doc_match.end():] if doc_match else text
+    if doc_match is not None:
+        exports_body = text[doc_match.end():]
     else:
         header_last = entries[-1][0] if entries else 0
         exports_body = "\n".join(lines[header_last:]) if header_last else text
@@ -652,10 +781,21 @@ def _docstring_findings(docstring: str, allowed_fields, where: str) -> list[str]
     return findings
 
 
+def _parse_python(text: str) -> ast.Module | None:
+    """Return the parsed module, or None when the source does not parse.
+
+    Rules:   ValueError covers the null-byte refusal ast.parse raises on binary content — that must not abort the run.
+    """
+    try:
+        return ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+
+
 def check_comment_content(path: Path) -> list[str]:
     """Return findings for comment lines outside the permitted CodeDNA content.
 
-    Rules:   Permitted: declaration summaries, L1 field lines, Rules:/message: lines and continuations; exemptions: tool directives, the shell shebang, rust doc, and SPDX license lines; line numbers address the comment's own line.
+    Rules:   Permitted: declaration summaries, L1 field lines, Rules:/message: lines and continuations; exemptions: tool directives, the shell shebang, rust doc, SPDX license lines, and shell heredoc bodies; line numbers address the comment's own line; a Python file that does not parse still gets its `#` comments scanned, and a Python file that does not tokenize gets its docstrings checked only.
     """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -667,29 +807,43 @@ def check_comment_content(path: Path) -> list[str]:
         module_doc = _PY_DOCSTRING.match(text)
         if module_doc:
             findings.extend(_docstring_findings(module_doc.group(2), L1_FIELDS, f"{path.name} module"))
-        try:
-            tree = ast.parse(text)
-        except SyntaxError:
+        tree = _parse_python(text)
+        if tree is not None:
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                docstring = ast.get_docstring(node, clean=False)
+                if docstring is None:
+                    continue
+                findings.extend(
+                    _docstring_findings(docstring, L2_FIELDS, f"{path.name} [{getattr(node, 'name', '')}]")
+                )
+        scan_inputs = _python_scan_inputs(text)
+        if scan_inputs is None:
             return findings
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            docstring = ast.get_docstring(node, clean=False)
-            if docstring is None:
-                continue
-            findings.extend(
-                _docstring_findings(docstring, L2_FIELDS, f"{path.name} [{getattr(node, 'name', '')}]")
+        masked_text, comment_lines = scan_inputs
+        findings.extend(
+            _scan_content(
+                profile, masked_text.split("\n"), text.split("\n"), comment_lines=comment_lines
             )
+        )
         return findings
     masked = mask_code(profile, text, path.suffix)
-    findings.extend(_scan_content(profile, masked.splitlines(), text.splitlines()))
+    skip_lines = _shell_heredoc_lines(text) if profile.name == "shell" else frozenset()
+    findings.extend(_scan_content(profile, masked.splitlines(), text.splitlines(), skip_lines))
     return findings
 
 
-def _scan_content(profile: LanguageProfile, masked: list[str], originals: list[str]) -> list[str]:
+def _scan_content(
+    profile: LanguageProfile,
+    masked: list[str],
+    originals: list[str],
+    skip_lines: frozenset[int] = frozenset(),
+    comment_lines: frozenset[int] | None = None,
+) -> list[str]:
     """Report comment lines outside the permitted CodeDNA content set.
 
-    Rules:   Permitted: L1 field lines with continuations, one summary line per declaration (top-level, grouped, or struct member), Rules:/message: lines with continuations, tool directives, rust doc, the shell shebang. Context comes from masked code: brace depth for type bodies, paren depth for groups, declarations for summaries.
+    Rules:   Permitted: L1 field lines with continuations, one summary line per declaration (top-level, grouped, or struct member), Rules:/message: lines with continuations, tool directives, rust doc, the shell shebang. Context comes from masked code: brace depth for type bodies, paren depth for groups, declarations for summaries. `skip_lines` holds data lines (shell heredoc bodies) that are never comments; `comment_lines` replaces the prefix test with exact positions when the caller knows them (Python).
     """
     findings: list[str] = []
     header_zone = _header_line_count(profile, originals)
@@ -704,6 +858,9 @@ def _scan_content(profile: LanguageProfile, masked: list[str], originals: list[s
         line_no = index + 1
         masked_code = masked[index].strip()
         stripped = raw.strip()
+        if line_no in skip_lines:
+            prev_label = None
+            continue
         if not stripped:
             prev_label = None
             continue
@@ -732,10 +889,15 @@ def _scan_content(profile: LanguageProfile, masked: list[str], originals: list[s
                 continue
             if "<!--" in _strip_html_ctrl(stripped) or stripped == "-->":
                 continue
-        is_comment = profile.is_comment(stripped) or (
-            profile.name in ("css", "html") and (in_block_comment or _block_open(stripped))
-        )
-        is_comment = is_comment and not (profile.name == "html" and _strip_html_ctrl(stripped).strip() == "")
+        if comment_lines is not None:
+            is_comment = line_no in comment_lines
+        else:
+            is_comment = profile.is_comment(stripped) or (
+                profile.name in ("css", "html") and (in_block_comment or _block_open(stripped))
+            )
+            is_comment = is_comment and not (
+                profile.name == "html" and _strip_html_ctrl(stripped).strip() == ""
+            )
         if not is_comment:
             if type_body_depth and depth < type_body_depth:
                 type_body_depth = 0
@@ -898,7 +1060,7 @@ def check_examples(text: str, source: str = "AGENTS.md") -> list[str]:
 def collect_source_files(roots, ignored_dirs=DEFAULT_IGNORED_DIRS) -> list[Path]:
     """Return the candidate source files under each root.
 
-    Rules:   Skip ignored directory names at any depth; follow no symlinks.
+    Rules:   Skip ignored directory names at any depth below the scanned root — a directory above it must never hide the tree; follow no symlinks; an explicitly named file is scanned wherever it sits.
     """
     found: list[Path] = []
     for root in roots:
@@ -911,7 +1073,7 @@ def collect_source_files(roots, ignored_dirs=DEFAULT_IGNORED_DIRS) -> list[Path]
                 continue
             if path.suffix not in SOURCE_SUFFIXES:
                 continue
-            if ignored_dirs.intersection(path.parts):
+            if ignored_dirs.intersection(path.relative_to(root_path).parts):
                 continue
             found.append(path)
     return found
@@ -920,17 +1082,29 @@ def collect_source_files(roots, ignored_dirs=DEFAULT_IGNORED_DIRS) -> list[Path]
 def main(argv=None) -> int:
     """Run the checker over the given paths.
 
-    Rules:   Exit 1 when any finding exists, 0 when every header is clean; findings carry either header or comment line numbers.
+    Rules:   Exit 1 when any finding exists, 0 when every header is clean, 2 when a scanned path does not exist — a typo must never read as a clean run.
     """
     parser = argparse.ArgumentParser(description="Report CodeDNA L1 header drift and out-of-contract comment content.")
     parser.add_argument("paths", nargs="*", help="files or directories to scan (default: .)")
     parser.add_argument("--root", default=".", help="root that used_by targets resolve against")
     parser.add_argument("--skip-content", action="store_true", help="check headers only")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="extra directory name to skip at any depth (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     roots = [Path(item) for item in args.paths] or [Path(".")]
+    missing = [item for item in roots if not item.exists()]
+    if missing:
+        for item in missing:
+            print(f"codedna_check: path not found: {item}")
+        return 2
     root = Path(args.root)
-    files = collect_source_files(roots)
+    files = collect_source_files(roots, DEFAULT_IGNORED_DIRS | frozenset(args.exclude))
     documents = [
         item / "AGENTS.md"
         for item in roots

@@ -1,12 +1,13 @@
 """test_codedna_check.py — Tests for the CodeDNA L1 header drift checker.
 
-exports: class CodednaCheckTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class HeaderShapeTestCase
+exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
 agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker tests
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | added per-language, line-number, content, and shape test classes
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | added agent-shape, SPDX-exempt, and over-cap-summary regression tests
+agent:   grok-build | xai | 2026-10-09 | 01a120bc-e75a-79c3-8ab4-e055948b9a83 | added tool-directory, exclude-flag, Python comment, absolute-line, and heredoc tests
 """
 
 from __future__ import annotations
@@ -142,6 +143,13 @@ class CodednaCheckTestCase(unittest.TestCase):
         path = self.write("src/sample.go", "package sample\n\nfunc helper() int { return 1 }\n")
         self.assertEqual(["missing L1 header"], self.checker.check_file(path, self.root))
 
+    def test_binary_content_does_not_crash_the_scan(self) -> None:
+        path = self.root / "src" / "binary.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(bytes(range(256)))
+        self.assertEqual(["missing L1 header"], self.checker.check_file(path, self.root))
+        self.assertEqual([], self.checker.check_comment_content(path))
+
     def test_first_line_without_a_description_is_reported(self) -> None:
         text = CLEAN_MODULE.replace(
             "sample.py — Example module used by the checker tests.", "sample.py"
@@ -196,6 +204,13 @@ class CodednaCheckTestCase(unittest.TestCase):
         self.write("src/sample.py", CLEAN_MODULE)
         without_findings = self.run_main()
         self.assertEqual((1, 0), (with_findings, without_findings))
+
+    def test_main_reports_two_when_a_scanned_path_does_not_exist(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = self.checker.main([str(self.root / "gone")])
+        self.assertEqual(2, exit_code, stdout.getvalue())
+        self.assertIn("path not found", stdout.getvalue(), stdout.getvalue())
 
 
 GO_CLEAN = textwrap.dedent(
@@ -310,6 +325,126 @@ JS_CLEAN = textwrap.dedent(
 )
 
 
+class ToolDirectoryTestCase(CodednaCheckTestCase):
+    """Tool-owned directories are skipped — agents and editors do not own project source."""
+
+    def test_collect_source_files_skips_tool_directories(self) -> None:
+        self.write("src/sample.py", CLEAN_MODULE)
+        for name in (".claude", ".codex", ".commandcode", ".cursor", ".gemini", ".grok"):
+            self.write(f"{name}/cache/tool.py", "import os\n")
+        found = {path.name for path in self.checker.collect_source_files([self.root])}
+        self.assertEqual({"sample.py"}, found)
+
+    def test_main_is_clean_when_only_tool_directories_hold_source(self) -> None:
+        self.write(".claude/plugins/hooks/hook.py", "import os\n\n# warms the cache\n")
+        self.write(".codex/sessions/loader.js", "// session loader for the runtime\n")
+        self.assertEqual(0, self.run_main())
+
+    def test_exclude_flag_skips_an_extra_directory_name(self) -> None:
+        self.write("src/sample.py", CLEAN_MODULE)
+        self.write("third_party_agent/tool.py", "import os\n")
+        without_exclude = self.run_main()
+        with contextlib.redirect_stdout(io.StringIO()):
+            with_exclude = self.checker.main(
+                ["--exclude", "third_party_agent", "--root", str(self.root), str(self.root)]
+            )
+        self.assertEqual((1, 0), (without_exclude, with_exclude))
+
+    def test_directory_whose_name_merely_starts_like_a_skip_name_is_scanned(self) -> None:
+        self.write("src/sample.py", CLEAN_MODULE)
+        self.write(".claudex/tool.py", "import os\n")
+        found = {str(path.relative_to(self.root)) for path in self.checker.collect_source_files([self.root])}
+        self.assertEqual({"src/sample.py", ".claudex/tool.py"}, found)
+
+    def test_skip_names_match_relative_to_the_scanned_root(self) -> None:
+        nested = self.root / ".cursor" / "proj"
+        nested.mkdir(parents=True)
+        self.write(".cursor/proj/src/sample.py", CLEAN_MODULE)
+        found = {path.name for path in self.checker.collect_source_files([nested])}
+        self.assertEqual({"sample.py"}, found)
+
+    def test_explicit_file_argument_inside_a_tool_directory_is_scanned(self) -> None:
+        path = self.write(".grok/cache/tool.py", "import os\n")
+        self.assertEqual(["missing L1 header"], self.checker.check_file(path, self.root))
+
+    def test_tool_directory_names_are_declared(self) -> None:
+        declared = self.checker.TOOL_OWNED_DIRS
+        self.assertTrue({".claude", ".codex", ".commandcode"} <= declared, declared)
+        self.assertTrue(declared <= self.checker.DEFAULT_IGNORED_DIRS, declared)
+
+
+class ShellHeredocTestCase(CodednaCheckTestCase):
+    """Heredoc bodies are data — skip them without silencing the comments around them."""
+
+    def findings_after(self, inserted: str) -> list[str]:
+        """Return content findings for a script with `inserted` placed after the prologue."""
+        body = SH_CLEAN.replace("set -euo pipefail", "set -euo pipefail\n" + inserted)
+        path = self.write("deploy/sample.sh", body)
+        return self.checker.check_comment_content(path)
+
+    def test_quoted_and_plain_heredoc_bodies_are_skipped(self) -> None:
+        findings = self.findings_after(
+            "cat <<'EOF' > generated.conf\n# managed by the installer\nkey = value\nEOF\n"
+            "cat <<-END > other.conf\n\t# indented body line\n\tEND\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_escaped_delimiter_body_is_skipped(self) -> None:
+        findings = self.findings_after(
+            "cat <<\\EOF > generated.conf\n# managed by the installer\nEOF\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_two_heredocs_on_one_line_are_skipped_in_order(self) -> None:
+        findings = self.findings_after(
+            "cat <<A <<B > out.conf\n# body of A\nA\n# body of B\nB\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_comment_after_the_terminator_is_still_reported(self) -> None:
+        findings = self.findings_after(
+            "cat <<EOF > generated.conf\n# managed by the installer\nEOF\n# helper keeps the ledger warm\n"
+        )
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("outside the permitted content", findings[0])
+
+    def test_space_indented_line_does_not_close_a_plain_heredoc(self) -> None:
+        findings = self.findings_after(
+            "cat <<EOF > generated.conf\nkey = value\n  EOF\n# still inside the body\nEOF\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_trailing_blank_does_not_close_a_plain_heredoc(self) -> None:
+        findings = self.findings_after(
+            "cat <<EOF > generated.conf\nkey = value\nEOF \n# still inside the body\nEOF\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_trailing_blank_does_not_close_a_tab_stripped_heredoc(self) -> None:
+        findings = self.findings_after(
+            "cat <<-END > generated.conf\n\t# indented body line\n\tEND \n# still inside the body\n\tEND\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_unterminated_heredoc_silences_nothing(self) -> None:
+        findings = self.findings_after("cat <<EOF > generated.conf\n# helper keeps the ledger warm\n")
+        self.assertEqual(1, len(findings), findings)
+
+    def test_arithmetic_shift_is_not_a_heredoc(self) -> None:
+        findings = self.findings_after("mask=$((1 << bits))\n# helper keeps the ledger warm\n")
+        self.assertEqual(1, len(findings), findings)
+
+    def test_herestring_is_not_a_heredoc(self) -> None:
+        findings = self.findings_after("cat <<< hello > /dev/null\n# helper keeps the ledger warm\n")
+        self.assertEqual(1, len(findings), findings)
+
+    def test_heredoc_marker_inside_a_quoted_string_is_not_a_heredoc(self) -> None:
+        findings = self.findings_after(
+            'echo "pass <<EOF when done"\n# helper keeps the ledger warm\nEOF\n'
+        )
+        self.assertEqual(1, len(findings), findings)
+
+
 class LanguageHeaderTestCase(CodednaCheckTestCase):
     """Per-language header checks — every scanned suffix must score clean."""
 
@@ -410,6 +545,14 @@ class FindingLineNumbersTestCase(CodednaCheckTestCase):
         findings = self.checker.check_file(path, self.root)
         self.assertTrue(any(finding.startswith("1: ") for finding in findings), findings)
 
+    def test_python_field_finding_lines_are_absolute_below_a_shebang(self) -> None:
+        body = "#!/usr/bin/env python3\n" + PY_CLEAN.replace("exports: helper", "exports: vanished")
+        path = self.write("src/sample.py", body)
+        findings = self.checker.check_file(path, self.root)
+        matching = [finding for finding in findings if "vanished" in finding]
+        self.assertEqual(1, len(matching), findings)
+        self.assertTrue(matching[0].startswith("4: "), matching)
+
 
 class CommentContentTestCase(CodednaCheckTestCase):
     """Comments outside permitted content are reported, per language dialect."""
@@ -467,6 +610,51 @@ class CommentContentTestCase(CodednaCheckTestCase):
         path = self.write("src/sample.py", body)
         findings = self.checker.check_comment_content(path)
         self.assertTrue(any("outside the permitted content" in finding for finding in findings), findings)
+
+    def test_python_body_comment_is_reported(self) -> None:
+        body = PY_CLEAN.replace("    return 1", "    # warms the ledger cache\n    return 1")
+        path = self.write("src/sample.py", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertTrue(any("outside the permitted content" in finding for finding in findings), findings)
+
+    def test_python_commented_out_code_is_reported(self) -> None:
+        body = PY_CLEAN.replace("    return 1", "    # return 2\n    return 1")
+        path = self.write("src/sample.py", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertTrue(any("commented-out code" in finding for finding in findings), findings)
+
+    def test_python_comments_are_scanned_when_the_file_does_not_parse(self) -> None:
+        body = PY_CLEAN.replace(
+            "def helper() -> int:\n    return 1",
+            "if True print(1)\n\n\n# warms the ledger cache",
+        )
+        path = self.write("src/sample.py", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertTrue(any("outside the permitted content" in finding for finding in findings), findings)
+
+    def test_python_hash_inside_a_string_is_not_a_comment(self) -> None:
+        body = PY_CLEAN.replace(
+            "def helper() -> int:\n    return 1",
+            'def helper() -> int:\n    return 1\n\n\nTEMPLATE = """\n# not a comment\n"""',
+        )
+        path = self.write("src/sample.py", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_python_hash_inside_an_f_string_is_not_a_comment(self) -> None:
+        body = PY_CLEAN.replace(
+            "def helper() -> int:\n    return 1",
+            'def helper() -> int:\n    return 1\n\n\nMESSAGE = f"""\n# not a comment {1}\n"""',
+        )
+        path = self.write("src/sample.py", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_python_tool_directives_are_exempt(self) -> None:
+        body = "# -*- coding: utf-8 -*-\n" + PY_CLEAN.replace(
+            "def helper", "# type: ignore[import]\n# noqa: E501\ndef helper"
+        )
+        path = self.write("src/sample.py", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+        self.assertEqual([], self.checker.check_file(path, self.root))
 
     def test_shell_prose_is_reported_and_shellcheck_exempt(self) -> None:
         body = SH_CLEAN.replace(
