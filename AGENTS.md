@@ -407,9 +407,12 @@ removes it, once no caller remains. If you discover a constraint or fix a bug,
 update `rules:` for the next agent. Append a
 new `agent:` line to the module header in the form `model-id | provider |
 YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
-5 entries; drop the oldest when adding a 6th. Full history is in git. When
-`.agents/skills/agents-contract/scripts/codedna_check.py` is present, run it
-after any annotation edit — with no flags it checks L1 headers (missing
+5 entries; drop the oldest when adding a 6th. Full history is in git. Run the
+checker the agents-contract skill ships after any annotation edit:
+`scripts/codedna_check.py` inside the skill directory the harness reports —
+`.agents/skills/agents-contract/scripts/codedna_check.py` in this repository's
+checkout — and skip the run when an install ships no script. With no flags it
+checks L1 headers (missing
 files/fields, `filename — description` form, field order, `used_by:` targets
 that do not exist, `exports:` names absent from the file body, agent-entry
 shape and the 5-entry cap) AND comment content (prose, commented-out code, TODO

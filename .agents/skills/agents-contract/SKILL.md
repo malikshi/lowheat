@@ -167,11 +167,12 @@ of the function you are editing; apply the file-level constraints first; keep
 it, once no caller remains; after editing, check `used_by:` targets especially
 `[cascade]`-tagged ones; append a new `agent:` line in the form above, keep only
 the last 5 entries, and drop the oldest when adding a 6th (full history is in
-git). Run
-`.agents/skills/agents-contract/scripts/codedna_check.py` after any annotation
-edit: with no flags it checks L1 headers (missing files/fields, `filename —`
-form, field order, dead `used_by:` targets, `exports:` names absent from the
-file body, agent-entry shape and the 5-entry cap) and comment content (prose,
+git). Run this skill's checker after any annotation edit — it ships at
+`scripts/codedna_check.py` beside this file, and an install that omits the
+scripts directory skips the run: with no flags it checks L1 headers (missing
+files/fields, `filename —` form, field order, dead `used_by:` targets,
+`exports:` names absent from the file body, agent-entry shape and the 5-entry
+cap) and comment content (prose,
 commented-out code, TODO markers outside `Rules:`/`message:`) across Python,
 Go, JavaScript/JSX/mjs/cjs, TypeScript/TSX, Rust, shell, CSS, and HTML, with
 line numbers on every finding; `--skip-content` limits it to headers. It is
