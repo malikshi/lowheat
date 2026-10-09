@@ -1,5 +1,3 @@
-> Verbatim mirror of AGENTS.md — do not edit directly; copy from AGENTS.md to sync.
-
 # Agent Instructions
 
 Contract-Version: 2026-10-08
@@ -411,10 +409,16 @@ new `agent:` line to the module header in the form `model-id | provider |
 YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
 5 entries; drop the oldest when adding a 6th. Full history is in git. When
 `.agents/skills/agents-contract/scripts/codedna_check.py` is present, run it
-after a header change: it reports missing L1 fields, `used_by:` targets that do
-not exist, `exports:` names absent from the file, and over-long `agent:`
-histories. When the scanned paths hold an `AGENTS.md`, it also lints that
-document's Python examples against these rules.
+after any annotation edit — with no flags it checks L1 headers (missing
+files/fields, `filename — description` form, field order, `used_by:` targets
+that do not exist, `exports:` names absent from the file body, agent-entry
+shape and the 5-entry cap) AND comment content (prose, commented-out code, TODO
+markers outside `Rules:`/`message:`), across Python, Go, JavaScript/JSX/mjs/cjs,
+TypeScript/TSX, Rust, shell, CSS, and HTML, with line numbers on every finding.
+`--skip-content` limits it to the header checks. It is line-based and errs toward
+reporting; a false positive is a signal that the comment belongs under
+`Rules:`/`message:`. When the scanned paths hold an `AGENTS.md`, it also lints
+that document's Python examples against these rules.
 
 **Session end protocol.** At the end of every session that modifies files,
 record the work in the git commit with the session trailers defined under Git
