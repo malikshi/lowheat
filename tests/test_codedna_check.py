@@ -5,6 +5,7 @@ used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
 agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker tests
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | added per-language, line-number, content, and shape test classes
+agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
 """
 
 from __future__ import annotations
@@ -500,7 +501,40 @@ class CommentContentTestCase(CodednaCheckTestCase):
         )
         path = self.write("web/sample.html", body)
         findings = self.checker.check_comment_content(path)
-        self.assertTrue(any("outside the permitted content" in finding for finding in findings), findings)
+        matching = [finding for finding in findings if "outside the permitted content" in finding]
+        self.assertEqual(1, len(matching), findings)
+        self.assertTrue(re.match(r"\d+:", matching[0]), findings)
+
+    def test_html_inline_comment_on_marked_up_line_reports_once(self) -> None:
+        body = HTML_CLEAN.replace(
+            "<body></body>",
+            "<body> <!-- note prose --> </body>",
+        )
+        path = self.write("web/sample.html", body)
+        findings = self.checker.check_comment_content(path)
+        matching = [finding for finding in findings if "outside the permitted content" in finding]
+        self.assertEqual(1, len(matching), findings)
+
+    def test_skip_content_limits_run_to_header_checks(self) -> None:
+        body = HTML_CLEAN.replace(
+            "<body></body>",
+            "<body><!-- drafts only; do not ship --></body>",
+        )
+        path = self.write("web/sample.html", body)
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = self.checker.main([str(path), "--skip-content", "--root", str(self.root)])
+        self.assertEqual(0, exit_code, stdout.getvalue())
+        self.assertIn("0 finding(s)", stdout.getvalue(), stdout.getvalue())
+        self.assertNotIn("outside the permitted content", stdout.getvalue(), stdout.getvalue())
+
+    def test_css_url_string_interior_never_reads_as_comment(self) -> None:
+        body = CSS_CLEAN.replace(
+            "body { margin: 0; }",
+            'body { background: url("https://cdn.example/a.png"); }',
+        )
+        path = self.write("web/sample.css", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
 
     def test_css_prose_is_reported(self) -> None:
         body = CSS_CLEAN.replace(

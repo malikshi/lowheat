@@ -7,6 +7,7 @@ related: .agents/skills/agents-contract/SKILL.md (CodeDNA section)
 rules:   Read-only — report findings carrying line numbers; never rewrite a file; shebangs, rust doc, and per-dialect directives are exempt.
 agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker, tests, and contract-example linting
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | rewrite: line-numbered findings, 15 language profiles, comment-content scan, agent-entry shape, field order, header-window relief
+agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | fixed mask_code OR-precedence, HTML double-report, dup type_body_depth reset; dropped dead HEADER_LINE_LIMIT; --skip-content now also skips contract examples
 message: Content scanning is line-based (no per-language parser): a permitted summary line needs a declaration below; the scan reports when unsure. In contract examples, repeat a field label on every docstring line after the summary.
 """
 
@@ -35,7 +36,6 @@ SOURCE_SUFFIXES = (
     ".html",
     ".htm",
 )
-HEADER_LINE_LIMIT = 40
 AGENT_HISTORY_LIMIT = 5
 L1_FIELDS = ("exports", "used_by", "related", "rules", "agent", "message")
 L2_FIELDS = ("rules", "message")
@@ -225,7 +225,7 @@ def mask_code(profile: LanguageProfile, text: str, suffix: str) -> str:
             out.append(c)
             i += 1
             continue
-        if c == "/" and i + 1 < n and text[i + 1] == "/" and suffix != ".js" and not js_family or (suffix == ".go" and c == "/" and i + 1 < n and text[i + 1] == "/"):
+        if c == "/" and i + 1 < n and text[i + 1] == "/" and (suffix == ".go" or not js_family):
             j = text.find("\n", i)
             j = n if j < 0 else j
             out.append(" " * (j - i))
@@ -644,7 +644,7 @@ def _docstring_findings(docstring: str, allowed_fields, where: str) -> list[str]
 def check_comment_content(path: Path) -> list[str]:
     """Return findings for comment lines outside the permitted CodeDNA content.
 
-    Rules:   Permitted: declaration summaries, L1 field lines, Rules:/message: lines and continuations; exemptions: tool directives, the shell shebang, rust doc, SPDX/license lines; line numbers address the comment's own line.
+    Rules:   Permitted: declaration summaries, L1 field lines, Rules:/message: lines and continuations; exemptions: tool directives, the shell shebang, and rust doc comments; line numbers address the comment's own line.
     """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -707,20 +707,25 @@ def _scan_content(profile: LanguageProfile, masked: list[str], originals: list[s
             continue
         if profile.name == "rust" and (stripped.startswith("///") or stripped.startswith("//!")):
             continue
-        if profile.name == "html":
+        if profile.name == "html" and "<!--" in stripped:
+            probe_hits = 0
             for probe_match in re.finditer(r"<!--(.*?)-->", stripped):
                 body_comment = probe_match.group(1).strip()
                 if body_comment and not _L2_LABEL_LINE.match(body_comment):
+                    probe_hits += 1
                     findings.append(
                         f"{line_no}: comment is outside the permitted content: {body_comment[:60]}"
                     )
+            # Rules: a probed line already reported must not fall through to the general comment path — that double-reports.
+            if probe_hits:
+                continue
+            if "<!--" in _strip_html_ctrl(stripped) or stripped == "-->":
+                continue
         is_comment = profile.is_comment(stripped) or (
             profile.name in ("css", "html") and (in_block_comment or _block_open(stripped))
         )
         is_comment = is_comment and not (profile.name == "html" and _strip_html_ctrl(stripped).strip() == "")
         if not is_comment:
-            if type_body_depth and depth < type_body_depth:
-                type_body_depth = 0
             if type_body_depth and depth < type_body_depth:
                 type_body_depth = 0
             opens = masked_code.count("{")
@@ -925,6 +930,8 @@ def main(argv=None) -> int:
         total += len(findings)
     for document in documents:
         if document in files:
+            continue
+        if args.skip_content:
             continue
         doc_findings = check_examples(document.read_text(encoding="utf-8", errors="replace"), str(document))
         for finding in doc_findings:
