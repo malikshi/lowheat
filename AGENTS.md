@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-10-08
+Contract-Version: 2026-10-10
 
 This repository operates as a multi-agent workspace. This file is the single,
 self-contained instruction surface and the **cross-agent source of truth**.
@@ -574,8 +574,12 @@ passing, no merge conflicts, branch up to date with target.
 |---|---|---|
 | CRITICAL | Security vulnerability or data loss risk | BLOCK — must fix first |
 | HIGH | Bug or significant quality issue | WARN — should fix first |
-| MEDIUM | Maintainability concern, including an unexplained source file over the soft 800-line ceiling | INFO — consider fixing |
+| MEDIUM | Maintainability concern, including an unexplained source file over the soft 800-line ceiling | INFO — fix or record a reason |
 | LOW | Style or minor suggestion | NOTE — optional |
+
+**Deferred findings:** a MEDIUM finding is either fixed or recorded with a
+reason in the PR body or the commit message — never silently dropped. LOW
+findings may be skipped.
 
 **Approval criteria:** the independent reviewer approves when no CRITICAL or HIGH
 issues remain, warns when only HIGH issues remain, and blocks on any CRITICAL

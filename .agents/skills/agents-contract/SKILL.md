@@ -253,6 +253,8 @@ Two modes, each mandatory where it applies:
   merge conflicts, branch up to date with target.
 - Severity: CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an
   unexplained file over the soft 800-line ceiling); LOW = NOTE.
+- A MEDIUM finding is either fixed or recorded with a reason — PR body or
+  commit message — never silently dropped; LOW findings may be skipped.
 - The independent reviewer approves only when no CRITICAL or HIGH issues remain,
   warns on HIGH-only, and blocks on any CRITICAL; a security-scoped review (§5
   STOP triggers) blocks on a HIGH finding too.

@@ -82,26 +82,21 @@ python3 -m pytest tests
 
 ### Keeping the mirror in sync
 
-`references/contract.md` is `AGENTS.md` copied verbatim under a two-line
-header; the skill reads it when the steps in `SKILL.md` need detail. Edit
-`AGENTS.md` only, then re-sync:
+`references/contract.md` is a byte-identical copy of `AGENTS.md`; the skill
+reads it when the steps in `SKILL.md` need detail. Edit `AGENTS.md` only, then
+re-sync:
 
 ```bash
-{ head -n 2 .agents/skills/agents-contract/references/contract.md; cat AGENTS.md; } \
-  > .agents/skills/agents-contract/references/contract.md.tmp \
-  && mv .agents/skills/agents-contract/references/contract.md.tmp \
-        .agents/skills/agents-contract/references/contract.md
+cp AGENTS.md .agents/skills/agents-contract/references/contract.md
 ```
 
 Verify the mirror matches `AGENTS.md` (no output means in sync):
 
 ```bash
-diff AGENTS.md <(tail -n +3 .agents/skills/agents-contract/references/contract.md)
+cmp AGENTS.md .agents/skills/agents-contract/references/contract.md
 ```
 
-Both commands were verified on this repo. The verify command uses process
-substitution, so it needs bash or zsh; the sync command is POSIX and runs in
-any shell.
+Both commands were verified on this repo.
 
 ### Direct download (curl)
 
