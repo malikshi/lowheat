@@ -136,6 +136,11 @@ Apply on every task, not just code changes:
   `rtk pytest -q`); run raw only when exact bytes or parseable structure are
   the requirement, or when RTK is unavailable or the subcommand is
   unsupported.
+- If a wrapped view hid something you needed, re-run raw once and stop
+  wrapping that command.
+- One read-compressor per command, after the intent gate above: RTK by
+  default; when RTK cannot wrap a command, `caveman shrink` stands in if the
+  caveman layer is installed, raw otherwise; `caveman browse` covers pages.
 - Prefer native Read/Grep tools when you need exact `line:content` for an
   edit; native Grep truncates very long lines, and `rtk read -n` covers bulk
   reads.
@@ -307,8 +312,9 @@ Two modes, each mandatory where it applies:
   a value the harness does not expose; never invent an ID.
 
 - **Git is the authoritative audit log** — do not keep a separate ledger file.
-- **Pull requests:** analyze full commit history, diff against base,
-  comprehensive summary, test plan with TODOs, push with `-u` on new branches.
+- **Pull requests:** analyze full commit history, diff against base
+  (`rtk git diff [base-branch]...HEAD`), comprehensive summary, test plan with
+  TODOs, push with `-u` on new branches.
 
 ## 8. Verification
 
