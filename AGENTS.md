@@ -629,7 +629,7 @@ Git is the authoritative audit log; do not keep a separate ledger file.
 #### Pull requests
 
 1. Analyze full commit history — not just the latest commit.
-2. Use `git diff [base-branch]...HEAD` to see all changes.
+2. Use `rtk git diff [base-branch]...HEAD` to see all changes.
 3. Draft a comprehensive PR summary.
 4. Include a test plan with TODOs.
 5. Push with `-u` flag if on a new branch.
