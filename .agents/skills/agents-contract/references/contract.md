@@ -534,7 +534,7 @@ exact `line:content`.
 | PHP | `rtk php artisan list`, `rtk phpunit`, `rtk phpstan analyze`, `rtk phpt`, `rtk pest`, `rtk paratest`, `rtk ecs`, `rtk pint` |
 | GitHub | `rtk gh pr list`, `rtk gh pr view <number>`, `rtk gh issue list`, `rtk gh run list`, `rtk glab mr list` |
 | Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk docker images/logs <c>`, `rtk docker compose ps`, `rtk kubectl pods`, `rtk kubectl logs <pod>`, `rtk oc pods/logs <pod>`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
-| Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
+| Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file>`, `rtk summary <cmd>` |
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
 | Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |

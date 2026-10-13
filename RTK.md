@@ -23,7 +23,7 @@ with the result:
 | Judge pass/fail | `rtk <cmd>` | exit codes pass through, and on failure the tee fallback keeps the full output |
 | Explore structure rather than values — trees, deps, `rtk json --keys-only` | `rtk <cmd>` | the structure is the signal; bodies are noise |
 | Apply or parse exact output — a diff/patch, JSON, CSV, `--format`, a redirect | **raw** | compression corrupts bytes and structure |
-| Handle secrets, credentials, or exact config | **raw** | masking and truncation make the values unusable |
+| Handle secrets, credentials, or exact config | **raw** | RTK does not mask, and it records commands plus elided output under `~/.local/share/rtk/` |
 | Follow output that grows — `tail -f`, watch, live logs | **raw** | RTK buffers, so it can hang |
 | Read a file with line numbers, any size | `rtk read <file> -n` | copies the file verbatim at the default level; `-n` adds numbers, normalizes CRLF→LF, and exits 1 on non-UTF-8 |
 | Read a file and line endings or bytes must stay exact | **native Read/Grep tools** | lossless; read caps at 1000 lines per call, and native Grep truncates very long lines |
@@ -53,6 +53,11 @@ If a wrapped view hid something you needed, re-run **raw once** — that pair is
 a net loss, so note the command type and stop wrapping it (`rtk discover`
 surfaces exactly this). The reverse — raw first, then wrapping — is never
 worth it: raw output is exact, so there is nothing left to recover.
+
+RTK also falls back on its own: a flag the filter does not recognize makes
+it run the command raw (`rtk wget -q …` is one), which looks like a filter
+that did nothing. `rtk gain --failures` lists those — if an example here
+seems unfiltered on your build, check there before trusting it.
 
 ## Fidelity zones (mnemonic)
 
@@ -91,12 +96,12 @@ lines. That is correct for surveys ("which files mention X", rough counts), but
 it loses exact `line:content`. When you need a precise line number or the full
 matching line (for example, to feed an edit), use the native Grep tool — it
 bypasses RTK entirely, though it truncates very long lines and says so. When a
-filter elides output, RTK prints a recovery hint
-inline — `[+4 hidden: rtk recall 6f88169463a3]` — and `rtk recall <hash>`
-returns the elided part instead of re-running the command. `rtk config recall`
-sets the recovery mode (`sqlite` is exact, `tee` logs the full output,
-`disabled` turns it off); `rtk gain --recalls` reports how often elisions were
-actually recalled.
+filter elides output, RTK prints a recovery hint inline — `[+4 hidden: rtk
+recall 6f88169463a3]` — and `rtk recall <hash>` returns the elided part (kept
+gzipped in `~/.local/share/rtk/recall.db`, with the command that produced it)
+instead of re-running it. `rtk config recall` sets the recovery mode (`sqlite`
+is exact, `tee` logs the full output, `disabled` turns it off);
+`rtk gain --recalls` reports how often elisions were actually recalled.
 
 ## When to use RTK — quick rules
 
@@ -264,7 +269,7 @@ rtk run -c '<script>'          # Shell string through sh (cmd on Windows)
 rtk run --shell fish -c '<script>'  # Explicit shell for shell-specific syntax
 rtk lint <cmd>                 # ESLint with grouped rule violations
 rtk lint biome                 # Other linters supported (biome, …)
-rtk log <file-or-cmd>          # Filter and deduplicate log output
+rtk log <file>                 # Filter/deduplicate a log file (stdin if omitted; not a command)
 rtk summary <cmd>              # Run command and show heuristic summary
 ```
 
@@ -277,9 +282,9 @@ only when a command needs shell syntax.
 
 ```bash
 rtk json <file>                # Show JSON (compact values)
-rtk json --keys-only <file>    # Keys and types only
+rtk json --keys-only <file>    # Keys and types for large/nested JSON; small files stay compact
 rtk deps                       # Summarize project dependencies
-rtk env -f <FILTER>            # Filtered env vars (e.g. -f PATH, -f AWS); secrets masked
+rtk env -f <FILTER>            # Env vars by name (e.g. -f PATH, -f AWS); values print in full
 rtk pipe                       # Read stdin, apply an RTK filter, print filtered output
 ```
 
