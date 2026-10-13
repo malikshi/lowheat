@@ -502,17 +502,13 @@ commit. Code Review Standards defines the reviewer and the recording rule.
   `cat file.py` becomes `rtk read file.py`, `python3 -m pytest -q` becomes
   `rtk pytest -q`. Treat any command missing from `rtk --help` as unsupported.
 - Decide by intent, never by size: wrap by default (`rtk <cmd>` compresses
-  noise, keeps errors and exit codes), run raw only when you need exact bytes,
-  line numbers, or parseable structure (diffs to apply, JSON to parse,
-  streaming output), and prefer the native Read/Grep tools for file access. If
-  a wrapped view hid something you needed, re-run raw once and stop wrapping
-  that command. Fall back to raw whenever RTK is not installed or the
-  subcommand is unsupported. See `RTK.md` for the full command catalogue or
-  `rtk discover` for missed-savings hints.
-- **With the RTK hook installed, PreToolUse is behavior, not a broken
-  wrapper.** The hook rewrites a raw Bash `grep` into `rtk grep`, so a raw
-  shell `grep` returns compressed output. That is expected; use the `Grep` tool
-  instead when you need exact `line:content` for an edit.
+  noise, keeps errors and exit codes), run raw only when you need exact bytes
+  or parseable structure (diffs to apply, JSON to parse, streaming output),
+  and prefer the native Read/Grep tools for file access. If a wrapped view hid
+  something you needed, re-run raw once and stop wrapping that command. Fall
+  back to raw whenever RTK is not installed or the subcommand is unsupported.
+  See `RTK.md` for the full command catalogue or `rtk discover` for
+  missed-savings hints.
 - Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`,
   pass the target path as an argument, or set the tool working directory.
 - **Never run `git commit` or `git push` without explicit user approval.** This
@@ -529,7 +525,7 @@ exact `line:content`.
 
 | Area | Commands |
 |---|---|
-| Core navigation | `rtk ls`, `rtk tree`, `rtk read <file>`, `rtk smart <file>`, `rtk find "*.go" .`, `rtk grep "p" path`, `rtk rg "p" path`, `rtk ast-grep run -p '<pat>'`, `rtk wc <file>`, `rtk diff <f1> <f2>` |
+| Core navigation | `rtk ls`, `rtk tree`, `rtk read <file>`, `rtk smart <file>`, `rtk find "*.go" .`, `rtk grep -rn "p" dir`, `rtk rg "p" dir`, `rtk ast-grep run -p '<pat>'`, `rtk wc <file>`, `rtk diff <f1> <f2>` |
 | Git | `rtk git status`, `rtk git log --oneline -10`, `rtk git diff`, `rtk git show <commit>`, `rtk git blame <file>`, `rtk git add/commit/push/pull`, `rtk git branch`, `rtk gt stack` |
 | Go | `rtk go build ./...`, `rtk go test ./...`, `rtk go vet ./...`, `rtk go mod tidy`, `rtk golangci-lint run` |
 | JS/frontend | `rtk npm test`, `rtk npx tsc --noEmit`, `rtk pnpm test`, `rtk pnpm list`, `rtk pnpm outdated`, `rtk bun test`, `rtk bun install/build`, `rtk bunx`, `rtk jest`, `rtk vitest`, `rtk tsc --noEmit`, `rtk next build`, `rtk lint .`, `rtk prettier --check .`, `rtk format .`, `rtk playwright test`, `rtk prisma generate`, `rtk ctest` |
@@ -541,7 +537,6 @@ exact `line:content`.
 | Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
 | Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
-| Hooks | `rtk init` (default Claude Code; `-g`, `--codex`, `--copilot`, `--gemini`, `--opencode`, `--agent cursor`), `rtk hook claude`, `rtk hook check '<cmd>'`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk trust`, `rtk untrust`, `rtk verify` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
 ### Git Workflow

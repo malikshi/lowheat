@@ -9,31 +9,37 @@ unsupported.
 ## The one rule: decide by intent, never by size
 
 RTK compresses **shell command output** before it enters the context window.
-Used well it cuts tokens on noisy commands *and* sharpens context (less noise →
-better reasoning). Used badly — compressing output you actually needed — it
-hides detail and forces re-runs that cost *more* than they save.
+Wrap what you will only *read*; keep raw what you will *use* — apply, parse,
+redirect, or edit from. Used well it cuts noise and sharpens context; used
+badly it hides detail and forces re-runs that cost *more* than they save.
 
 You cannot know an output's size before the command runs, so **size is never a
-decision input**. Pick the mode once, *before* running, based only on what you
-will do with the output:
+decision input**. Pick the mode once, *before* running, from what you will do
+with the result:
 
 | You will… | Mode | Why |
 |---|---|---|
-| Skim for signal — status, logs, listings, test/build runs | `rtk <cmd>` | compresses noise, keeps errors, diffs, and exit codes |
-| Apply or parse exact output — a diff/patch, JSON, CSV, `--format` | **raw** | compression corrupts structure and exact bytes |
-| Read or search a file with line numbers | **native Read/Grep tools** | lossless; never shell for this |
+| Skim for signal — status, listings, logs, test/build runs | `rtk <cmd>` | noise compressed; errors, diffs, and exit codes kept |
+| Judge pass/fail | `rtk <cmd>` | exit codes pass through, and on failure the tee fallback keeps the full output |
+| Explore structure rather than values — trees, deps, `rtk json --keys-only` | `rtk <cmd>` | the structure is the signal; bodies are noise |
+| Apply or parse exact output — a diff/patch, JSON, CSV, `--format`, a redirect | **raw** | compression corrupts bytes and structure |
+| Handle secrets, credentials, or exact config | **raw** | masking and truncation make the values unusable |
 | Follow output that grows — `tail -f`, watch, live logs | **raw** | RTK buffers, so it can hang |
-| Judge pass/fail | `rtk <cmd>` | RTK preserves exit codes and, on failure, its tee fallback keeps full output; if a verdict is ever unclear, confirm raw or with `rtk proxy <cmd>` |
+| Read a file with line numbers, any size | `rtk read <file> -n` | copies the file verbatim at the default level; `-n` adds numbers, normalizes CRLF→LF, and exits 1 on non-UTF-8 |
+| Read a file and line endings or bytes must stay exact | **native Read/Grep tools** | lossless; read caps at 1000 lines per call, and native Grep truncates very long lines |
 
 That is the whole decision: **wrap what you skim, keep exact what you need
 exact.** One command, one mode, chosen up front — no measuring, no double run.
+Anything not listed under Commands still runs through plain `rtk <cmd>`.
 
 ### Lossy modes are opt-in
 
 Plain `rtk <cmd>` keeps the signal — errors, diffs, stack traces, exit codes —
-and strips only noise. `--ultra-compact`, `rtk read … -l aggressive`, and
-`rtk smart` (2-line summary) are **lossy**: they discard detail on purpose.
-Reach for them only to skim something huge and unimportant, never as a default.
+and strips only noise. The lossy switches are **opt-in**: `--ultra-compact`,
+`rtk read -l minimal`, `rtk read -l aggressive`, `rtk read -m` (structure
+only), and `rtk smart` (2-line summary). Reach for them only to skim something
+huge and unimportant, never as a default. `rtk read` with no `-l` copies the
+file verbatim.
 
 > **`-u` doesn't work.** RTK's own README still lists a `-u` short form for
 > `--ultra-compact`; it was removed upstream and using it fails outright
@@ -50,51 +56,42 @@ worth it: raw output is exact, so there is nothing left to recover.
 
 ## Fidelity zones (mnemonic)
 
-- 🟢 **Wrap freely** — noisy, low-stakes output you'll only skim: `rtk ls`,
-  `rtk git status`, `rtk git log`, `rtk docker ps`, `rtk pip list`, and big
-  test/build runs (`rtk cargo test`, `rtk err <cmd>`, `rtk pytest`).
-- 🔴 **Run raw** — exact bytes, line numbers, or structure matter:
-  - A diff/patch you'll apply (`git diff`, `git show` raw)
-  - Output you'll parse or redirect (JSON, `--format`) — use `rtk json file`
-    only to *explore* structure
-  - Secrets / credentials / exact config
-  - Streaming/follow output (`-f`, `tail -f`, a growing log)
-  - Any command you'll feed into a pipe or file for later use
-- ⚪ **Native tools first** — for reading and searching files, use the
-  harness's own Read/Grep/Glob tools instead of `rtk read/grep/find`: lossless,
-  line numbers, and they bypass RTK entirely. Reserve `rtk` for shell commands.
+- 🟢 **Wrap freely** — noisy output you will only skim, where counts, trees,
+  and summaries are the point: `rtk ls`, `rtk tree`, `rtk git status`,
+  `rtk git log`, `rtk docker ps`, `rtk pip list`, `rtk deps`, and test/build
+  runs (`rtk cargo test`, `rtk pytest`, `rtk err <cmd>`). Expect truncation
+  with an inline recovery hint — `[+3431 hidden: rtk recall 0eabbc130600]`.
+- 🔴 **Run raw** — the bytes are the point:
+  - a diff or patch you will apply (`git diff`, `git show` raw)
+  - output you will parse or redirect (JSON, `--format`, `> file`)
+  - secrets, credentials, exact config
+  - streaming output (`tail -f`, `-f`, a growing log)
+  - anything you will feed into a pipe or another command
+- 🟡 **Not sure? Wrap once.** Wrapping first beats guessing: the fallback is
+  one-way, and `rtk discover` shows which commands should have gone raw.
 
-## Harness notes — works with or without hooks
+### When compression is unsafe
 
-RTK ships hook processors for Claude Code, Codex, Copilot, Gemini, OpenCode,
-Cursor, and others (`rtk init --agent <name>`). The rules above hold either
-way; hooks only change *who* applies them:
+Piped output is unsafe to compress: on a non-TTY pipe RTK can substitute a
+compressed summary (a redirected `grep` writing a line-count summary instead of
+the matches — RTK [#1282](https://github.com/rtk-ai/rtk/issues/1282), a
+correctness bug), and it has emitted ANSI codes into piped output before (RTK
+[#1409](https://github.com/rtk-ai/rtk/issues/1409), fixed) — run anything
+you'll parse or redirect raw, and set `NO_COLOR=1` defensively if escape codes
+leak through.
 
-- **With hooks installed**, a raw shell command may be rewritten to its `rtk`
-  form and come back compressed — that is expected, not a broken wrapper. When
-  you need exact `line:content` anyway, use the native Grep tool; hooks don't
-  touch it.
-- **Without hooks**, apply the intent rule yourself: wrap for skim, stay raw
-  for exact.
-- **Piped output is unsafe to compress**: RTK can substitute a compressed
-  summary on a non-TTY pipe (e.g. a redirected `grep` writing a line-count
-  summary instead of the matches — RTK
-  [#1282](https://github.com/rtk-ai/rtk/issues/1282), a correctness bug). Run
-  anything you'll parse or redirect raw. RTK has also emitted ANSI codes into
-  piped output before (RTK
-  [#1409](https://github.com/rtk-ai/rtk/issues/1409), fixed) — set `NO_COLOR=1`
-  defensively if escape codes leak through.
-- **Failures are never lost**: when a command fails, RTK's tee fallback saves
-  the full output to a log, so error detail survives compression on the cases
-  that matter.
+Failures are never lost: when a command fails, RTK's tee fallback saves the
+full output to a log, so error detail survives compression on the cases that
+matter.
 
-### Grep is lossy by design
+## Grep is lossy by design
 
 `rtk grep` and `rtk rg` group matches by file, strip whitespace, and truncate
 lines. That is correct for surveys ("which files mention X", rough counts), but
 it loses exact `line:content`. When you need a precise line number or the full
 matching line (for example, to feed an edit), use the native Grep tool — it
-bypasses RTK entirely. When a filter elides output, RTK prints a recovery hint
+bypasses RTK entirely, though it truncates very long lines and says so. When a
+filter elides output, RTK prints a recovery hint
 inline — `[+4 hidden: rtk recall 6f88169463a3]` — and `rtk recall <hash>`
 returns the elided part instead of re-running the command. `rtk config recall`
 sets the recovery mode (`sqlite` is exact, `tee` logs the full output,
@@ -103,14 +100,21 @@ actually recalled.
 
 ## When to use RTK — quick rules
 
-- **Wrap by default** for output you'll only read for signal.
-- **Skip RTK** when you'll apply, parse, redirect, or edit from the output, or
-  when RTK is unavailable — fall back to raw without ceremony.
-- Prefer the forms listed under Commands; for anything unlisted, plain
-  `rtk <cmd>` still filters. Use `rtk proxy <cmd>` to run raw while tracking
-  savings, or `rtk run <cmd>` for fully raw execution with no tracking.
-- Check `rtk --help` when in doubt; treat commands missing from it as
-  unsupported and run them raw.
+Three questions, asked before the command runs:
+
+1. **Will I use the output, or only read it?** Using it — applying a patch,
+   parsing, redirecting, editing from it — means **raw**. Reading it for signal
+   means wrap.
+2. **Is it secret, exact, or alive?** Credentials, exact config, and streaming
+   output (`tail -f`, a growing log) are always **raw**: RTK masks, truncates,
+   and buffers.
+3. **Then wrap it.** `rtk <cmd>` for a shell command, or the matching form
+   under Commands (`rtk read`, `rtk git status`, `rtk pytest`, …).
+
+If a wrapped view hides something you needed, re-run that one command raw and
+stop wrapping it. `rtk proxy <cmd>` runs raw while tracking savings;
+`rtk run <cmd>` runs fully raw with no tracking. Anything missing from
+`rtk --help` is unsupported — run it raw.
 
 ## Commands
 
@@ -124,8 +128,9 @@ rtk read -l aggressive <file>  # Read with lossy aggressive filtering (opt-in)
 rtk read --head-lines 40 <file> # First N lines, byte-exact at the default level
 rtk smart <file>               # Generate a 2-line technical summary (lossy)
 rtk find "*.go" .              # Find files (pattern first; "-name" before the path fails)
-rtk grep "pattern" path        # Compact grep - strips whitespace, groups by file
-rtk rg "pattern" path          # Ripgrep-compatible search through RTK
+rtk grep -rn "pattern" dir    # Compact grep; flags pass through, -r walks directories
+rtk grep "pattern" file        # Single file: no -r needed
+rtk rg "pattern" dir --type go # ripgrep flags (--type, -g) work with rtk rg only
 rtk ast-grep run -p '<pat>' .  # ast-grep via RTK (needs the ast-grep binary on PATH)
 rtk wc <file>                  # Compact line/word/byte counts
 rtk diff <file1> <file2>       # Condensed diff; exit 0 identical, 1 different, 2 read error
@@ -366,9 +371,8 @@ git apply change.patch
 
 ### Search for a symbol or pattern
 ```bash
-rtk grep "func HandleRequest" --type go
-rtk grep "TODO|FIXME" --type go
-rtk rg "func HandleRequest" --type go
+rtk grep -rn "TODO|FIXME" .            # plain grep flags; -r walks directories
+rtk rg "func HandleRequest" --type go  # ripgrep flags (--type, -g) need rtk rg
 # Need exact line:content for an edit? Use the native Grep tool instead.
 ```
 
@@ -386,39 +390,3 @@ rtk ruff check .
 --ultra-compact      # Ultra-compact mode: ASCII icons, inline format (lossy — opt-in)
 --skip-env           # Set SKIP_ENV_VALIDATION=1 for child processes
 ```
-
-## Hook Integration
-
-RTK provides hook processors for LLM CLI tools:
-
-```bash
-rtk init             # Initialize RTK for Claude Code (default)
-rtk init -g          # Global install: hook + RTK.md + settings.json patch
-rtk init -g --auto-patch  # Same, non-interactive (CI/CD)
-rtk init -g --hook-only   # Hook only, no RTK.md
-rtk init --codex     # Target Codex CLI (PreToolUse hook + AGENTS.md + RTK.md)
-rtk init --copilot   # Install GitHub Copilot integration (VS Code + CLI)
-rtk init --gemini    # Initialize for Gemini CLI
-rtk init --opencode  # Install OpenCode plugin
-rtk init --agent cursor   # Target a specific agent (cursor, windsurf, cline, kilocode, …)
-rtk init --show      # Show current configuration
-rtk init --dry-run   # Preview changes without writing (combine -v to show content)
-rtk hook             # Hook processors for Claude Code, Codex, Cursor, Gemini, Copilot, …
-rtk hook check '<cmd>'    # Dry-run: print how the hook would rewrite one command
-rtk rewrite <cmd>    # Rewrite a raw command to its RTK equivalent
-rtk hook-audit       # Show hook rewrite audit metrics
-rtk trust            # Trust project-local TOML filters in current directory
-rtk untrust          # Revoke trust for project-local TOML filters
-rtk verify           # Verify hook integrity and TOML filter tests
-```
-
-> `rtk init` targets **Claude Code by default**. `--agent` values: claude, cursor,
-> trae, windsurf, cline, kilocode, antigravity, kimi, pi, hermes, droid, vibe,
-> omp.
-
-Two limits worth knowing. The hook rewrites **Bash tool calls only** — an
-agent's native Read/Grep/Glob bypass it (which is why this repo's contract
-prefers those tools for exact reads). And it only affects sessions started
-after the install: restart the agent, then `rtk hook check 'git status'` shows
-the rewrite it would apply. With no hook installed, the decision rule above is
-the whole adaptation — prefix `rtk` yourself.

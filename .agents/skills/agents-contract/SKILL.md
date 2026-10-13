@@ -117,7 +117,9 @@ Apply on every task, not just code changes:
 ## 3. Command style
 
 - Run shell commands directly (`git status`, `python3 -m pytest -q`).
-- Prefer native Read/Grep tools when you need exact `line:content` for an edit.
+- Prefer native Read/Grep tools when you need exact `line:content` for an
+  edit; native Grep truncates very long lines, and `rtk read -n` covers bulk
+  reads.
 - Avoid `cd <path> && <command>` chains — pass the path as an argument or set
   the tool working directory.
 - **Never run `git commit` or `git push` without explicit user approval.**

@@ -49,39 +49,6 @@ every agent session picks them up:
 All three live at the project root and are picked up automatically. A symlink
 to a checkout works as well as a copy, and re-syncs on every `git pull`.
 
-### One canonical copy per machine
-
-Agent surfaces read instructions from fixed paths, and independent copies drift
-silently. This contract's own deployment lost a rule that way in October 2026:
-three copies were live on one machine, and two of them lacked the newest rule.
-Keep one canonical file and point the other surfaces at it.
-
-| Surface | Path it reads | Wiring |
-|---|---|---|
-| Grok Build | `~/.grok/AGENTS.md`, `<project>/AGENTS.md` | symlink to the canonical file |
-| Claude Code | `<project>/CLAUDE.md`, `~/.claude/CLAUDE.md` | one `@AGENTS.md` import line, or a symlink |
-| Cursor | `<project>/.cursor/rules/` | one `.mdc` rule that points at `AGENTS.md` |
-| Any other agent | `<project>/AGENTS.md` | copy or symlink |
-
-```bash
-mkdir -p ~/.grok ~/.claude
-ln -sfn /path/to/lowheat/AGENTS.md ~/.grok/AGENTS.md
-ln -sfn /path/to/lowheat/AGENTS.md ~/.claude/AGENTS.md
-sha256sum ~/.grok/AGENTS.md ~/.claude/AGENTS.md AGENTS.md
-```
-
-`Contract-Version:` on line 3 names the revision. A copy that shows a different
-value, or none, is stale — refresh it from the canonical file. A symlink
-resolves to the file on the checked-out branch, so point it at a checkout that
-sits on the default branch.
-
-Run the contract's own checks:
-
-```bash
-python3 .agents/skills/agents-contract/scripts/codedna_check.py
-python3 -m pytest tests
-```
-
 ### Keeping the mirror in sync
 
 `references/contract.md` is a byte-identical copy of `AGENTS.md`; the skill
@@ -100,6 +67,13 @@ cmp AGENTS.md .agents/skills/agents-contract/references/contract.md
 
 Both commands were verified on this repo.
 
+Run the contract's own checks:
+
+```bash
+python3 .agents/skills/agents-contract/scripts/codedna_check.py
+python3 -m pytest tests
+```
+
 ### Direct download (curl)
 
 Prefer cloning (above) for the full repo; to pull individual files without git:
@@ -116,26 +90,6 @@ curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/AGENTS.md -o 
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o RTK.md
 ```
 
-## Required plugin / skill
-
-The contract references one plugin for workflow skills. For Claude Code:
-
-```bash
-claude plugin install superpowers@claude-plugins-official
-```
-
-`superpowers` (source: [`github.com/obra/superpowers`](https://github.com/obra/superpowers))
-provides the workflow skills referenced in `AGENTS.md` — TDD, planning,
-debugging, parallel work, and verification. Verify it's active:
-
-```bash
-claude plugin list
-```
-
-If your agent surface has a different skill or plugin mechanism, install
-Superpowers there — or read the tracked `SKILL.md` files directly; the contract
-is plain Markdown.
-
 ## Required binary: RTK
 
 `RTK.md` documents the [RTK](https://github.com/rtk-ai/rtk) CLI proxy, which
@@ -149,12 +103,10 @@ curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/instal
 cargo install --git https://github.com/rtk-ai/rtk
 ```
 
-Confirm the binary and check what is wired:
+Confirm the binary:
 
 ```bash
 rtk --version    # should print 0.51.0 or newer — the catalogue is verified against 0.51.0
-rtk init --show  # hook, RTK.md, and settings.json status
-rtk init -g      # install hook + RTK.md globally (restart the agent afterwards)
 ```
 
 > The crates.io package named `rtk` is a different project (Rust Type Kit) —
