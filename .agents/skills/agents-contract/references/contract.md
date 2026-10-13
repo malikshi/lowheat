@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-10-10
+Contract-Version: 2026-10-13
 
 This repository operates as a multi-agent workspace. This file is the single,
 self-contained instruction surface and the **cross-agent source of truth**.
@@ -234,8 +234,8 @@ must hold:
 Run the smallest check that proves the change before claiming completion:
 
 - For config or docs edits: syntax checks or targeted grep checks.
-- For Python source edits: the relevant `pytest` targets.
-- For Go source edits: `go build ./...` and `go vet ./...`.
+- For Python source edits: the relevant `rtk pytest` targets.
+- For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
 - For browser-facing or user-facing work: test observable behavior and verify
   with the real interface when possible.
 - Report any check that could not run and why. Report meaningful blockers,
@@ -494,15 +494,55 @@ commit. Code Review Standards defines the reviewer and the recording rule.
 
 ### Command Style
 
-- Run shell commands directly (`git status`, `cat file.py`,
-  `python3 -m pytest -q`).
-- Prefer the native Read/Grep tools for file access when you need exact
-  `line:content` for an edit.
+- Wrap shell commands through **RTK**. RTK supports `git`, `go`, `pytest`,
+  `ruff`, `npm`, `cargo`, `docker`, `kubectl`, `psql`, `curl`, `ls`, `tree`,
+  `find`, `grep`, `read`, `wc`, `json`, `env`, `deps`, `log`, and many more.
+  Run `rtk --help` to confirm support before reaching for a raw command.
+- The mapping is transparent: `git status` becomes `rtk git status`,
+  `cat file.py` becomes `rtk read file.py`, `python3 -m pytest -q` becomes
+  `rtk pytest -q`. Treat any command missing from `rtk --help` as unsupported.
+- Decide by intent, never by size: wrap by default (`rtk <cmd>` compresses
+  noise, keeps errors and exit codes), run raw only when you need exact bytes,
+  line numbers, or parseable structure (diffs to apply, JSON to parse,
+  streaming output), and prefer the native Read/Grep tools for file access. If
+  a wrapped view hid something you needed, re-run raw once and stop wrapping
+  that command. Fall back to raw whenever RTK is not installed or the
+  subcommand is unsupported. See `RTK.md` for the full command catalogue or
+  `rtk discover` for missed-savings hints.
+- **With the RTK hook installed, PreToolUse is behavior, not a broken
+  wrapper.** The hook rewrites a raw Bash `grep` into `rtk grep`, so a raw
+  shell `grep` returns compressed output. That is expected; use the `Grep` tool
+  instead when you need exact `line:content` for an edit.
 - Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`,
   pass the target path as an argument, or set the tool working directory.
 - **Never run `git commit` or `git push` without explicit user approval.** This
   repository rule overrides any upstream templates that suggest automatic
   commit and push behavior.
+
+**RTK quick reference.** RTK is a token-optimized CLI proxy that cuts 60–90% of
+the bash output an agent reads — estimated as `bytes / 4`, so a share of
+output, never of the bill. Full catalogue: `RTK.md` and `rtk --help`. `rtk grep`
+and `rtk rg` are lossy by design — they group matches by file, strip
+whitespace, and truncate lines; correct for surveys and rough counts, and
+`rtk recall <hash>` recovers what they elided, so use the native Grep tool for
+exact `line:content`.
+
+| Area | Commands |
+|---|---|
+| Core navigation | `rtk ls`, `rtk tree`, `rtk read <file>`, `rtk smart <file>`, `rtk find "*.go" .`, `rtk grep "p" path`, `rtk rg "p" path`, `rtk ast-grep run -p '<pat>'`, `rtk wc <file>`, `rtk diff <f1> <f2>` |
+| Git | `rtk git status`, `rtk git log --oneline -10`, `rtk git diff`, `rtk git show <commit>`, `rtk git blame <file>`, `rtk git add/commit/push/pull`, `rtk git branch`, `rtk gt stack` |
+| Go | `rtk go build ./...`, `rtk go test ./...`, `rtk go vet ./...`, `rtk go mod tidy`, `rtk golangci-lint run` |
+| JS/frontend | `rtk npm test`, `rtk npx tsc --noEmit`, `rtk pnpm test`, `rtk pnpm list`, `rtk pnpm outdated`, `rtk bun test`, `rtk bun install/build`, `rtk bunx`, `rtk jest`, `rtk vitest`, `rtk tsc --noEmit`, `rtk next build`, `rtk lint .`, `rtk prettier --check .`, `rtk format .`, `rtk playwright test`, `rtk prisma generate`, `rtk ctest` |
+| Python | `rtk pytest -q`, `rtk ruff check .`, `rtk ruff format --check .`, `rtk mypy .`, `rtk pip list`, `rtk pip outdated`, `rtk uv run <cmd>`, `rtk sqlfluff lint models/`, `rtk deno test`, `rtk deno lint/check` |
+| Rust/Ruby/.NET/Android | `rtk cargo test`, `rtk cargo build/clippy`, `rtk rake test`, `rtk rubocop`, `rtk rspec`, `rtk dotnet test`, `rtk gradlew test`, `rtk sbt test`, `rtk mvn test`, `rtk mvnd test` |
+| PHP | `rtk php artisan list`, `rtk phpunit`, `rtk phpstan analyze`, `rtk phpt`, `rtk pest`, `rtk paratest`, `rtk ecs`, `rtk pint` |
+| GitHub | `rtk gh pr list`, `rtk gh pr view <number>`, `rtk gh issue list`, `rtk gh run list`, `rtk glab mr list` |
+| Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk docker images/logs <c>`, `rtk docker compose ps`, `rtk kubectl pods`, `rtk kubectl logs <pod>`, `rtk oc pods/logs <pod>`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
+| Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file-or-cmd>`, `rtk summary <cmd>` |
+| Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
+| Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Hooks | `rtk init` (default Claude Code; `-g`, `--codex`, `--copilot`, `--gemini`, `--opencode`, `--agent cursor`), `rtk hook claude`, `rtk hook check '<cmd>'`, `rtk rewrite <cmd>`, `rtk hook-audit`, `rtk trust`, `rtk untrust`, `rtk verify` |
+| Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
 ### Git Workflow
 
@@ -588,6 +628,12 @@ too.
 
 ## Environment & Source Repositories
 
+### Companion surfaces
+
+| File | Role |
+|---|---|
+| `RTK.md` | Token-efficient CLI proxy command reference — catalogue verified against rtk 0.51.0 |
+
 ### Installed plugins / skills
 
 | Plugin / skill | Source | Purpose |
@@ -621,7 +667,10 @@ Put captured knowledge in the right place:
 
 | Source | Purpose |
 |---|---|
+| `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
+
+@RTK.md
