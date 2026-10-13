@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-10-13
+Contract-Version: 2026-10-14
 
 This repository operates as a multi-agent workspace. This file is the single,
 self-contained instruction surface and the **cross-agent source of truth**.
@@ -15,7 +15,9 @@ Then use the table to find the section you need, and follow it literally.
 | Starting any task | Operating Principles + The Work Loop |
 | Resolving conflicting instructions | How to use this file → Precedence |
 | Sizing a task | Operating Principles → Task sizing |
+| Deciding how much to build | Operating Principles → Do the smallest thing that works |
 | Running a command | Execution & Delivery → Command Style |
+| Sending a reply or report | Execution & Delivery → Communication Style |
 | Writing or editing code | Engineering Standards → Coding Style + CodeDNA |
 | Writing a test | Engineering Standards → Testing Requirements |
 | Touching auth, secrets, user input, or data | Engineering Standards → Security Guidelines |
@@ -92,6 +94,16 @@ by gold-plating.
   code, no error handling for impossible scenarios. Keep changes focused and
   avoid low-signal tests. If 200 lines could be 50, rewrite. Ask: "Would a
   senior engineer call this overcomplicated?"
+- **Climb the ladder (Ponytail).** Take the first rung that fully works: does
+  this need to exist at all (YAGNI) → does it already exist in this codebase →
+  does the standard library → does a native platform feature → does an
+  installed dependency → can it be one line → only then the minimum code that
+  works. The ladder runs *after* you understand the problem, never instead of
+  it: read the code the change touches, list every place it must reach
+  (callers, tests, fixtures, config, exports), and check what it could break
+  for users. Laziness never cuts trust-boundary validation, error handling
+  that prevents data loss, security, accessibility, or anything explicitly
+  requested. Full rules and levels: `ponytail.md`.
 - **Search before building.** Check existing project code, standard libraries,
   and proven dependencies before creating a new abstraction or helper. Prefer
   boring technology; add a dependency only when it is clearly better than the
@@ -100,6 +112,11 @@ by gold-plating.
   code. Match existing style. Remove only orphans your changes created; if you
   notice pre-existing dead code, mention it — do not delete it. Every changed
   line must trace back to the request.
+- **Root cause, once.** A bug report names a symptom: grep every caller of the
+  function you touch and fix the shared code once — one guard there is a
+  smaller diff than one per caller.
+- **Disclose what you skipped.** End every report with one or two lines: what
+  you skipped or did not check, and any risk the user must know.
 
 ### Verify, don't assume
 
@@ -506,8 +523,9 @@ commit. Code Review Standards defines the reviewer and the recording rule.
   or parseable structure (diffs to apply, JSON to parse, streaming output),
   and prefer the native Read/Grep tools for file access. If a wrapped view hid
   something you needed, re-run raw once and stop wrapping that command. Fall
-  back to raw whenever RTK is not installed or the subcommand is unsupported.
-  See `RTK.md` for the full command catalogue or `rtk discover` for
+  back to raw whenever RTK is not installed or the subcommand is unsupported
+  — or use `caveman shrink` when the layer is installed (Communication
+  Style). See `RTK.md` for the full command catalogue or `rtk discover` for
   missed-savings hints.
 - Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`,
   pass the target path as an argument, or set the tool working directory.
@@ -538,6 +556,37 @@ exact `line:content`.
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
 | Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
+
+### Communication Style
+
+**Caveman.** Replies default to terse caveman mode: answer first
+(`[thing] [action] [reason]. [next step].`), no greeting, no "let me", no
+recap, no filler or hedging; fragments are fine. Meaning never drops —
+*not*, *never*, *only*, numbers, and units stay exact. Payload verbatim:
+code, commands, paths, and error text are untouched character-for-character,
+and a fix shows the changed lines, not the whole file again.
+Quiet tool runs: one line per phase, one line with the result.
+No performance — no "me think" dialect; when caveman phrasing is not shorter,
+plain wins. User prompts are never rewritten.
+
+Full sentences return, then caveman resumes, for: security warnings,
+irreversible-action confirmations, step-by-step orders where dropped
+conjunctions risk misreading, ambiguous compression, and a confused or
+questioning user. Anything persisted outside chat — code, docs, PR bodies,
+memory files — keeps normal prose; caveman governs the chat channel only.
+Two artifacts have their own terse formats: commit messages (Conventional
+Commits, terse and imperative) and review findings (one line each: severity,
+location, problem, fix). Both, the modes, and the layer live in `caveman.md`.
+
+Precedence is unchanged: the harness system prompt and the user's request
+outrank this mode. Off: "stop caveman" / "normal mode" / `/caveman off`.
+Modes: caveman by default, `/caveman ultra` (ultracave) for maximum
+compression, and `/caveman wenyan` (megacave, a classical-Chinese register).
+The optional caveman layer compresses what the agent *reads* (logs, test
+output, JSON, diffs, web pages). One read-compressor per command, after
+Command Style's intent gate: RTK by default; when RTK cannot wrap a command,
+`caveman shrink` stands in if the layer is installed, raw otherwise; and
+`caveman browse` covers pages.
 
 ### Git Workflow
 
@@ -628,6 +677,8 @@ too.
 | File | Role |
 |---|---|
 | `RTK.md` | Token-efficient CLI proxy command reference — catalogue verified against rtk 0.51.0 |
+| `caveman.md` | Terse-reply mode — voice rules, modes, commit and review formats, optional output layer |
+| `ponytail.md` | Laziness ladder — smallest complete change, root-cause fixes, disclosure and shortcut conventions |
 
 ### Installed plugins / skills
 
@@ -663,9 +714,13 @@ Put captured knowledge in the right place:
 | Source | Purpose |
 |---|---|
 | `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
+| `https://github.com/JuliusBrussee/caveman` | Caveman communication mode — terse replies, commit and review formats, optional output layer |
+| `https://github.com/DietrichGebert/ponytail` | Ponytail laziness ladder — smallest complete change, root-cause fixes, disclosure line |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
 | `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
 
 @RTK.md
+@caveman.md
+@ponytail.md

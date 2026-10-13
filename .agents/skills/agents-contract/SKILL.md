@@ -1,6 +1,6 @@
 ---
 name: agents-contract
-description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Operating Principles, Definition of Done, CodeDNA annotations, testing/security standards, code review, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, reviewing code, committing changes, wrapping shell commands through RTK, or following the cross-agent contract.
+description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Operating Principles, Definition of Done, CodeDNA annotations, testing/security standards, code review, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, reviewing code, committing changes, wrapping shell commands through RTK, replying in caveman mode, keeping scope ponytail-lazy, or following the cross-agent contract.
 ---
 
 # Agents Contract — Operating Contract Execution
@@ -8,10 +8,12 @@ description: Execute tasks using the repository's operating contract from AGENTS
 This skill executes the repository's cross-agent operating contract defined in
 `AGENTS.md`. It encodes the Operating Principles and the Work Loop, the
 Engineering Standards (Definition of Done, Verification, Coding Style, CodeDNA,
-Testing, Security), Execution & Delivery (Command Style, Git Workflow, Code
-Review), and the Environment notes as executable steps. The full contract text
-lives in `references/contract.md`; the RTK command catalogue lives in
-`references/commands.md`. Read them when the steps below need detail.
+Testing, Security), Execution & Delivery (Command Style, Communication Style,
+Git Workflow, Code Review), and the Environment notes as executable steps. The
+full contract text lives in `references/contract.md`; the RTK command
+catalogue lives in `references/commands.md`; the caveman and ponytail
+companion catalogues live in `caveman.md` and `ponytail.md` beside the
+contract. Read them when the steps below need detail.
 
 ## 1. Start a task — the Work Loop
 
@@ -74,6 +76,20 @@ Apply on every task, not just code changes:
   only what the request requires, remove only orphans your change created,
   mention pre-existing dead code rather than deleting it, every changed line
   traces back to it.
+- **Ponytail ladder.** Take the first rung that fully works — needs to exist →
+  already exists here → standard library → native platform → installed
+  dependency → one line → the minimum that works — *after* reading the code
+  the change touches and listing every caller, test, fixture, config, and
+  export it must reach. Never cut trust-boundary validation, data-loss
+  handling, security, accessibility, or anything explicitly requested; a bug
+  fix greps every caller and fixes the shared code once; end every report with
+  what you skipped or did not check and any risk (`ponytail.md`).
+- **Caveman replies.** Terse by default: answer first, no filler or recap;
+  code, commands, paths, errors, and numbers stay verbatim; full sentences for
+  security warnings, irreversible actions, order-sensitive steps, and confused
+  users; `/caveman ultra` and `/caveman wenyan` escalate, "stop caveman" /
+  "normal mode" / `/caveman off` turn it off; commit and review formats live
+  in `caveman.md`.
 - **Verify, don't assume.** Split deterministic work (scripts, tests,
   formatters, schema checks, targeted shell) from reasoning work — if the same
   question asked twice gives the same answer by definition, script it; never do
@@ -116,7 +132,10 @@ Apply on every task, not just code changes:
 
 ## 3. Command style
 
-- Run shell commands directly (`git status`, `python3 -m pytest -q`).
+- Wrap shell commands through RTK by default (`rtk git status`,
+  `rtk pytest -q`); run raw only when exact bytes or parseable structure are
+  the requirement, or when RTK is unavailable or the subcommand is
+  unsupported.
 - Prefer native Read/Grep tools when you need exact `line:content` for an
   edit; native Grep truncates very long lines, and `rtk read -n` covers bulk
   reads.
