@@ -1,13 +1,13 @@
 """test_codedna_check.py — Tests for the CodeDNA L1 header drift checker.
 
-exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase
+exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   grok-build-plan | 9router | 2026-10-08 | 01a11c14-e6f9-7581-9248-a9b2f058a3e8 | added checker tests
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | added per-language, line-number, content, and shape test classes
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | added agent-shape, SPDX-exempt, and over-cap-summary regression tests
 agent:   grok-build | xai | 2026-10-09 | 01a120bc-e75a-79c3-8ab4-e055948b9a83 | added tool-directory, exclude-flag, Python comment, absolute-line, and heredoc tests
+agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | added masking edge tests after the split: template expressions, escapes, unterminated literals, tokenize failure, and heredoc quote handling; strengthened to pin mask_code output directly after an independent review
 """
 
 from __future__ import annotations
@@ -444,6 +444,18 @@ class ShellHeredocTestCase(CodednaCheckTestCase):
         )
         self.assertEqual(1, len(findings), findings)
 
+    def test_backslash_before_the_marker_keeps_the_heredoc_opener(self) -> None:
+        findings = self.findings_after("echo a\\ <<EOF > out.conf\n# body line\nEOF\n")
+        self.assertEqual([], findings)
+
+    def test_closed_quote_before_the_marker_keeps_the_heredoc_opener(self) -> None:
+        findings = self.findings_after('echo "pass" <<EOF > out.conf\n# body line\nEOF\n')
+        self.assertEqual([], findings)
+
+    def test_escaped_quote_before_the_marker_keeps_the_heredoc_opener(self) -> None:
+        findings = self.findings_after('echo \\" <<EOF > out.conf\n# body line\nEOF\n')
+        self.assertEqual([], findings)
+
 
 class LanguageHeaderTestCase(CodednaCheckTestCase):
     """Per-language header checks — every scanned suffix must score clean."""
@@ -854,6 +866,76 @@ class HeaderShapeTestCase(CodednaCheckTestCase):
         path = self.write("src/sample.go", body)
         findings = self.checker.check_file(path, self.root)
         self.assertEqual([], findings, findings)
+
+
+class MaskCodeEdgeTestCase(CodednaCheckTestCase):
+    """Masking edge branches: unterminated literals, escapes, and template expressions."""
+
+    def test_js_template_expression_is_masked_whole(self) -> None:
+        body = JS_CLEAN.replace(
+            "function helper() { return 1; }",
+            'const t = `a\\`b${ {"k": "// not"} }c`;\n// helper keeps the ledger warm\n',
+        )
+        path = self.write("web/sample.js", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+
+    def test_unterminated_template_expression_does_not_crash(self) -> None:
+        body = JS_CLEAN.replace("function helper() { return 1; }", "const t = `a${unclosed")
+        path = self.write("web/sample.js", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_shell_backticks_mask_without_hiding_the_next_comment(self) -> None:
+        body = SH_CLEAN.replace(
+            "set -euo pipefail", "set -euo pipefail\nvalue=`echo hi`\n# helper prepares the ledger.\n"
+        )
+        path = self.write("deploy/sample.sh", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+
+    def test_escaped_quote_inside_a_string_keeps_it_closed(self) -> None:
+        body = JS_CLEAN.replace(
+            "function helper() { return 1; }",
+            'const s = "a\\"b";\n// helper keeps the ledger warm\n',
+        )
+        path = self.write("web/sample.js", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+
+    def masked(self, text: str, suffix: str) -> str:
+        import codedna_masking
+        import codedna_spec
+
+        profile = codedna_spec.profile_for(Path("sample" + suffix))
+        return codedna_masking.mask_code(profile, text, suffix)
+
+    def test_mask_code_blanks_an_escaped_quote_string_whole(self) -> None:
+        self.assertEqual(
+            "const s = " + " " * 6 + ";\n", self.masked('const s = "a\\"b";\n', ".js")
+        )
+
+    def test_mask_code_blanks_a_template_through_its_closing_backtick(self) -> None:
+        self.assertEqual(
+            "const t = " + " " * 8 + ";\nvalue = 1;\n",
+            self.masked("const t = `a${x}b`;\nvalue = 1;\n", ".js"),
+        )
+
+    def test_mask_code_restarts_a_template_at_a_backtick_inside_an_expression(self) -> None:
+        # Rules: pin the documented brace scan — a backtick inside `${...}` restarts the literal there.
+        self.assertEqual(
+            "const t = " + " " * 6 + "b  \n", self.masked('const t = `a${\\`b`;\n', ".js")
+        )
+
+    def test_python_file_that_does_not_tokenize_checks_docstrings_only(self) -> None:
+        body = PY_CLEAN.replace(
+            "rules:   none", "rules:   none\nmessage: probe note\nextra prose line"
+        ).replace(
+            "    return 1", "    return 1\n\nx = (1\n\n# helper keeps the ledger warm"
+        )
+        path = self.write("src/sample.py", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("outside the permitted content", findings[0])
 
 
 if __name__ == "__main__":
