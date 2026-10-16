@@ -686,18 +686,9 @@ too.
 | Plugin / skill | Source | Purpose |
 |---|---|---|
 | `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
-| `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code search — `search` and `find_related` for locating an implementation by intent |
 
 Use the Skill tool when a Superpowers skill matches the task; otherwise read
 the tracked `SKILL.md` for project guidance.
-
-**Semble is a discovery aid, not a replacement for native tools.** Use
-`semble search` to find *where* something is implemented (by intent or name),
-then read the returned file and line directly. Keep the native Read/Grep/Glob
-tools for exact `line:content`, every occurrence of a literal string, and
-lossless file reads — per Command Style's native-tools-first rule (`RTK.md`).
-If the semble MCP server is not connected, fall back to Grep/Glob; work is
-never blocked on it. Full reference: `README.md` → Optional companion: semble.
 
 ### Context window management
 

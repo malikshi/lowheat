@@ -149,40 +149,6 @@ Install (optional):
   then `/plugin install ponytail@ponytail`.
 - Full install paths, modes, and caveats live in each companion file.
 
-## Optional companion: semble
-
-[`semble`](https://github.com/MinishLab/semble) is an MCP code-search server
-that locates code by intent — "where is the header check implemented" — and
-returns the file, line, and snippet. It is optional infrastructure like RTK:
-if it is not connected, agents fall back to Grep/Glob and work is never
-blocked on it.
-
-Semble is a **discovery** aid, not a replacement for the native tools. Use
-`search` to find *where* something lives, then read that file directly; keep
-the harness's Read/Grep/Glob for exact `line:content`, all occurrences of a
-literal string, and lossless reads (Command Style → native tools first).
-
-Install (optional):
-
-```bash
-uv tool install "semble[mcp]"                      # or: pipx install "semble[mcp]"
-uvx --from "semble[mcp]" semble search "query" .   # no-install fallback
-semble install --agent claude --type mcp -y        # wire the MCP server into an agent
-```
-
-CLI equivalents of the two MCP tools (`--content code|docs|config|all`,
-`-k/--top-k`, `--max-snippet-lines N`):
-
-```bash
-semble search "authentication flow" ./my-project --max-snippet-lines 10
-semble search "deployment guide" ./my-project --content docs
-semble find-related src/auth.py 42 ./my-project
-```
-
-The CLI subcommand is `find-related`; the MCP tool is `find_related`. The
-index builds on first run and is cached; `semble clear` drops it, `semble
-savings` reports token savings. Verified against semble 0.7.0.
-
 ## Operating contract sources
 
 `AGENTS.md` adapts material from:
@@ -190,7 +156,6 @@ savings` reports token savings. Verified against semble 0.7.0.
 | Source | Contribution |
 |---|---|
 | [`rtk-ai/rtk`](https://github.com/rtk-ai/rtk) | RTK CLI and command catalogue — the token-optimized proxy wrapped by Command Style |
-| [`MinishLab/semble`](https://github.com/MinishLab/semble) | Semble MCP code search — `search` and `find_related` for locating an implementation by intent |
 | [`JuliusBrussee/caveman`](https://github.com/JuliusBrussee/caveman) | Caveman communication mode — terse replies, commit and review formats, optional read-compression layer |
 | [`DietrichGebert/ponytail`](https://github.com/DietrichGebert/ponytail) | Ponytail laziness ladder — smallest complete change, root-cause fixes, disclosure line |
 | [`jbarbier/CLAUDE.md`](https://github.com/jbarbier/CLAUDE.md) | Operating-contract influence — complete real fixes, search before building, verify before completion |
