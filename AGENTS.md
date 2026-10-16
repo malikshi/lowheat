@@ -533,6 +533,34 @@ commit. Code Review Standards defines the reviewer and the recording rule.
   repository rule overrides any upstream templates that suggest automatic
   commit and push behavior.
 
+#### Tool ladder for code discovery
+
+Locating code is a different job from reading it, and the token economics
+differ. Take the first rung that answers the question:
+
+1. **Semble MCP** — `search` / `find_related`, when the MCP server is
+   connected. Ranked chunks with file and line; ~99% fewer tokens than
+   grep+read on our corpus (`bench/discovery_tokens.py`).
+2. **Semble CLI** — `semble search "<query>" . --max-snippet-lines 10` when
+   the MCP is not wired in but the binary is on PATH.
+3. **`rtk grep`** — a lossy survey: 0–90%+ smaller than native grep output
+   (near-zero when a query has few matches). It collapses file paths and
+   truncates lines, so it answers "roughly where", not "give me every match".
+4. **Native Grep/Glob** — the correctness floor: exact `line:content`, every
+   occurrence, no caps. Always available, never lossy.
+
+Two rules keep the ladder honest:
+
+- **Reads stay native.** `rtk read` with no `-l` is byte-identical to `cat`
+  (verified) — it has no token advantage. Use the native Read tool, or
+  `rtk read -l aggressive` only to skim a huge file you will not edit.
+- **Compressing *command* output is where RTK pays.** `rtk pytest`, `rtk cargo
+  test`, `rtk git status`, build and log output collapse 90%+ with errors and
+  exit codes intact. That is RTK's designed strength, separate from discovery.
+
+A tool that is absent changes nothing you must do: drop to the next rung.
+Discovery is never blocked on semble or RTK being installed.
+
 **RTK quick reference.** RTK is a token-optimized CLI proxy that cuts 60–90% of
 the bash output an agent reads — estimated as `bytes / 4`, so a share of
 output, never of the bill. Full catalogue: `RTK.md` and `rtk --help`. `rtk grep`

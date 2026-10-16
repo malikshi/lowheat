@@ -44,7 +44,17 @@ command instead — `rtk ls -u` runs `ls -u`.
 **Grep is lossy by design.** `rtk grep` and `rtk rg` group matches by file,
 strip whitespace, and truncate lines. Correct for surveys and rough counts, and
 `rtk recall <hash>` recovers what they elided (`rtk config recall` sets the
-recovery mode); for exact `line:content` use the native Grep tool.
+recovery mode); for exact `line:content` use the native Grep tool. Two further
+gotchas: `--max=N` / `--max-len=N` must use the `=` form and precede the
+pattern or they leak to GNU grep, and output caps at 200 results with 80-char
+lines by default.
+
+## Discovery ladder
+
+Locating code is not reading it. First rung that answers wins: semble MCP
+(`search` / `find_related`) → semble CLI (`semble search "<q>" .`) →
+`rtk grep` (lossy survey) → native Grep/Glob (exact, never lossy). Reads stay
+native — `rtk read` is byte-identical to `cat`.
 
 ## Catalogue
 

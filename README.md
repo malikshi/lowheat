@@ -15,6 +15,8 @@ workspace contract lives in `AGENTS.md`.
 | `.agents/skills/agents-contract/references/contract.md` | Verbatim mirror of `AGENTS.md` (do not edit directly — re-sync from `AGENTS.md`) |
 | `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 languages, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
+| `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
+| `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
 | `LICENSE` | MIT |
 
 ## Contract structure
@@ -148,6 +150,46 @@ Install (optional):
 - Ponytail in Claude Code: `/plugin marketplace add DietrichGebert/ponytail`,
   then `/plugin install ponytail@ponytail`.
 - Full install paths, modes, and caveats live in each companion file.
+
+## Code discovery: semble
+
+[`semble`](https://github.com/MinishLab/semble) is an MCP code-search server
+that locates code by intent and returns ranked chunks with file and line. It
+is the top rung of the discovery ladder in `AGENTS.md` → Command Style →
+**Tool ladder for code discovery**: semble MCP → semble CLI → `rtk grep` →
+native Grep/Glob. Each absent rung drops to the next; discovery is never
+blocked on an install.
+
+Semble is a **discovery** aid, not a replacement for the native tools. Use it
+to find *where* something lives, then read that file directly; keep native
+Read/Grep/Glob for exact `line:content`, all occurrences of a literal string,
+and lossless reads.
+
+Install (optional):
+
+```bash
+uv tool install "semble[mcp]"                      # or: pipx install "semble[mcp]"
+semble install --agent claude --type mcp -y        # wire the MCP server into an agent
+semble search "firewall install" . --max-snippet-lines 10   # CLI fallback
+```
+
+The CLI subcommand for related code is `find-related` (`find_related` as an
+MCP tool). The index builds on first run and is cached under `~/.cache/semble`;
+`semble clear` drops it, `semble savings` reports token savings. Verified
+against semble 0.7.0.
+
+### Benchmark
+
+`bench/discovery_tokens.py` measures tokens *an agent ingests* per query across
+the ladder, with `tiktoken` when installed (`bytes/4` otherwise). On an ~466-file
+Python corpus it measured **semble ~99.5% and `rtk grep`+read ~28%** below
+native grep+read. `rtk read` was excluded on purpose: it is byte-identical to
+`cat`, so it has no token advantage — the measured savings come from `rtk grep`.
+Reproduce against any corpus:
+
+```bash
+python3 bench/discovery_tokens.py /path/to/repo
+```
 
 ## Operating contract sources
 

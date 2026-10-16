@@ -132,6 +132,9 @@ Apply on every task, not just code changes:
 
 ## 3. Command style
 
+- Locate code down the discovery ladder: semble MCP → semble CLI → `rtk grep`
+  → native Grep/Glob. A missing rung drops to the next; reads stay native
+  (`rtk read` equals `cat`).
 - Wrap shell commands through RTK by default (`rtk git status`,
   `rtk pytest -q`); run raw only when exact bytes or parseable structure are
   the requirement, or when RTK is unavailable or the subcommand is

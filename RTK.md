@@ -103,6 +103,21 @@ instead of re-running it. `rtk config recall` sets the recovery mode (`sqlite`
 is exact, `tee` logs the full output, `disabled` turns it off);
 `rtk gain --recalls` reports how often elisions were actually recalled.
 
+Three `rtk grep` behaviors to know before trusting its output (verified on
+1.0.1):
+
+- **`--max` and `--max-len` must use the `=` form and precede the pattern**
+  (`rtk grep --max=100000 -rn "p" dir`). With a space, or after the pattern,
+  they leak to the wrapped GNU grep and it exits with an error instead of
+  results.
+- **The default output caps at 200 results and truncates lines at 80 chars.**
+  A broad search silently reports a subset; the reported match *count* is
+  accurate, but the file labels are collapsed and elided, so it cannot be used
+  to enumerate files.
+- **`rtk find` filters dot-directories and caches** (`.agents`, `.commandcode`,
+  `__pycache__`, `.pytest_cache`, …) and elides them behind `[+N hidden]`.
+  Use it to skim, or native `find`/Glob when you must enumerate every match.
+
 ## When to use RTK — quick rules
 
 Three questions, asked before the command runs:
