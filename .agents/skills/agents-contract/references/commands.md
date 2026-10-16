@@ -3,7 +3,7 @@
 RTK is a token-optimized CLI proxy that cuts 60–90% of the bash output an agent
 reads — estimated as `bytes / 4`, so a share of output, never of the bill.
 Full reference: `RTK.md` in the repo root, and `rtk --help`. Verified against
-rtk 0.51.0.
+rtk 1.0.1.
 
 ## When to wrap and when to run raw
 
@@ -25,7 +25,7 @@ running, so never measure. Pick the mode once, up front:
 
 The fallback is one-way: if a wrapped view hid something you needed, re-run
 raw once — that pair is a net loss, so stop wrapping that command. The reverse
-(raw then wrap) is never worth it. `rtk proxy <cmd>` runs raw but tracks
+(raw then wrap) is never worth it. `rtk bypass <cmd>` runs raw but tracks
 savings; `rtk run <cmd>` runs raw with no filtering or tracking.
 
 Piped/non-TTY output is unsafe to compress (RTK #1282): run anything you'll
@@ -61,7 +61,8 @@ recovery mode); for exact `line:content` use the native Grep tool.
 | Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk docker images/logs <c>`, `rtk docker compose ps`, `rtk kubectl pods`, `rtk kubectl logs <pod>`, `rtk oc pods/logs <pod>`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
 | Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file>`, `rtk summary <cmd>` |
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
-| Meta/analytics | `rtk gain`, `rtk gain --history`, `rtk gain --graph`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Meta/analytics | `rtk gain`, `rtk gain --history`, `rtk gain --graph`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk bypass <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Hooks/filters | `rtk init`, `rtk rewrite <cmd>`, `rtk hook <tool>`, `rtk hook-audit`, `rtk trust`, `rtk untrust`, `rtk verify`, `rtk pipeline`, `rtk methods list`, `rtk plugins new\|list\|build`, `rtk tasks list`, `rtk llm-proxy <start\|stop\|status>` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
 Measure **net** savings, not gross: `rtk gain --history` shows per-command

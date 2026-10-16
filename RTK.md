@@ -2,7 +2,7 @@
 
 Token-optimized CLI proxy. Prefix shell commands with `rtk` to cut the bash
 output your agent reads by 60-90% on dev operations. Full reference:
-`rtk --help`. This catalogue is verified against **rtk 0.51.0** — run
+`rtk --help`. This catalogue is verified against **rtk 1.0.1** — run
 `rtk --version` for your build, and treat anything missing from `rtk --help` as
 unsupported.
 
@@ -43,7 +43,7 @@ file verbatim.
 
 > **`-u` doesn't work.** RTK's own README still lists a `-u` short form for
 > `--ultra-compact`; it was removed upstream and using it fails outright
-> (verified on 0.51.0: `rtk -u ls` errors). Use the long flag. Placed after a
+> (verified on 1.0.1: `rtk -u ls` errors). Use the long flag. Placed after a
 > subcommand, `-u` goes to the wrapped command instead — `rtk ls -u` runs
 > `ls -u`.
 
@@ -117,7 +117,7 @@ Three questions, asked before the command runs:
    under Commands (`rtk read`, `rtk git status`, `rtk pytest`, …).
 
 If a wrapped view hides something you needed, re-run that one command raw and
-stop wrapping it. `rtk proxy <cmd>` runs raw while tracking savings;
+stop wrapping it. `rtk bypass <cmd>` runs raw while tracking savings;
 `rtk run <cmd>` runs fully raw with no tracking. Anything missing from
 `rtk --help` is unsupported — run it raw.
 
@@ -303,13 +303,45 @@ rtk config                     # Show or create RTK configuration
 rtk config recall [mode]       # Recovery mode: sqlite (exact) | tee | disabled
 rtk telemetry                  # Manage telemetry consent and data
 rtk learn                      # Learn CLI corrections from Claude Code error history
-rtk proxy <cmd>                # Run raw, but track usage
+rtk bypass <cmd>               # Run raw, but track usage (former rtk proxy)
 rtk run <cmd>                  # Run raw, no filtering or tracking
 rtk recall <hash>              # Recall output a filter elided, by content hash
 rtk discover                   # Missed-savings scan (current project)
 rtk discover --all --since 7   # All projects, last 7 days (also --limit, --format json)
 rtk session                    # Show RTK adoption across Claude Code sessions
 ```
+
+> `rtk proxy` is a **deprecated alias** for `rtk bypass` — identical behavior,
+> no deprecation notice, kept so instructions written before the rename keep
+> working. Use `rtk bypass` in new text.
+
+## Hooks & Filters
+
+RTK 1.0 ships a project-local filter and hook surface. None of it is required
+for the wrap/raw decision above; reach for it only when adding a custom filter
+or debugging one.
+
+```bash
+rtk init                       # Install RTK instructions into an agent config
+rtk init -g                    # ...into the global assistant config dir
+rtk rewrite <cmd>              # Rewrite a raw command to its RTK equivalent
+rtk hook <tool>                # Hook processor for an LLM CLI (Gemini CLI, Copilot, ...)
+rtk hook-audit                 # Hook rewrite audit metrics (needs RTK_HOOK_AUDIT=1)
+rtk trust                      # Trust project-local TOML filters in this directory
+rtk untrust                    # Revoke trust for project-local TOML filters
+rtk verify                     # Verify hook integrity and run TOML filter inline tests
+rtk verify --require-all       # CI mode — fail if any filter has no inline tests
+rtk pipeline                   # Inspect, validate, and test the compression pipeline
+rtk methods list               # List registered compression methods and contracts
+rtk plugins new|list|build     # Author and link your own Rust pipeline methods
+rtk tasks list                 # List configured delegation tasks and bindings
+rtk llm-proxy <start|stop|...> # Transparent LLM proxy daemon
+```
+
+`rtk rewrite` carries a hook contract: exit `0` = rewrite printed and every
+command is allow-covered; `1` = nothing printed, run unchanged; `2` = a deny
+matched, block; `3` = rewrite printed but approval is deferred to the host.
+A hook must handle all four.
 
 ## Analytics — measure *net* savings, not just gross
 

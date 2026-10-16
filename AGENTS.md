@@ -554,7 +554,8 @@ exact `line:content`.
 | Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk docker images/logs <c>`, `rtk docker compose ps`, `rtk kubectl pods`, `rtk kubectl logs <pod>`, `rtk oc pods/logs <pod>`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
 | Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file>`, `rtk summary <cmd>` |
 | Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
-| Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk proxy <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk bypass <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
+| Hooks/filters | `rtk init`, `rtk rewrite <cmd>`, `rtk hook <tool>`, `rtk hook-audit`, `rtk trust`, `rtk untrust`, `rtk verify`, `rtk pipeline`, `rtk methods list`, `rtk plugins new\|list\|build`, `rtk tasks list`, `rtk llm-proxy <start\|stop\|status>` |
 | Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
 
 ### Communication Style
@@ -676,7 +677,7 @@ too.
 
 | File | Role |
 |---|---|
-| `RTK.md` | Token-efficient CLI proxy command reference — catalogue verified against rtk 0.51.0 |
+| `RTK.md` | Token-efficient CLI proxy command reference — catalogue verified against rtk 1.0.1 |
 | `caveman.md` | Terse-reply mode — voice rules, modes, commit and review formats, optional output layer |
 | `ponytail.md` | Laziness ladder — smallest complete change, root-cause fixes, disclosure and shortcut conventions |
 
