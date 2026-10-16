@@ -5,9 +5,8 @@ used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | added per-language, line-number, content, and shape test classes
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
-agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | added agent-shape, SPDX-exempt, and over-cap-summary regression tests
-agent:   grok-build | xai | 2026-10-09 | 01a120bc-e75a-79c3-8ab4-e055948b9a83 | added tool-directory, exclude-flag, Python comment, absolute-line, and heredoc tests
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | added masking edge tests after the split: template expressions, escapes, unterminated literals, tokenize failure, and heredoc quote handling; strengthened to pin mask_code output directly after an independent review
+agent:   unknown | unknown | 2026-10-16 | s_gapfix | added prose-above-Python-docstring regression test after fixing the header-zone gap in codedna_content.py
 """
 
 from __future__ import annotations
@@ -651,6 +650,19 @@ class CommentContentTestCase(CodednaCheckTestCase):
         )
         path = self.write("src/sample.py", body)
         self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_python_prose_above_docstring_is_reported(self) -> None:
+        # Rules: `#` lines above the module docstring sit outside the header zone — they must not ride the L1 exemption.
+        module = PY_CLEAN.split("def helper() -> int:")[0].rstrip() + "\nx = 1\n"
+        body = "# TODO: wire the module header fields before shipping this module\n" + module
+        path = self.write("src/sample.py", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertTrue(any("TODO" in finding for finding in findings), findings)
+
+        prose = "# gap.py — docstring lives below this stray leading line.\n" + module
+        path = self.write("src/prose.py", prose)
+        findings = self.checker.check_comment_content(path)
+        self.assertTrue(any("outside the permitted content" in finding for finding in findings), findings)
 
     def test_python_hash_inside_an_f_string_is_not_a_comment(self) -> None:
         body = PY_CLEAN.replace(

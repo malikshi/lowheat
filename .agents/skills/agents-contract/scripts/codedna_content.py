@@ -4,7 +4,8 @@ exports: check_comment_content | check_examples
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_comment_content and check_examples [cascade]
 rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; the 138-line content scan is now one loop plus state and classification helpers.
-message: The scan is line-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: a comment block above a Python module docstring counts as a header zone; a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
+agent:   unknown | unknown | 2026-10-16 | s_gapfix | killed the Python header-zone exemption: docstring-adjacent `#` prose and TODO markers report now; probes confirmed non-Python string masking already correct.
+message: The scan is line-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
 """
 from __future__ import annotations
 
@@ -366,9 +367,11 @@ def _classify_content(
 def _header_line_count(profile: LanguageProfile, originals: list[str]) -> int:
     """Return the leading header's last line number for exemption.
 
-    Rules:   The header zone covers only the leading block; code-side field lines later in the file still report.
+    Rules:   Python has no header zone — the docstring carries the L1 fields and tokenized comment_lines already classify its `#` lines separately, so no docstring-adjacent `#` line rides the exemption; other languages exempt their leading comment block.
     """
     entries = _header_entries(profile, originals)
+    if profile.name == "python":
+        return 0
     return entries[-1][0] if entries else 0
 
 
