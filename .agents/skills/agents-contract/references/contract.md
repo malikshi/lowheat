@@ -536,24 +536,31 @@ commit. Code Review Standards defines the reviewer and the recording rule.
 #### Tool ladder for code discovery
 
 Locating code is a different job from reading it, and the token economics
-differ. Take the first rung that answers the question:
+differ. **Try semble and RTK first; native tools are the fallback, not the
+opening move.** Take the first rung that answers the question:
 
 1. **Semble MCP** — `search` / `find_related`, when the MCP server is
-   connected. Ranked chunks with file and line; ~99% fewer tokens than
-   grep+read on our corpus (`bench/discovery_tokens.py`).
+   connected. Ranked chunks with file and line at a fraction of grep+read cost.
 2. **Semble CLI** — `semble search "<query>" . --max-snippet-lines 10` when
    the MCP is not wired in but the binary is on PATH.
 3. **`rtk grep`** — a lossy survey: 0–90%+ smaller than native grep output
    (near-zero when a query has few matches). It collapses file paths and
    truncates lines, so it answers "roughly where", not "give me every match".
-4. **Native Grep/Glob** — the correctness floor: exact `line:content`, every
-   occurrence, no caps. Always available, never lossy.
+4. **Native Grep/Glob** — the fallback when no earlier rung answers: exact
+   `line:content`, every occurrence, no caps. Always available, never lossy.
 
-Two rules keep the ladder honest:
+Rungs 1–3 come first for *finding* code. Reach for native Grep/Glob when the
+earlier rungs return nothing, when you need every occurrence of a literal
+string, or when attention must be exact — not as the default first attempt.
 
-- **Reads stay native.** `rtk read` with no `-l` is byte-identical to `cat`
-  (verified) — it has no token advantage. Use the native Read tool, or
+Three rules keep the ladder honest:
+
+- **Discovery first, reading native.** Find the file with semble or `rtk grep`,
+  then read it with the native Read tool. `rtk read` with no `-l` is
+  byte-identical to `cat` (verified) — it has no token advantage; use
   `rtk read -l aggressive` only to skim a huge file you will not edit.
+- **Semble returns top-k, not every match.** Use native Grep to confirm an
+  exhaustive set.
 - **Compressing *command* output is where RTK pays.** `rtk pytest`, `rtk cargo
   test`, `rtk git status`, build and log output collapse 90%+ with errors and
   exit codes intact. That is RTK's designed strength, separate from discovery.
@@ -706,6 +713,7 @@ too.
 | File | Role |
 |---|---|
 | `RTK.md` | Token-efficient CLI proxy command reference — catalogue verified against rtk 1.0.1 |
+| `semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
 | `caveman.md` | Terse-reply mode — voice rules, modes, commit and review formats, optional output layer |
 | `ponytail.md` | Laziness ladder — smallest complete change, root-cause fixes, disclosure and shortcut conventions |
 
@@ -713,6 +721,7 @@ too.
 
 | Plugin / skill | Source | Purpose |
 |---|---|---|
+| `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code-search server — `search` / `find_related`, top rung of the discovery ladder |
 | `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
 
 Use the Skill tool when a Superpowers skill matches the task; otherwise read
@@ -743,6 +752,7 @@ Put captured knowledge in the right place:
 | Source | Purpose |
 |---|---|
 | `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
+| `https://github.com/MinishLab/semble` | Semble MCP code-search server and CLI |
 | `https://github.com/JuliusBrussee/caveman` | Caveman communication mode — terse replies, commit and review formats, optional output layer |
 | `https://github.com/DietrichGebert/ponytail` | Ponytail laziness ladder — smallest complete change, root-cause fixes, disclosure line |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
@@ -751,5 +761,6 @@ Put captured knowledge in the right place:
 | `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
 
 @RTK.md
+@semble.md
 @caveman.md
 @ponytail.md

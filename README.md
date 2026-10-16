@@ -9,6 +9,7 @@ workspace contract lives in `AGENTS.md`.
 |---|---|
 | `AGENTS.md` | Canonical contract — operating principles, Work Loop, engineering standards, CodeDNA, execution & delivery, environment |
 | `RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
+| `semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
 | `caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
 | `ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
@@ -48,11 +49,12 @@ root so every agent session picks them up:
 |---|---|---|
 | `AGENTS.md` | project root | Cross-agent source of truth |
 | `RTK.md` | project root | RTK command reference — the CLI proxy that compresses shell output |
+| `semble.md` | project root | Semble code-search reference — the discovery ladder, CLI verbs, and caveats |
 | `caveman.md` | project root | Caveman reply-mode reference — terse replies, commit and review formats, optional layer |
 | `ponytail.md` | project root | Ponytail posture reference — the laziness ladder and its conventions |
 | `.agents/skills/agents-contract/` | project root | Skill encoding the contract as executable steps |
 
-All five install under the project root and are picked up automatically. A
+All six install under the project root and are picked up automatically. A
 symlink to a checkout works as well as a copy, and re-syncs on every
 `git pull`.
 
@@ -95,6 +97,12 @@ curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/AGENTS.md -o 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o RTK.md
+```
+
+**semble.md** → project root
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/semble.md -o semble.md
 ```
 
 **caveman.md** → project root

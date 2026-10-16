@@ -51,10 +51,11 @@ lines by default.
 
 ## Discovery ladder
 
-Locating code is not reading it. First rung that answers wins: semble MCP
-(`search` / `find_related`) → semble CLI (`semble search "<q>" .`) →
-`rtk grep` (lossy survey) → native Grep/Glob (exact, never lossy). Reads stay
-native — `rtk read` is byte-identical to `cat`.
+Locating code is not reading it. Try the cheap rungs first, native is the
+fallback: semble MCP (`search` / `find_related`) → semble CLI
+(`semble search "<q>" .`) → `rtk grep` (lossy survey) → native Grep/Glob
+(exact, never lossy). Reads stay native — `rtk read` is byte-identical to
+`cat`.
 
 ## Catalogue
 

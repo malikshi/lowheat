@@ -11,9 +11,9 @@ Engineering Standards (Definition of Done, Verification, Coding Style, CodeDNA,
 Testing, Security), Execution & Delivery (Command Style, Communication Style,
 Git Workflow, Code Review), and the Environment notes as executable steps. The
 full contract text lives in `references/contract.md`; the RTK command
-catalogue lives in `references/commands.md`; the caveman and ponytail
-companion catalogues live in `caveman.md` and `ponytail.md` beside the
-contract. Read them when the steps below need detail.
+catalogue lives in `references/commands.md`; the caveman, ponytail, and semble
+companion catalogues live in `caveman.md`, `ponytail.md`, and `semble.md`
+beside the contract. Read them when the steps below need detail.
 
 ## 1. Start a task — the Work Loop
 
@@ -132,9 +132,10 @@ Apply on every task, not just code changes:
 
 ## 3. Command style
 
-- Locate code down the discovery ladder: semble MCP → semble CLI → `rtk grep`
-  → native Grep/Glob. A missing rung drops to the next; reads stay native
-  (`rtk read` equals `cat`).
+- Locate code down the discovery ladder, trying the cheap rungs first: semble
+  MCP → semble CLI → `rtk grep` → native Grep/Glob. Native is the fallback when
+  the earlier rungs return nothing or you need every occurrence; reads stay
+  native (`rtk read` equals `cat`).
 - Wrap shell commands through RTK by default (`rtk git status`,
   `rtk pytest -q`); run raw only when exact bytes or parseable structure are
   the requirement, or when RTK is unavailable or the subcommand is
