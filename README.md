@@ -15,7 +15,10 @@ workspace contract lives in `AGENTS.md`.
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
 | `.agents/skills/agents-contract/references/contract.md` | Verbatim mirror of `AGENTS.md` (do not edit directly — re-sync from `AGENTS.md`) |
 | `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 languages, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
+| `.agents/skills/agents-contract/hooks/` | Contract hook — harness detection, the Command Style and discovery decisions, and the installer that wires Claude Code, Grok, and Command Code |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
+| `tests/test_contract_hook.py` | Tests for the hook policy, reply shapes, deny budgets, and entry point |
+| `tests/test_install_hooks.py` | Tests for the installer merge, backup, and uninstall paths |
 | `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
 | `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
 | `LICENSE` | MIT |
@@ -141,6 +144,57 @@ rtk --version    # should print 1.0.1 or newer — the catalogue is verified aga
 > `rtk` is not on PATH, agents run commands normally and skip the token
 > optimization — work is never blocked on it, and the Command Style rules apply
 > `rtk` by hand. Run `rtk --help` for your build's command list.
+
+## Hook wiring (enforcement)
+
+`AGENTS.md` states the Command Style and discovery rules; the hook makes them
+hold, because instructions alone lose to a harness's default tool choice. One
+hook script serves all three harnesses:
+
+| Harness | Config it writes | What the hook does there |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | rewrites a shell command to its `rtk` form via `hookSpecificOutput.updatedInput`, and injects the session digest |
+| Grok | `~/.grok/hooks/contract.json` | same rewrite and digest rules; Grok also reads `~/.claude/settings.json` and deduplicates handlers that run the same command |
+| Command Code | `~/.commandcode/settings.json` | cannot rewrite tool input, so it refuses one raw command per session with the rtk form to re-issue, and injects the session digest |
+
+The first native `Grep` and the first native `Glob` of a session are each
+refused once on Claude Code and Grok, with the cheapest rung the hook has
+verified it can run: the semble MCP tool, then `semble search` when the CLI can
+launch, then `rtk grep`. A `semble` shim on `PATH` whose interpreter is gone is
+detected — the hook reads the shim's shebang and drops that rung rather than
+recommending a command that exits 127. It never runs the CLI to find out:
+`semble -V` costs 3–5 s because it imports the embedding stack. Everything else
+is fail-open: a missing `rtk`, an unreadable cache, or a malformed payload
+leaves the tool call alone, and each refusal fires once per session.
+
+Deny budgets live in `~/.cache/lowheat-hooks/`, one state file per session,
+swept after seven days; an exclusive lock keeps parallel tool calls from
+spending the same budget twice.
+
+```bash
+python3 .agents/skills/agents-contract/hooks/install_hooks.py --dry-run
+python3 .agents/skills/agents-contract/hooks/install_hooks.py
+python3 .agents/skills/agents-contract/hooks/install_hooks.py --uninstall
+```
+
+`--harness claude|grok|commandcode|all` narrows the run. The installer merges
+rather than overwrites, keeps every existing hook and key, and copies the
+pristine file to `<name>.lowheat-bak` before the first write. `--uninstall`
+removes our handlers and writes that copy back when only the hook wiring had
+changed, so the settings file returns byte for byte (`cmp` verified on both).
+
+Verified end to end on all three harnesses — the model emits the raw command and
+`rtk gain --history` records the rtk form running:
+
+| Harness | Evidence |
+|---|---|
+| Claude Code 2.1.296 | `claude -p "run rg ..."` reported the raw form; `rtk gain --history` recorded `rtk rg` |
+| Grok 1.0.62 | `grok -p ... --output-format streaming-json` shows `rawInput.command` as the raw form and the executed command as `rtk ls -la /tmp \| head -3`; `grok inspect` lists the hook with no load errors |
+| Command Code 1.84.0 | `cmd -p ... --yolo`: the raw form is refused once, the model re-issues the rtk form, which runs |
+
+Headless Command Code runs need `--yolo` (`--permission-mode yolo` does not grant
+the shell tool) and take their model from `~/.commandcode/config.json`; pass
+`-m <provider>/<model>` to override it.
 
 ## Optional companions: caveman and ponytail
 
