@@ -148,13 +148,25 @@ rtk --version    # should print 1.0.1 or newer — the catalogue is verified aga
 ## Hook wiring (enforcement)
 
 `AGENTS.md` states the Command Style and discovery rules; the hook makes them
-hold, because instructions alone lose to a harness's default tool choice. One
-hook script serves all three harnesses:
+hold, because instructions alone lose to a harness's default tool choice.
+
+These rules are enforced where the harness allows it. The contract hook in the
+agents-contract skill (`hooks/`) rewrites a shell command to its `rtk` form on
+Claude Code and Grok; on Command Code, which cannot rewrite tool input, it
+refuses one raw command per session with the `rtk` form to re-issue. It refuses
+the first native Grep and the first native Glob of a session once each, naming
+the cheapest rung it has verified it can run. Refusals are budgeted per session
+in `~/.cache/lowheat-hooks/` and every other path fails open. Wire it, or remove
+it, with
+`python3 .agents/skills/agents-contract/hooks/install_hooks.py [--uninstall]`; a
+harness left unwired follows the rules by hand.
+
+One hook script serves all three harnesses:
 
 | Harness | Config it writes | What the hook does there |
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` | rewrites a shell command to its `rtk` form via `hookSpecificOutput.updatedInput`, and injects the session digest |
-| Grok | `~/.grok/hooks/contract.json` | same rewrite and digest rules; Grok also reads `~/.claude/settings.json` and deduplicates handlers that run the same command |
+| Grok | `~/.grok/hooks/contract.json` | same rewrite rules; Grok also reads `~/.claude/settings.json` and deduplicates handlers that run the same command. It ignores hook output on SessionStart, so it gets no digest |
 | Command Code | `~/.commandcode/settings.json` | cannot rewrite tool input, so it refuses one raw command per session with the rtk form to re-issue, and injects the session digest |
 
 The first native `Grep` and the first native `Glob` of a session are each
@@ -179,9 +191,23 @@ python3 .agents/skills/agents-contract/hooks/install_hooks.py --uninstall
 
 `--harness claude|grok|commandcode|all` narrows the run. The installer merges
 rather than overwrites, keeps every existing hook and key, and copies the
-pristine file to `<name>.lowheat-bak` before the first write. `--uninstall`
-removes our handlers and writes that copy back when only the hook wiring had
-changed, so the settings file returns byte for byte (`cmp` verified on both).
+pristine file to `<name>.lowheat-bak` before the first write — including the
+Grok hook file, which it creates rather than owns. `--uninstall` removes our
+handlers and writes that copy back when only the hook wiring had changed, so the
+file returns byte for byte (`cmp` verified on both); a file that gained foreign
+handlers since the install keeps them, and the Grok file is deleted only when
+nothing else remains in it.
+
+Compression is the point of the rewrite and also its sharp edge: a command whose
+output is the answer can come back empty. Plain `git add -n --verbose <paths>`
+printed five `add '…'` lines here; through `rtk git add -n --verbose <paths>` it
+printed none and still exited 0. The refusal text names the raw escape hatch,
+`rtk gain --history` shows the form that actually ran, and reading the reason is
+how an agent notices it was rewritten at all — Grok reports nothing extra on a
+rewrite. Two costs ride along: on Claude Code the reply carries
+`permissionDecision: "allow"`, so a rewritten call runs without the prompt the
+raw form would have raised, and every shell tool call spawns `rtk hook claude`
+to ask for the rewrite, bounded by a 3 s timeout.
 
 Verified end to end on all three harnesses — the model emits the raw command and
 `rtk gain --history` records the rtk form running:

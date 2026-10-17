@@ -4,6 +4,7 @@ exports: class HarnessDetectionTestCase | class EventAndToolTestCase | class She
 used_by: none
 rules:   Load the hook modules by file path — the skill directory name is not a Python package. Never call the real rtk, semble, or harness binaries: inject runners, `which` lookups, and a temporary cache root.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added policy, encoding, budget, and entry-point tests for the three-harness contract hook
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | regression tests for the empty-query nudge: pattern aliases, the directory the call carries, and the placeholder fallback
 """
 
 from __future__ import annotations
@@ -395,6 +396,40 @@ class DiscoveryPolicyTestCase(HookTestCase):
 
         self.assertIn('semble search "firewall install"', decision.reason)
         self.assertNotIn("cannot run", decision.reason)
+
+    def test_nudge_names_the_directory_the_grep_call_carries(self):
+        decision = self.decide(self.grep_payload(), CLAUDE_ENV)
+
+        self.assertIn('"firewall install" src', decision.reason)
+
+    def test_nudge_quotes_a_placeholder_for_a_call_with_no_pattern(self):
+        payload = {
+            "hookEventName": "pre_tool_use",
+            "sessionId": "s-grok-listdir",
+            "toolName": "list_dir",
+            "toolInput": {"target_directory": "/srv/app/src"},
+        }
+
+        decision = self.decide(payload, GROK_ENV)
+
+        self.assertEqual(decision.kind, "deny")
+        self.assertIn('"<pattern>"', decision.reason)
+        self.assertIn("/srv/app/src", decision.reason)
+        self.assertNotIn('""', decision.reason)
+
+    def test_nudge_falls_back_to_the_working_directory(self):
+        payload = {
+            "session_id": "s-claude-glob",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Glob",
+            "tool_input": {},
+        }
+
+        decision = self.decide(payload, CLAUDE_ENV)
+
+        self.assertEqual(decision.kind, "deny")
+        self.assertIn('"<pattern>" .', decision.reason)
+        self.assertNotIn('""', decision.reason)
 
     def test_native_binary_without_a_shebang_counts_as_ready(self):
         shim = Path(self._tmp.name) / "bin" / "semble-binary"

@@ -4,8 +4,9 @@ exports: BUDGET_LIMIT | CACHE_DIR_NAME | RTK_BIN | RTK_TIMEOUT_SECONDS | SEMBLE_
 used_by: .agents/skills/agents-contract/hooks/contract_hook.py → decide [cascade]
 used_by: tests/test_contract_hook.py → consume, decide, session_state_path [cascade]
 related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Command Style and the tool ladder are the rules enforced here.
-rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop.
+rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
 """
 
 from __future__ import annotations
@@ -44,6 +45,9 @@ CACHE_DIR_NAME = "lowheat-hooks"
 REWRITE_REASON = "agents-contract Command Style: rtk wraps this command and compresses its output."
 _BUDGET_SESSION_CHARS = 64
 _SAFE_SESSION_RE = re.compile(r"[^A-Za-z0-9._-]")
+_PATTERN_KEYS = ("pattern", "query", "regex")
+_DIRECTORY_KEYS = ("path", "target_directory", "directory")
+_PATTERN_PLACEHOLDER = "<pattern>"
 
 SESSION_CONTEXT = (
     "agents-contract (lowheat) is active. Command Style: shell commands run through rtk, the "
@@ -241,6 +245,18 @@ def deny_text(rewritten: str) -> str:
     )
 
 
+def _first_text(arguments: Mapping[str, Any], keys: tuple[str, ...]) -> str:
+    """Return the first non-blank string the call carries under keys.
+
+    Rules:   Harnesses name the same field differently, so probe the aliases in order and return an empty string when none carries text — callers substitute a placeholder rather than quoting an empty argument.
+    """
+    for key in keys:
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def discovery_text(
     tool: str,
     arguments: Mapping[str, Any],
@@ -251,17 +267,20 @@ def discovery_text(
 ) -> str:
     """Return the reason that points a refused native search at the ladder.
 
-    Rules:   Quote the pattern with json.dumps so a pattern carrying quotes or backslashes cannot break the reason, name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended.
+    Rules:   Quote the pattern with json.dumps so a pattern carrying quotes or backslashes cannot break the reason, and quote _PATTERN_PLACEHOLDER when the call carries none — Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended.
     """
-    query = str(arguments.get("pattern") or "")
+    query = _first_text(arguments, _PATTERN_KEYS) or _PATTERN_PLACEHOLDER
+    directory = _first_text(arguments, _DIRECTORY_KEYS) or "."
     options = [f"the semble MCP {semble_mcp_tool(harness)} tool"]
     if has_semble_cli:
-        options.append(f"semble search {json.dumps(query)} . --max-snippet-lines 10")
+        options.append(
+            f"semble search {json.dumps(query)} {directory} --max-snippet-lines 10"
+        )
     if has_rtk:
         if tool.strip().lower() in hook_harness.DISCOVERY_TOOLS - {"grep"}:
-            options.append(f"rtk find {json.dumps(query)} .")
+            options.append(f"rtk find {json.dumps(query)} {directory}")
         else:
-            options.append(f"rtk grep -rn {json.dumps(query)} <path>")
+            options.append(f"rtk grep -rn {json.dumps(query)} {directory}")
     note = ""
     if cli_installed and not has_semble_cli:
         note = (

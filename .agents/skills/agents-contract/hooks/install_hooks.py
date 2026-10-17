@@ -4,8 +4,9 @@ exports: BACKUP_SUFFIX | COMMANDCODE_MATCHER | HARNESSES | HARNESS_CLAUDE | HARN
 used_by: tests/test_install_hooks.py → Change, HARNESS_*, HOOK_MATCHER, HOOK_SCRIPT_NAME, HOOK_TIMEOUT_SECONDS, MARKER, BACKUP_SUFFIX, InstallError, claude_settings_path, commandcode_settings_path, grok_hooks_path, handler_command, install, uninstall [cascade]
 used_by: README.md → the hook wiring section
 related: contract_hook.py is the script every entry runs; hook_harness.py names the three harnesses.
-rules:   Merge, never overwrite. Keep every existing key, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing.
+rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled
 """
 
 from __future__ import annotations
@@ -212,13 +213,13 @@ def install(
 ) -> list[Change]:
     """Wire the contract hook into one harness under home.
 
-    Rules:   Grok owns its hook file outright; Claude Code and Command Code settings are merged. The interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or on the working directory.
+    Rules:   Every harness merges — ours are appended last so a foreign guard keeps running first, and an earlier copy of ours is replaced so a re-run or a moved checkout never duplicates it. Grok gets no SessionStart group because it ignores one there. The interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or on the working directory.
     """
     interpreter = str(python or sys.executable)
     target = str(Path(script or Path(__file__).with_name(HOOK_SCRIPT_NAME)).resolve())
     if harness == HARNESS_GROK:
-        data = {"hooks": {"PreToolUse": [_group(HOOK_MATCHER, interpreter, target)]}}
-        return [_write(grok_hooks_path(home), data, HARNESS_GROK, "write", dry_run)]
+        groups = {"PreToolUse": [_group(HOOK_MATCHER, interpreter, target)]}
+        return [_upsert(grok_hooks_path(home), groups, HARNESS_GROK, dry_run)]
     if harness == HARNESS_CLAUDE:
         groups = {
             "PreToolUse": [_group(HOOK_MATCHER, interpreter, target)],
@@ -234,28 +235,40 @@ def install(
     raise InstallError(f"unknown harness: {harness}")
 
 
+def _settings_path(harness: str, home: Path | str) -> Path:
+    """Return the settings file one harness keeps under home.
+
+    Rules:   An unknown harness raises InstallError here, so every caller sees the same validation.
+    """
+    if harness == HARNESS_GROK:
+        return grok_hooks_path(home)
+    if harness == HARNESS_CLAUDE:
+        return claude_settings_path(home)
+    if harness == HARNESS_COMMANDCODE:
+        return commandcode_settings_path(home)
+    raise InstallError(f"unknown harness: {harness}")
+
+
+def _remove_file(path: Path, harness: str, dry_run: bool) -> Change:
+    """Delete a hook file the installer created and now owns.
+
+    Rules:   Only the Grok hook file reaches here, and only when stripping our handlers left it empty with no backup claiming it — a file the installer did not create is never deleted. A dry run reports the removal without touching the disk.
+    """
+    if dry_run:
+        return Change(harness, path, "remove", "dry run")
+    try:
+        path.unlink()
+    except OSError as error:
+        raise InstallError(f"{path}: {error}") from error
+    return Change(harness, path, "remove")
+
+
 def uninstall(harness: str, home: Path | str, dry_run: bool = False) -> list[Change]:
     """Remove the contract hook from one harness under home.
 
-    Rules:   Remove only handlers carrying MARKER; leave every other hook in place, drop an event key that ends up empty, and delete the Grok hook file outright because the installer owns it. When the stripped result matches the pristine backup, write that backup back verbatim so the file returns byte for byte; a file that never held our handlers is left alone.
+    Rules:   Remove only handlers carrying MARKER; leave every other hook in place and drop an event key that ends up empty. When the stripped result matches the pristine backup, write that backup back verbatim so the file returns byte for byte; when the file gained foreign content since the install, write the stripped object instead. Delete the Grok hook file only when nothing else remains in it and no backup claims it. A file that never held our handlers is left alone.
     """
-    if harness == HARNESS_GROK:
-        path = grok_hooks_path(home)
-        if not path.exists():
-            return [Change(HARNESS_GROK, path, "unchanged")]
-        if dry_run:
-            return [Change(HARNESS_GROK, path, "remove", "dry run")]
-        try:
-            path.unlink()
-        except OSError as error:
-            raise InstallError(f"{path}: {error}") from error
-        return [Change(HARNESS_GROK, path, "remove")]
-    if harness == HARNESS_CLAUDE:
-        path = claude_settings_path(home)
-    elif harness == HARNESS_COMMANDCODE:
-        path = commandcode_settings_path(home)
-    else:
-        raise InstallError(f"unknown harness: {harness}")
+    path = _settings_path(harness, home)
     if not path.exists():
         return [Change(harness, path, "unchanged")]
     text = _read_text(path)
@@ -274,6 +287,8 @@ def uninstall(harness: str, home: Path | str, dry_run: bool = False) -> list[Cha
         pristine = _read_text(backup)
         if _parse_settings(pristine, backup) == data:
             return [_write_text(path, pristine, harness, "restore", dry_run)]
+    if not data and harness == HARNESS_GROK:
+        return [_remove_file(path, harness, dry_run)]
     if _parse_settings(text, path) == data:
         return [Change(harness, path, "unchanged")]
     return [_write(path, data, harness, "write", dry_run)]

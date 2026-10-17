@@ -4,6 +4,7 @@ exports: class ClaudeInstallTestCase | class GrokInstallTestCase | class Command
 used_by: none
 rules:   Load the installer by file path — the skill directory name is not a Python package. Every case runs against a temporary home directory; never touch the real harness configs.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it
 """
 
 from __future__ import annotations
@@ -61,6 +62,21 @@ EXISTING_COMMANDCODE_SETTINGS = {
     "tasteLearning": False,
 }
 
+EXISTING_GROK_HOOKS = {
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Write|Edit",
+                "hooks": [
+                    {"type": "command", "command": "bash '/root/.grok/hooks/guard-writes.sh'"}
+                ],
+            }
+        ]
+    }
+}
+
+FOREIGN_GROK_HANDLER = "bash '/root/.grok/hooks/guard-writes.sh'"
+
 
 def handler_commands(groups) -> list[str]:
     return [
@@ -91,6 +107,12 @@ class InstallerTestCase(unittest.TestCase):
 
     def write_claude_settings(self, data=EXISTING_CLAUDE_SETTINGS) -> Path:
         path = install_hooks.claude_settings_path(self.home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return path
+
+    def write_grok_hooks(self, data=EXISTING_GROK_HOOKS) -> Path:
+        path = install_hooks.grok_hooks_path(self.home)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return path
@@ -231,6 +253,64 @@ class GrokInstallTestCase(InstallerTestCase):
 
         self.uninstall(GROK)
         self.assertFalse(path.exists())
+
+    def test_install_keeps_a_foreign_handler_and_appends_ours(self):
+        path = self.write_grok_hooks()
+
+        self.install(GROK)
+        data = self.read_json(path)
+
+        groups = data["hooks"]["PreToolUse"]
+        self.assertEqual(groups[0]["matcher"], "Write|Edit")
+        commands = handler_commands(groups)
+        self.assertIn(FOREIGN_GROK_HANDLER, commands)
+        self.assertTrue(any(install_hooks.MARKER in item for item in commands))
+
+    def test_uninstall_restores_the_pristine_grok_file(self):
+        path = self.write_grok_hooks()
+        original = path.read_text(encoding="utf-8")
+        self.install(GROK)
+
+        changes = self.uninstall(GROK)
+
+        self.assertEqual(changes[0].action, "restore")
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_uninstall_writes_when_the_file_gained_foreign_content(self):
+        path = self.write_grok_hooks()
+        self.install(GROK)
+        data = self.read_json(path)
+        data["hooks"]["PreToolUse"].append(
+            {"matcher": "Read", "hooks": [{"type": "command", "command": "bash '/root/.grok/hooks/audit-reads.sh'"}]}
+        )
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        changes = self.uninstall(GROK)
+
+        self.assertEqual(changes[0].action, "write")
+        commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
+        self.assertIn(FOREIGN_GROK_HANDLER, commands)
+        self.assertIn("bash '/root/.grok/hooks/audit-reads.sh'", commands)
+        self.assertFalse(any(install_hooks.MARKER in item for item in commands))
+
+    def test_uninstall_dry_run_reports_the_removal_without_deleting(self):
+        path = install_hooks.grok_hooks_path(self.home)
+        self.install(GROK)
+
+        changes = self.uninstall(GROK, dry_run=True)
+
+        self.assertEqual(changes[0].action, "remove")
+        self.assertEqual(changes[0].detail, "dry run")
+        self.assertTrue(path.exists())
+
+    def test_uninstall_leaves_a_foreign_only_grok_file_alone(self):
+        path = self.write_grok_hooks()
+        original = path.read_text(encoding="utf-8")
+
+        changes = self.uninstall(GROK)
+
+        self.assertEqual(changes[0].action, "unchanged")
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_install_uses_the_same_command_string_as_the_other_harnesses(self):
         self.install(GROK)
