@@ -6,7 +6,7 @@ used_by: README.md → the hook wiring section
 related: contract_hook.py is the script every entry runs; hook_harness.py names the three harnesses.
 rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced
 """
 
 from __future__ import annotations
@@ -71,9 +71,9 @@ def commandcode_settings_path(home: Path | str) -> Path:
 def handler_command(python: str, script: str) -> str:
     """Return the shell command a harness runs for the contract hook.
 
-    Rules:   Both paths are absolute — a hook runs with the workspace as its working directory, so a relative path would resolve elsewhere or fail a folder-trust check. Quote each one for the shell: a space in a path would otherwise split the command into a program that does not exist, and a metacharacter would inject a second command the harness runs on every matching tool call.
+    Rules:   Both paths are absolute — a hook runs with the workspace as its working directory, so a relative path would resolve elsewhere or fail a folder-trust check. Expand `~` first: quoting the path stops the shell from expanding it, and a hook that cannot start is a silent failure. Quote each one for the shell: a space in a path would otherwise split the command into a program that does not exist, and a metacharacter would inject a second command the harness runs on every matching tool call.
     """
-    return f"{shlex.quote(python)} {shlex.quote(script)}"
+    return f"{shlex.quote(os.path.expanduser(python))} {shlex.quote(os.path.expanduser(script))}"
 
 
 def _handler(python: str, script: str) -> dict[str, Any]:
@@ -170,18 +170,19 @@ def _write_text(
 ) -> Change:
     """Write text to the settings file after one backup of the pristine copy.
 
-    Rules:   The backup is taken only when it does not exist yet, so a second run never overwrites the original. The write stages beside the target and moves into place, because a truncate-then-write that hits ENOSPC, EIO, or a kill would leave the harness a corrupt settings file — the module rule is that a failed install leaves every file byte-identical. A dry run returns the change without touching the disk.
+    Rules:   The backup is taken only when it does not exist yet, so a second run never overwrites the original, and it sits beside the link so an uninstall finds it there. The write stages beside the resolved target and moves into place with os.replace: a truncate-then-write that hits ENOSPC, EIO, or a kill would leave the harness a corrupt settings file, and replacing the link itself would silently detach a dotfiles-managed settings file from its target. A dry run returns the change without touching the disk.
     """
     if dry_run:
         return Change(harness, path, action, "dry run")
     backup = path.with_name(path.name + BACKUP_SUFFIX)
-    staged = path.with_name(path.name + ".tmp")
+    target = Path(os.path.realpath(path)) if path.is_symlink() else path
+    staged = target.with_name(target.name + ".tmp")
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not backup.exists():
             shutil.copy2(path, backup)
         staged.write_text(text, encoding="utf-8")
-        os.replace(staged, path)
+        os.replace(staged, target)
     except OSError as error:
         raise InstallError(f"{path}: {error}") from error
     return Change(harness, path, action)
@@ -224,7 +225,9 @@ def install(
     Rules:   Every harness merges — ours are appended last so a foreign guard keeps running first, and an earlier copy of ours is replaced so a re-run or a moved checkout never duplicates it. Grok gets no SessionStart group because it ignores one there. The interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or on the working directory.
     """
     interpreter = str(python or sys.executable)
-    target = str(Path(script or Path(__file__).with_name(HOOK_SCRIPT_NAME)).resolve())
+    target = str(
+        Path(os.path.expanduser(script or Path(__file__).with_name(HOOK_SCRIPT_NAME))).resolve()
+    )
     if harness == HARNESS_GROK:
         groups = {"PreToolUse": [_group(HOOK_MATCHER, interpreter, target)]}
         return [_upsert(grok_hooks_path(home), groups, HARNESS_GROK, dry_run)]

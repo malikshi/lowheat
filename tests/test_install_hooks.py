@@ -4,7 +4,7 @@ exports: class ClaudeInstallTestCase | class GrokInstallTestCase | class Command
 used_by: none
 rules:   Load the installer by file path — the skill directory name is not a Python package. Every case runs against a temporary home directory; never touch the real harness configs.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted
 """
 
 from __future__ import annotations
@@ -477,6 +477,52 @@ class InstallerSafetyTestCase(InstallerTestCase):
         commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
 
         self.assertTrue(any("'/opt/py thon/python3'" in item for item in commands))
+
+    def test_handler_command_expands_a_tilde_path(self):
+        command = install_hooks.handler_command("~/venv/bin/python", "~/hook.py")
+
+        self.assertEqual(
+            command, f"{Path.home() / 'venv/bin/python'} {Path.home() / 'hook.py'}"
+        )
+
+    def test_install_expands_a_tilde_script_path(self):
+        path = install_hooks.claude_settings_path(self.home)
+
+        self.install(CLAUDE, script="~/hooks/contract_hook.py")
+        commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
+
+        self.assertTrue(
+            any(str(Path.home() / "hooks/contract_hook.py") in item for item in commands)
+        )
+
+    def test_install_writes_through_a_symlinked_settings_file(self):
+        real = Path(self._tmp.name) / "dotfiles" / "settings.json"
+        real.parent.mkdir(parents=True, exist_ok=True)
+        real.write_text(json.dumps({"permissions": {"allow": ["Bash(*)"]}}), encoding="utf-8")
+        path = install_hooks.claude_settings_path(self.home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(real)
+
+        self.install(CLAUDE)
+
+        self.assertTrue(path.is_symlink())
+        commands = handler_commands(self.read_json(real)["hooks"]["PreToolUse"])
+        self.assertTrue(any(install_hooks.MARKER in item for item in commands))
+
+    def test_uninstall_restores_a_symlinked_settings_file(self):
+        real = Path(self._tmp.name) / "dotfiles" / "settings.json"
+        real.parent.mkdir(parents=True, exist_ok=True)
+        original = json.dumps({"permissions": {"allow": ["Bash(*)"]}})
+        real.write_text(original, encoding="utf-8")
+        path = install_hooks.claude_settings_path(self.home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(real)
+        self.install(CLAUDE)
+
+        self.uninstall(CLAUDE)
+
+        self.assertTrue(path.is_symlink())
+        self.assertEqual(real.read_text(encoding="utf-8"), original)
 
     def test_a_failed_move_leaves_the_settings_file_untouched(self):
         path = self.write_claude_settings()

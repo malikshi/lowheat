@@ -7,7 +7,7 @@ related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Com
 rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects; second pass: every leading `**/` is stripped and a pattern that still holds a slash gets the grep rung, because find rejects those too
 """
 
 from __future__ import annotations
@@ -265,14 +265,17 @@ def _first_text(arguments: Mapping[str, Any], keys: tuple[str, ...]) -> str:
     return ""
 
 
-def _find_pattern(pattern: str) -> str:
-    """Return the pattern in the shape rtk's find translation accepts.
+def _find_pattern(pattern: str) -> str | None:
+    """Return the pattern rtk's find translation accepts, or None when it has none.
 
-    Rules:   rtk translates only a bare glob to `find -name`, so `rtk find "**/*.py" .` fails with a missing-file error while `rtk find "*.py" .` lists the matches recursively. Strip the leading `**/`, and keep the pattern when the prefix is all it holds.
+    Rules:   rtk translates only a bare glob to `find -name`, so `rtk find "**/*.py" .` fails with a missing-file error while `rtk find "*.py" .` lists the matches recursively. Strip every leading `**/`, and answer None when a slash remains or nothing is left — a pattern with a slash has no find form at all, and the caller must offer the grep rung instead of a command find rejects.
     """
-    if not pattern.startswith(_RECURSIVE_PREFIX):
-        return pattern
-    return pattern[len(_RECURSIVE_PREFIX) :] or pattern
+    stripped = pattern
+    while stripped.startswith(_RECURSIVE_PREFIX):
+        stripped = stripped[len(_RECURSIVE_PREFIX) :]
+    if not stripped or "/" in stripped:
+        return None
+    return stripped
 
 
 def discovery_text(
@@ -295,8 +298,9 @@ def discovery_text(
             f"semble search {shlex.quote(query)} {directory} --max-snippet-lines 10"
         )
     if has_rtk:
-        if tool.strip().lower() in hook_harness.DISCOVERY_TOOLS - {"grep"}:
-            options.append(f"rtk find {shlex.quote(_find_pattern(query))} {directory}")
+        find_form = _find_pattern(query)
+        if tool.strip().lower() in hook_harness.DISCOVERY_TOOLS - {"grep"} and find_form:
+            options.append(f"rtk find {shlex.quote(find_form)} {directory}")
         else:
             options.append(f"rtk grep -rn {shlex.quote(query)} {directory}")
     note = ""
