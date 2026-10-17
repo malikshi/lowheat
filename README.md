@@ -201,13 +201,15 @@ nothing else remains in it.
 Compression is the point of the rewrite and also its sharp edge: a command whose
 output is the answer can come back empty. Plain `git add -n --verbose <paths>`
 printed five `add '…'` lines here; through `rtk git add -n --verbose <paths>` it
-printed none and still exited 0. The refusal text names the raw escape hatch,
-`rtk gain --history` shows the form that actually ran, and reading the reason is
-how an agent notices it was rewritten at all — Grok reports nothing extra on a
-rewrite. Two costs ride along: on Claude Code the reply carries
-`permissionDecision: "allow"`, so a rewritten call runs without the prompt the
-raw form would have raised, and every shell tool call spawns `rtk hook claude`
-to ask for the rewrite, bounded by a 3 s timeout.
+printed none and still exited 0. The rewrite has no budget — every shell call
+with an rtk form is compressed — so `rtk bypass <command>` is the route to
+untouched output: the engine never rewrites it, and both the rewrite reason and
+the refusal name it. `rtk gain --history` shows the form that actually ran.
+Nothing else signals a rewrite on Grok, so the reason text, `RTK.md`, and this
+section are how an agent learns of it. Two costs ride along: on Claude Code the
+reply carries `permissionDecision: "allow"`, so a rewritten call runs without
+the prompt the raw form would have raised, and every shell tool call spawns
+`rtk hook claude` to ask for the rewrite, bounded by a 3 s timeout.
 
 Verified end to end on all three harnesses — the model emits the raw command and
 `rtk gain --history` records the rtk form running:

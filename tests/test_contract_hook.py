@@ -5,6 +5,7 @@ used_by: none
 rules:   Load the hook modules by file path — the skill directory name is not a Python package. Never call the real rtk, semble, or harness binaries: inject runners, `which` lookups, and a temporary cache root.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added policy, encoding, budget, and entry-point tests for the three-harness contract hook
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | regression tests for the empty-query nudge: pattern aliases, the directory the call carries, and the placeholder fallback
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites
 """
 
 from __future__ import annotations
@@ -277,6 +278,16 @@ class ShellPolicyTestCase(HookTestCase):
 
         self.assertEqual(self.decide(payload, CLAUDE_ENV).kind, "noop")
 
+    def test_rewrite_reason_names_the_route_to_untouched_output(self):
+        decision = self.decide(claude_payload(), CLAUDE_ENV)
+
+        self.assertIn("rtk bypass", decision.reason)
+
+    def test_refusal_names_the_route_to_untouched_output(self):
+        decision = self.decide(commandcode_payload(), COMMANDCODE_ENV)
+
+        self.assertIn("rtk bypass", decision.reason)
+
     def test_ignores_a_non_shell_tool(self):
         payload = claude_payload()
         payload["tool_name"] = "Read"
@@ -400,7 +411,15 @@ class DiscoveryPolicyTestCase(HookTestCase):
     def test_nudge_names_the_directory_the_grep_call_carries(self):
         decision = self.decide(self.grep_payload(), CLAUDE_ENV)
 
-        self.assertIn('"firewall install" src', decision.reason)
+        self.assertIn('"firewall install" "src"', decision.reason)
+
+    def test_nudge_quotes_a_directory_that_carries_a_space(self):
+        payload = self.grep_payload(session="s-spaced")
+        payload["tool_input"]["path"] = "/home/me/My Docs/src"
+
+        decision = self.decide(payload, CLAUDE_ENV)
+
+        self.assertIn('"/home/me/My Docs/src"', decision.reason)
 
     def test_nudge_quotes_a_placeholder_for_a_call_with_no_pattern(self):
         payload = {
@@ -428,7 +447,7 @@ class DiscoveryPolicyTestCase(HookTestCase):
         decision = self.decide(payload, CLAUDE_ENV)
 
         self.assertEqual(decision.kind, "deny")
-        self.assertIn('"<pattern>" .', decision.reason)
+        self.assertIn('"<pattern>" "."', decision.reason)
         self.assertNotIn('""', decision.reason)
 
     def test_native_binary_without_a_shebang_counts_as_ready(self):

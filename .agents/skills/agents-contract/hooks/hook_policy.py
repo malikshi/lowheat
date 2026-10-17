@@ -7,6 +7,7 @@ related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Com
 rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route
 """
 
 from __future__ import annotations
@@ -42,7 +43,11 @@ _SHEBANG_BYTES = 256
 BUDGET_LIMIT = 1
 SHELL_BUDGET_KEY = "shell"
 CACHE_DIR_NAME = "lowheat-hooks"
-REWRITE_REASON = "agents-contract Command Style: rtk wraps this command and compresses its output."
+_RAW_FORM = "rtk bypass"
+REWRITE_REASON = (
+    "agents-contract Command Style: rtk wraps this command and compresses its "
+    f"output. Write `{_RAW_FORM} <command>` when you need the output untouched."
+)
 _BUDGET_SESSION_CHARS = 64
 _SAFE_SESSION_RE = re.compile(r"[^A-Za-z0-9._-]")
 _PATTERN_KEYS = ("pattern", "query", "regex")
@@ -236,12 +241,13 @@ def semble_mcp_tool(harness: str) -> str:
 def deny_text(rewritten: str) -> str:
     """Return the reason that carries the rtk form of a refused command.
 
-    Rules:   Name the exact replacement command and the one escape hatch — output the caller will parse or redirect stays raw; the model reads this text as the tool result, so it must be actionable on its own.
+    Rules:   Name the exact replacement command and the one escape hatch — output the caller will parse or redirect stays raw through `rtk bypass`, which the rtk engine never rewrites; the model reads this text as the tool result, so it must be actionable on its own.
     """
     return (
         "agents-contract Command Style: this command has an rtk form. Re-issue it as: "
-        f"`{rewritten}`. rtk runs the same command and compresses its output; keep the raw "
-        "form only for output you will parse or redirect. This refusal fires once per session."
+        f"`{rewritten}`. rtk runs the same command and compresses its output; write "
+        f"`{_RAW_FORM} <command>` for output you will parse or redirect. This refusal "
+        "fires once per session."
     )
 
 
@@ -267,10 +273,10 @@ def discovery_text(
 ) -> str:
     """Return the reason that points a refused native search at the ladder.
 
-    Rules:   Quote the pattern with json.dumps so a pattern carrying quotes or backslashes cannot break the reason, and quote _PATTERN_PLACEHOLDER when the call carries none — Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended.
+    Rules:   Quote the pattern with json.dumps so a pattern carrying quotes or backslashes cannot break the reason, and quote _PATTERN_PLACEHOLDER when the call carries none — Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. The directory the call carried is quoted the same way, because a path with a space or a shell metacharacter is unrunnable as written. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended.
     """
     query = _first_text(arguments, _PATTERN_KEYS) or _PATTERN_PLACEHOLDER
-    directory = _first_text(arguments, _DIRECTORY_KEYS) or "."
+    directory = json.dumps(_first_text(arguments, _DIRECTORY_KEYS) or ".")
     options = [f"the semble MCP {semble_mcp_tool(harness)} tool"]
     if has_semble_cli:
         options.append(
