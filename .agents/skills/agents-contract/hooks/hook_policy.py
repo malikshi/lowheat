@@ -7,7 +7,7 @@ related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Com
 rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,7 @@ _SAFE_SESSION_RE = re.compile(r"[^A-Za-z0-9._-]")
 _PATTERN_KEYS = ("pattern", "query", "regex")
 _DIRECTORY_KEYS = ("path", "target_directory", "directory")
 _PATTERN_PLACEHOLDER = "<pattern>"
+_RECURSIVE_PREFIX = "**/"
 
 SESSION_CONTEXT = (
     "agents-contract (lowheat) is active. Command Style: shell commands run through rtk, the "
@@ -263,6 +265,16 @@ def _first_text(arguments: Mapping[str, Any], keys: tuple[str, ...]) -> str:
     return ""
 
 
+def _find_pattern(pattern: str) -> str:
+    """Return the pattern in the shape rtk's find translation accepts.
+
+    Rules:   rtk translates only a bare glob to `find -name`, so `rtk find "**/*.py" .` fails with a missing-file error while `rtk find "*.py" .` lists the matches recursively. Strip the leading `**/`, and keep the pattern when the prefix is all it holds.
+    """
+    if not pattern.startswith(_RECURSIVE_PREFIX):
+        return pattern
+    return pattern[len(_RECURSIVE_PREFIX) :] or pattern
+
+
 def discovery_text(
     tool: str,
     arguments: Mapping[str, Any],
@@ -273,20 +285,20 @@ def discovery_text(
 ) -> str:
     """Return the reason that points a refused native search at the ladder.
 
-    Rules:   Quote the pattern with json.dumps so a pattern carrying quotes or backslashes cannot break the reason, and quote _PATTERN_PLACEHOLDER when the call carries none — Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. The directory the call carried is quoted the same way, because a path with a space or a shell metacharacter is unrunnable as written. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended.
+    Rules:   Quote the pattern and the directory with shlex.quote, not json.dumps — the model runs the suggestion in a shell, and JSON quoting leaves `$(...)`, backticks, and `$name` live, so a pattern holding one would run a substitution instead of the search the model asked for. Quote _PATTERN_PLACEHOLDER when the call carries no pattern, because Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended. The MCP rung is named unconditionally: the hook cannot see which tools the harness exposes, so it names the tool that harness mounts when the server is wired.
     """
     query = _first_text(arguments, _PATTERN_KEYS) or _PATTERN_PLACEHOLDER
-    directory = json.dumps(_first_text(arguments, _DIRECTORY_KEYS) or ".")
+    directory = shlex.quote(_first_text(arguments, _DIRECTORY_KEYS) or ".")
     options = [f"the semble MCP {semble_mcp_tool(harness)} tool"]
     if has_semble_cli:
         options.append(
-            f"semble search {json.dumps(query)} {directory} --max-snippet-lines 10"
+            f"semble search {shlex.quote(query)} {directory} --max-snippet-lines 10"
         )
     if has_rtk:
         if tool.strip().lower() in hook_harness.DISCOVERY_TOOLS - {"grep"}:
-            options.append(f"rtk find {json.dumps(query)} {directory}")
+            options.append(f"rtk find {shlex.quote(_find_pattern(query))} {directory}")
         else:
-            options.append(f"rtk grep -rn {json.dumps(query)} {directory}")
+            options.append(f"rtk grep -rn {shlex.quote(query)} {directory}")
     note = ""
     if cli_installed and not has_semble_cli:
         note = (

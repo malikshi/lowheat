@@ -4,8 +4,9 @@ exports: HARNESS_CLAUDE | HARNESS_GROK | HARNESS_COMMANDCODE | KIND_CONTEXT | KI
 used_by: .agents/skills/agents-contract/hooks/hook_policy.py → Decision, DISCOVERY_TOOLS, SHELL_TOOLS, detect_harness, event_name, session_id, tool_input, tool_name [cascade]
 used_by: .agents/skills/agents-contract/hooks/contract_hook.py → detect_harness, encode [cascade]
 used_by: tests/test_contract_hook.py → Decision, HARNESS_CLAUDE, HARNESS_GROK, HARNESS_COMMANDCODE, SHELL_TOOLS, DISCOVERY_TOOLS, detect_harness, event_name, tool_name, encode [cascade]
-rules:   Emit only a shape the target harness documents: Claude Code and Command Code read hookSpecificOutput, Grok reads hookSpecificOutput.updatedInput and its own top-level decision, and a Grok SessionStart is observe-only, so a context decision encodes to None. An unknown payload shape reads as Claude Code — the three wired harnesses are the only callers.
+rules:   Emit only a shape the target harness documents: Claude Code and Command Code read hookSpecificOutput, Grok reads hookSpecificOutput.updatedInput and its own top-level decision, and a Grok SessionStart is observe-only, so a context decision encodes to None. A rewrite never grants approval — no permissionDecision on the rewrite path, so the harness's own permission rules still see the rewritten command. An unknown payload shape reads as Claude Code — the three wired harnesses are the only callers.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: env-then-payload detection, alias tables for shell and discovery tools, four decision kinds, per-harness encoders
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | dropped permissionDecision allow from the Claude Code rewrite reply: it skipped the permission prompt, so a wrapped `git push` ran without the approval the contract requires
 """
 
 from __future__ import annotations
@@ -144,7 +145,7 @@ def session_id(payload: Mapping[str, Any], harness: str, env: Mapping[str, str])
 def encode(harness: str, decision: Decision) -> dict[str, Any] | None:
     """Render a Decision into the reply the harness reads.
 
-    Rules:   None means print nothing. A deny carries permissionDecision for Claude Code and Command Code and a top-level decision for Grok; a rewrite carries updatedInput, plus the allow that RTK's own Claude hook emits; context is read only by Claude Code and Command Code.
+    Rules:   None means print nothing. A deny carries permissionDecision for Claude Code and Command Code and a top-level decision for Grok. A rewrite carries updatedInput and no permission decision, because a `permissionDecision` of `allow` skips the harness's own permission prompt — that would auto-approve commands the workspace contract says need explicit user approval, and would let whatever the external rewrite produced run unseen. Without it, the harness evaluates its own rules against the rewritten command. No harness shows a reason on a rewrite, so none is emitted. Context is read only by Claude Code and Command Code.
     """
     if decision.kind == KIND_DENY:
         if harness == HARNESS_GROK:
@@ -157,14 +158,12 @@ def encode(harness: str, decision: Decision) -> dict[str, Any] | None:
             }
         }
     if decision.kind == KIND_REWRITE:
-        body: dict[str, Any] = {
-            "hookEventName": "PreToolUse",
-            "updatedInput": dict(decision.updated_input or {}),
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "updatedInput": dict(decision.updated_input or {}),
+            }
         }
-        if harness == HARNESS_CLAUDE:
-            body["permissionDecision"] = "allow"
-            body["permissionDecisionReason"] = decision.reason
-        return {"hookSpecificOutput": body}
     if decision.kind == KIND_CONTEXT and harness in (HARNESS_CLAUDE, HARNESS_COMMANDCODE):
         return {
             "hookSpecificOutput": {

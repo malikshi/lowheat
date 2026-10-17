@@ -5,7 +5,7 @@ used_by: none
 rules:   Load the hook modules by file path — the skill directory name is not a Python package. Never call the real rtk, semble, or harness binaries: inject runners, `which` lookups, and a temporary cache root.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added policy, encoding, budget, and entry-point tests for the three-harness contract hook
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | regression tests for the empty-query nudge: pattern aliases, the directory the call carries, and the placeholder fallback
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites; on review: a rewrite carries no permissionDecision, shlex quoting defuses a substitution in the suggestion, a glob keeps `**/` out of the find hint, and a closed stdout still exits 0
 """
 
 from __future__ import annotations
@@ -405,13 +405,13 @@ class DiscoveryPolicyTestCase(HookTestCase):
     def test_nudge_advertises_a_shim_whose_interpreter_exists(self):
         decision = self.decide(self.grep_payload(), CLAUDE_ENV, which=self.which())
 
-        self.assertIn('semble search "firewall install"', decision.reason)
+        self.assertIn("semble search 'firewall install'", decision.reason)
         self.assertNotIn("cannot run", decision.reason)
 
     def test_nudge_names_the_directory_the_grep_call_carries(self):
         decision = self.decide(self.grep_payload(), CLAUDE_ENV)
 
-        self.assertIn('"firewall install" "src"', decision.reason)
+        self.assertIn("'firewall install' src", decision.reason)
 
     def test_nudge_quotes_a_directory_that_carries_a_space(self):
         payload = self.grep_payload(session="s-spaced")
@@ -419,7 +419,28 @@ class DiscoveryPolicyTestCase(HookTestCase):
 
         decision = self.decide(payload, CLAUDE_ENV)
 
-        self.assertIn('"/home/me/My Docs/src"', decision.reason)
+        self.assertIn("'/home/me/My Docs/src'", decision.reason)
+
+    def test_nudge_quotes_a_pattern_that_holds_a_substitution(self):
+        payload = self.grep_payload(pattern="cost$(id -u)")
+
+        decision = self.decide(payload, CLAUDE_ENV)
+
+        self.assertIn("'cost$(id -u)'", decision.reason)
+
+    def test_glob_nudge_strips_the_recursive_prefix_from_the_find_form(self):
+        payload = {
+            "session_id": "s-glob-prefix",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Glob",
+            "tool_input": {"pattern": "**/*.py"},
+        }
+
+        decision = self.decide(payload, CLAUDE_ENV)
+
+        self.assertIn("rtk find '*.py'", decision.reason)
+        self.assertIn("semble search '**/*.py'", decision.reason)
+        self.assertNotIn("rtk find '**/*.py'", decision.reason)
 
     def test_nudge_quotes_a_placeholder_for_a_call_with_no_pattern(self):
         payload = {
@@ -432,7 +453,7 @@ class DiscoveryPolicyTestCase(HookTestCase):
         decision = self.decide(payload, GROK_ENV)
 
         self.assertEqual(decision.kind, "deny")
-        self.assertIn('"<pattern>"', decision.reason)
+        self.assertIn("'<pattern>'", decision.reason)
         self.assertIn("/srv/app/src", decision.reason)
         self.assertNotIn('""', decision.reason)
 
@@ -447,7 +468,7 @@ class DiscoveryPolicyTestCase(HookTestCase):
         decision = self.decide(payload, CLAUDE_ENV)
 
         self.assertEqual(decision.kind, "deny")
-        self.assertIn('"<pattern>" "."', decision.reason)
+        self.assertIn("'<pattern>' .", decision.reason)
         self.assertNotIn('""', decision.reason)
 
     def test_native_binary_without_a_shebang_counts_as_ready(self):
@@ -518,15 +539,16 @@ class EncodingTestCase(HookTestCase):
         self.assertEqual(reply["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertEqual(reply["hookSpecificOutput"]["permissionDecisionReason"], "stop")
 
-    def test_claude_rewrite_allows_the_rewritten_input(self):
+    def test_claude_rewrite_never_grants_approval(self):
         reply = hook_harness.encode(
             hook_harness.HARNESS_CLAUDE,
             Decision.rewrite({"command": REWRITTEN}, "wrapped"),
         )
 
         body = reply["hookSpecificOutput"]
-        self.assertEqual(body["permissionDecision"], "allow")
         self.assertEqual(body["updatedInput"], {"command": REWRITTEN})
+        self.assertNotIn("permissionDecision", body)
+        self.assertNotIn("permissionDecisionReason", body)
 
     def test_grok_deny_uses_the_top_level_decision(self):
         reply = hook_harness.encode(hook_harness.HARNESS_GROK, Decision.deny("stop"))
@@ -542,6 +564,17 @@ class EncodingTestCase(HookTestCase):
         body = reply["hookSpecificOutput"]
         self.assertEqual(body["updatedInput"], {"command": REWRITTEN})
         self.assertNotIn("permissionDecision", body)
+
+    def test_a_rewrite_for_a_pushing_command_never_grants_approval(self):
+        for harness in (hook_harness.HARNESS_CLAUDE, hook_harness.HARNESS_GROK):
+            with self.subTest(harness=harness):
+                reply = hook_harness.encode(
+                    harness, Decision.rewrite({"command": "rtk git push"}, "wrapped")
+                )
+                body = reply["hookSpecificOutput"]
+
+                self.assertNotIn("permissionDecision", body)
+                self.assertNotIn("allow", json.dumps(reply))
 
     def test_commandcode_deny_uses_permission_decision(self):
         reply = hook_harness.encode(
@@ -698,6 +731,19 @@ class EntrypointTestCase(HookTestCase):
 
         self.assertEqual(code, 0)
         self.assertEqual(out, "")
+
+    def test_a_closed_stdout_exits_zero_without_raising(self):
+        class BrokenSink(io.StringIO):
+            def write(self, text):
+                raise BrokenPipeError("harness closed the pipe")
+
+        decision = Decision.rewrite({"command": REWRITTEN}, "wrapped")
+        with unittest.mock.patch.object(hook_policy, "decide", return_value=decision):
+            code = contract_hook.main(
+                stdin=io.StringIO(json.dumps(claude_payload())), stdout=BrokenSink()
+            )
+
+        self.assertEqual(code, 0)
 
     def test_internal_failure_writes_one_stderr_line_and_exits_zero(self):
         stdout, stderr = io.StringIO(), io.StringIO()

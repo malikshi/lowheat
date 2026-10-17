@@ -206,10 +206,17 @@ with an rtk form is compressed — so `rtk bypass <command>` is the route to
 untouched output: the engine never rewrites it, and both the rewrite reason and
 the refusal name it. `rtk gain --history` shows the form that actually ran.
 Nothing else signals a rewrite on Grok, so the reason text, `RTK.md`, and this
-section are how an agent learns of it. Two costs ride along: on Claude Code the
-reply carries `permissionDecision: "allow"`, so a rewritten call runs without
-the prompt the raw form would have raised, and every shell tool call spawns
-`rtk hook claude` to ask for the rewrite, bounded by a 3 s timeout.
+section are how an agent learns of it.
+
+A rewrite grants no approval. The reply carries `updatedInput` and no
+`permissionDecision`, so the harness applies its own permission rules to the
+rewritten command — an earlier revision sent `permissionDecision: "allow"` on
+Claude Code, which skipped the prompt and would have run a wrapped `git push`
+without the approval `AGENTS.md` requires. Verified with `claude -p` on 2.1.296:
+one payload in, one reply holding only `updatedInput`, and `rtk gain --history`
+records `rtk git status --short --branch` executing. One process cost stays:
+every shell tool call spawns `rtk hook claude` to ask for the rewrite, bounded
+by a 3 s timeout.
 
 Verified end to end on all three harnesses — the model emits the raw command and
 `rtk gain --history` records the rtk form running:

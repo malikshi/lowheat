@@ -6,6 +6,7 @@ used_by: tests/test_contract_hook.py → main [cascade]
 related: hook_policy.py holds the decisions; hook_harness.py holds detection and the reply shapes.
 rules:   Fail open. A malformed payload, a non-object payload, or an unexpected internal error must exit 0 and leave the tool call alone — a hook that cannot decide never blocks work. The reply is the only stdout line, because every harness parses stdout as JSON.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: stdin payload → decide → encode, silent on unparseable input, one stderr breadcrumb on an internal error
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | on review: the reply write is guarded too, so a harness that closes the pipe returns 0 instead of raising BrokenPipeError
 """
 
 from __future__ import annotations
@@ -45,7 +46,10 @@ def main(argv=None, stdin=None, stdout=None) -> int:
         print(f"contract_hook: {type(error).__name__}: {error}", file=sys.stderr)
         return 0
     if reply:
-        print(json.dumps(reply), file=sink)
+        try:
+            print(json.dumps(reply), file=sink)
+        except OSError:
+            return 0
     return 0
 
 

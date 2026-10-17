@@ -6,13 +6,15 @@ used_by: README.md → the hook wiring section
 related: contract_hook.py is the script every entry runs; hook_harness.py names the three harnesses.
 rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import shlex
 import shutil
 import sys
 from dataclasses import dataclass
@@ -69,9 +71,9 @@ def commandcode_settings_path(home: Path | str) -> Path:
 def handler_command(python: str, script: str) -> str:
     """Return the shell command a harness runs for the contract hook.
 
-    Rules:   Both paths are absolute — a hook runs with the workspace as its working directory, so a relative path would resolve elsewhere or fail a folder-trust check.
+    Rules:   Both paths are absolute — a hook runs with the workspace as its working directory, so a relative path would resolve elsewhere or fail a folder-trust check. Quote each one for the shell: a space in a path would otherwise split the command into a program that does not exist, and a metacharacter would inject a second command the harness runs on every matching tool call.
     """
-    return f"{python} {script}"
+    return f"{shlex.quote(python)} {shlex.quote(script)}"
 
 
 def _handler(python: str, script: str) -> dict[str, Any]:
@@ -138,25 +140,29 @@ def _hooks_object(data: dict[str, Any], path: Path) -> dict[str, Any]:
     return hooks
 
 
-def _is_ours(group: Any) -> bool:
-    """Report whether a matcher group holds a handler this installer wrote."""
-    handlers = group.get("hooks") if isinstance(group, dict) else None
-    if not isinstance(handlers, list):
-        return False
-    return any(
-        isinstance(handler, dict) and MARKER in str(handler.get("command", ""))
-        for handler in handlers
-    )
+def _carries_marker(handler: Any) -> bool:
+    """Report whether a handler is one this installer wrote."""
+    return isinstance(handler, dict) and MARKER in str(handler.get("command", ""))
 
 
 def _strip_ours(groups: Any, path: Path) -> list[Any]:
     """Return the groups with every handler this installer wrote removed.
 
-    Rules:   A group that is not a list raises InstallError; anything else is preserved in order so a foreign hook keeps its place and its timeout.
+    Rules:   A group that is not a list raises InstallError; anything else is preserved in order so a foreign hook keeps its place and its timeout. Remove only handlers carrying MARKER — a foreign handler a user added to one of our groups must survive, and the group is dropped only when no handler remains. Never mutate a group in place: a group that loses a handler is rebuilt.
     """
     if not isinstance(groups, list):
         raise InstallError(f"{path}: hooks entry is not a JSON array")
-    return [group for group in groups if not _is_ours(group)]
+    kept: list[Any] = []
+    for group in groups:
+        handlers = group.get("hooks") if isinstance(group, dict) else None
+        if not isinstance(handlers, list):
+            kept.append(group)
+            continue
+        remaining = [handler for handler in handlers if not _carries_marker(handler)]
+        if not remaining:
+            continue
+        kept.append(group if len(remaining) == len(handlers) else {**group, "hooks": remaining})
+    return kept
 
 
 def _write_text(
@@ -164,16 +170,18 @@ def _write_text(
 ) -> Change:
     """Write text to the settings file after one backup of the pristine copy.
 
-    Rules:   The backup is taken only when it does not exist yet, so a second run never overwrites the original; a dry run returns the change without touching the disk.
+    Rules:   The backup is taken only when it does not exist yet, so a second run never overwrites the original. The write stages beside the target and moves into place, because a truncate-then-write that hits ENOSPC, EIO, or a kill would leave the harness a corrupt settings file — the module rule is that a failed install leaves every file byte-identical. A dry run returns the change without touching the disk.
     """
     if dry_run:
         return Change(harness, path, action, "dry run")
     backup = path.with_name(path.name + BACKUP_SUFFIX)
+    staged = path.with_name(path.name + ".tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not backup.exists():
             shutil.copy2(path, backup)
-        path.write_text(text, encoding="utf-8")
+        staged.write_text(text, encoding="utf-8")
+        os.replace(staged, path)
     except OSError as error:
         raise InstallError(f"{path}: {error}") from error
     return Change(harness, path, action)

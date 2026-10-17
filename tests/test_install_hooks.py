@@ -4,7 +4,7 @@ exports: class ClaudeInstallTestCase | class GrokInstallTestCase | class Command
 used_by: none
 rules:   Load the installer by file path — the skill directory name is not a Python package. Every case runs against a temporary home directory; never touch the real harness configs.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 HOOKS_DIR = (
@@ -76,6 +77,28 @@ EXISTING_GROK_HOOKS = {
 }
 
 FOREIGN_GROK_HANDLER = "bash '/root/.grok/hooks/guard-writes.sh'"
+
+MIXED_CLAUDE_SETTINGS = {
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|Grep|Glob",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash '/root/.claude/hooks/extra-guard.sh'",
+                    },
+                    {
+                        "type": "command",
+                        "command": f"{PYTHON} {SCRIPT}",
+                    },
+                ],
+            }
+        ]
+    }
+}
+
+FOREIGN_SHARED_HANDLER = "bash '/root/.claude/hooks/extra-guard.sh'"
 
 
 def handler_commands(groups) -> list[str]:
@@ -226,6 +249,24 @@ class ClaudeInstallTestCase(InstallerTestCase):
 
         self.assertEqual(changes[0].action, "unchanged")
         self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_install_keeps_a_foreign_handler_that_shares_our_group(self):
+        path = self.write_claude_settings(MIXED_CLAUDE_SETTINGS)
+
+        self.install(CLAUDE)
+        commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
+
+        self.assertIn(FOREIGN_SHARED_HANDLER, commands)
+        ours = [item for item in commands if install_hooks.MARKER in item]
+        self.assertEqual(len(ours), 1)
+
+    def test_uninstall_keeps_a_foreign_handler_that_shares_our_group(self):
+        path = self.write_claude_settings(MIXED_CLAUDE_SETTINGS)
+
+        self.uninstall(CLAUDE)
+        commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
+
+        self.assertEqual(commands, [FOREIGN_SHARED_HANDLER])
 
 
 class GrokInstallTestCase(InstallerTestCase):
@@ -423,6 +464,31 @@ class InstallerSafetyTestCase(InstallerTestCase):
         command = install_hooks.handler_command(PYTHON, SCRIPT)
 
         self.assertEqual(command, f"{PYTHON} {SCRIPT}")
+
+    def test_handler_command_quotes_paths_that_hold_a_space(self):
+        command = install_hooks.handler_command("/opt/py thon/python3", "/opt/low heat/hook.py")
+
+        self.assertEqual(command, "'/opt/py thon/python3' '/opt/low heat/hook.py'")
+
+    def test_install_writes_the_quoted_interpreter_into_the_settings(self):
+        path = install_hooks.claude_settings_path(self.home)
+
+        self.install(CLAUDE, python="/opt/py thon/python3")
+        commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
+
+        self.assertTrue(any("'/opt/py thon/python3'" in item for item in commands))
+
+    def test_a_failed_move_leaves_the_settings_file_untouched(self):
+        path = self.write_claude_settings()
+        original = path.read_text(encoding="utf-8")
+
+        with unittest.mock.patch.object(
+            install_hooks.os, "replace", side_effect=OSError("no space left")
+        ):
+            with self.assertRaises(install_hooks.InstallError):
+                self.install(CLAUDE)
+
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_hook_timeout_stays_within_the_recommended_budget(self):
         self.assertLessEqual(install_hooks.HOOK_TIMEOUT_SECONDS, 10)
