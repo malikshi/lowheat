@@ -7,7 +7,7 @@ related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Com
 rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects; second pass: every leading `**/` is stripped and a pattern that still holds a slash gets the grep rung, because find rejects those too; third pass: that rung is labelled a content search, since the call asked for a file list
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects; second pass: every leading `**/` is stripped and a pattern that still holds a slash gets the grep rung, because find rejects those too; third pass: that rung is labelled a content search, since the call asked for a file list; fourth pass: the reason ends on the last suggested command, because the sentence period turned `.` into `..`, and the `**/` strip is index-based after a 600 KB pattern took 16.6 s
 """
 
 from __future__ import annotations
@@ -268,11 +268,12 @@ def _first_text(arguments: Mapping[str, Any], keys: tuple[str, ...]) -> str:
 def _find_pattern(pattern: str) -> str | None:
     """Return the pattern rtk's find translation accepts, or None when it has none.
 
-    Rules:   rtk translates only a bare glob to `find -name`, so `rtk find "**/*.py" .` fails with a missing-file error while `rtk find "*.py" .` lists the matches recursively. Strip every leading `**/`, and answer None when a slash remains or nothing is left — a pattern with a slash has no find form at all, and the caller must offer the grep rung instead of a command find rejects.
+    Rules:   rtk translates only a bare glob to `find -name`, so `rtk find "**/*.py" .` fails with a missing-file error while `rtk find "*.py" .` lists the matches recursively. Strip every leading `**/` by advancing an index — slicing the pattern per prefix is quadratic in a length the caller controls — and answer None when a slash remains or nothing is left: a pattern with a slash has no find form at all, and the caller must offer the grep rung instead of a command find rejects.
     """
-    stripped = pattern
-    while stripped.startswith(_RECURSIVE_PREFIX):
-        stripped = stripped[len(_RECURSIVE_PREFIX) :]
+    index = 0
+    while pattern.startswith(_RECURSIVE_PREFIX, index):
+        index += len(_RECURSIVE_PREFIX)
+    stripped = pattern[index:]
     if not stripped or "/" in stripped:
         return None
     return stripped
@@ -288,7 +289,7 @@ def discovery_text(
 ) -> str:
     """Return the reason that points a refused native search at the ladder.
 
-    Rules:   Quote the pattern and the directory with shlex.quote, not json.dumps — the model runs the suggestion in a shell, and JSON quoting leaves `$(...)`, backticks, and `$name` live, so a pattern holding one would run a substitution instead of the search the model asked for. Quote _PATTERN_PLACEHOLDER when the call carries no pattern, because Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended. When a glob tool's pattern has no find form, say so: the grep rung runs, but it answers a content search while the call asked for a file list. The MCP rung is named unconditionally: the hook cannot see which tools the harness exposes, so it names the tool that harness mounts when the server is wired.
+    Rules:   Quote the pattern and the directory with shlex.quote, not json.dumps — the model runs the suggestion in a shell, and JSON quoting leaves `$(...)`, backticks, and `$name` live, so a pattern holding one would run a substitution instead of the search the model asked for. Quote _PATTERN_PLACEHOLDER when the call carries no pattern, because Grok's list_dir sends target_directory where a search sends pattern, and a refusal must never suggest an empty argument. End the reason on the last suggested command, because any punctuation appended to it becomes part of its final argument. Name only rungs the hook has verified it can run, and say so when the CLI is installed but cannot execute — a shim on PATH that fails at exec time must never be recommended. When a glob tool's pattern has no find form and rtk is there to offer the grep rung, say so: it runs, but it answers a content search while the call asked for a file list. The MCP rung is named unconditionally: the hook cannot see which tools the harness exposes, so it names the tool that harness mounts when the server is wired.
     """
     query = _first_text(arguments, _PATTERN_KEYS) or _PATTERN_PLACEHOLDER
     directory = shlex.quote(_first_text(arguments, _DIRECTORY_KEYS) or ".")
@@ -305,7 +306,7 @@ def discovery_text(
         else:
             options.append(f"rtk grep -rn {shlex.quote(query)} {directory}")
     notes = ""
-    if is_glob_tool and find_form is None:
+    if has_rtk and is_glob_tool and find_form is None:
         notes += (
             " No rtk find form exists for a pattern that carries a slash, so the grep "
             "rung above searches file contents instead of listing the files the call "
@@ -318,9 +319,9 @@ def discovery_text(
         )
     return (
         f"agents-contract discovery ladder: semble MCP → semble CLI → rtk grep → native {tool} "
-        f"(rung 4). This call was refused once. Try: {', '.join(options)}.{notes} "
+        f"(rung 4). This call was refused once; the nudge fires once per session per tool.{notes} "
         "Exact line:content, every literal occurrence, and lossless reads stay native — "
-        "re-issue this call and it runs; the nudge fires once per session per tool."
+        f"re-issue this call and it runs. Try: {', '.join(options)}"
     )
 
 

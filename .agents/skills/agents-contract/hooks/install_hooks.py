@@ -6,12 +6,13 @@ used_by: README.md → the hook wiring section
 related: contract_hook.py is the script every entry runs; hook_harness.py names the three harnesses.
 rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone; fourth pass: the check requires an executable file (a directory or /dev/null passed it before), a bare PATH name resolves to its absolute path, a failed move drops its staged file, an empty hooks object the pristine backup carried restores byte for byte, and a later harness failure still prints what landed
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import shlex
@@ -184,6 +185,8 @@ def _write_text(
         staged.write_text(text, encoding="utf-8")
         os.replace(staged, target)
     except OSError as error:
+        with contextlib.suppress(OSError):
+            staged.unlink(missing_ok=True)
         raise InstallError(f"{path}: {error}") from error
     return Change(harness, path, action)
 
@@ -224,7 +227,7 @@ def install(
 
     Rules:   Every harness merges — ours are appended last so a foreign guard keeps running first, and an earlier copy of ours is replaced so a re-run or a moved checkout never duplicates it. Grok gets no SessionStart group because it ignores one there. The interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or on the working directory.
     """
-    interpreter = str(python or sys.executable)
+    interpreter = _resolve_interpreter(str(python or sys.executable))
     target = str(
         Path(os.path.expanduser(script or Path(__file__).with_name(HOOK_SCRIPT_NAME))).resolve()
     )
@@ -274,10 +277,20 @@ def _remove_file(path: Path, harness: str, dry_run: bool) -> Change:
     return Change(harness, path, "remove")
 
 
+def _without_empty_hooks(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the settings object with an empty hooks key removed.
+
+    Rules:   Stripping our handlers can leave `"hooks": {}` behind where the pristine file never had the key, so compare objects through this view — otherwise a file that returns to its original state is rewritten instead of restored.
+    """
+    if data.get("hooks") == {}:
+        return {key: value for key, value in data.items() if key != "hooks"}
+    return dict(data)
+
+
 def uninstall(harness: str, home: Path | str, dry_run: bool = False) -> list[Change]:
     """Remove the contract hook from one harness under home.
 
-    Rules:   Remove only handlers carrying MARKER; leave every other hook in place and drop an event key that ends up empty. When the stripped result matches the pristine backup, write that backup back verbatim so the file returns byte for byte; when the file gained foreign content since the install, write the stripped object instead. Delete the Grok hook file only when nothing else remains in it and no backup claims it. A file that never held our handlers is left alone.
+    Rules:   Remove only handlers carrying MARKER; leave every other hook in place and drop an event key that ends up empty. When the stripped result matches the pristine backup, write that backup back verbatim so the file returns byte for byte, comparing through _without_empty_hooks so an empty hooks key left by the strip still counts as a match. When it does not match, write the stripped object instead. Delete the Grok hook file only when nothing else remains in it and no backup claims it. A file that never held our handlers is left alone.
     """
     path = _settings_path(harness, home)
     if not path.exists():
@@ -296,7 +309,9 @@ def uninstall(harness: str, home: Path | str, dry_run: bool = False) -> list[Cha
     backup = path.with_name(path.name + BACKUP_SUFFIX)
     if backup.exists():
         pristine = _read_text(backup)
-        if _parse_settings(pristine, backup) == data:
+        if _without_empty_hooks(
+            _parse_settings(pristine, backup)
+        ) == _without_empty_hooks(data):
             return [_write_text(path, pristine, harness, "restore", dry_run)]
     if not data and harness == HARNESS_GROK:
         return [_remove_file(path, harness, dry_run)]
@@ -324,24 +339,41 @@ def _run(targets: Iterable[str], args: argparse.Namespace) -> list[Change]:
     return changes
 
 
-def _missing_paths(python: str, script: str | None) -> list[str]:
-    """Return the interpreter and hook script paths that do not exist.
+def _resolve_interpreter(python: str) -> str:
+    """Return the interpreter path a harness should run.
 
-    Rules:   A harness runs the hook file by absolute path, so a path that does not exist installs a hook that never starts while the installer still reports success. Validate exactly what the command will run: the interpreter, and the script the installer would resolve.
+    Rules:   A bare name such as `python3` resolves through PATH, because the harness runs the command through a shell and a recorded absolute path survives a later PATH change; anything carrying a path separator is used as given.
     """
-    candidates = [os.path.expanduser(python)]
-    candidates.append(
+    if os.sep in python:
+        return python
+    return shutil.which(python) or python
+
+
+def _unusable_paths(python: str, script: str | None) -> list[tuple[str, str]]:
+    """Return the (path, reason) pairs a hook could not start with.
+
+    Rules:   A harness runs the hook file by absolute path, so a path that does not exist, is a directory, or carries no execute bit installs a hook that never starts while the installer still reports success. Require the interpreter to be an executable file and the script to be a file.
+    """
+    interpreter = _resolve_interpreter(os.path.expanduser(python))
+    target = (
         os.path.expanduser(script)
         if script
         else str(Path(__file__).with_name(HOOK_SCRIPT_NAME))
     )
-    return [path for path in candidates if not Path(path).exists()]
+    problems: list[tuple[str, str]] = []
+    if not Path(interpreter).is_file():
+        problems.append((interpreter, "is not a file"))
+    elif not os.access(interpreter, os.X_OK):
+        problems.append((interpreter, "is not executable"))
+    if not Path(target).is_file():
+        problems.append((target, "is not a file"))
+    return problems
 
 
 def main(argv=None) -> int:
     """Wire or unwire the contract hook for the harnesses named on the command line.
 
-    Rules:   Default to all three harnesses under the real home; report every file touched so the caller can see exactly what changed and revert with --uninstall. Refuse a wiring run whose interpreter or script does not exist, before anything is written — an unwire still runs, because the checkout may already be gone.
+    Rules:   Default to all three harnesses under the real home; report every change as it lands, so a run that fails on a later harness still shows what it already wrote. Refuse a wiring run whose interpreter or script cannot start a hook, before anything is written; an unwire still runs, because the checkout may already be gone.
     """
     parser = argparse.ArgumentParser(
         description="Wire the agents-contract hook into Claude Code, Grok, and Command Code."
@@ -350,24 +382,26 @@ def main(argv=None) -> int:
     parser.add_argument("--uninstall", action="store_true", help="remove the hook wiring")
     parser.add_argument("--dry-run", action="store_true", help="report changes without writing")
     parser.add_argument("--home", default=None, help="home directory to wire (default: $HOME)")
-    parser.add_argument("--python", default=sys.executable, help="interpreter that runs the hook")
+    parser.add_argument(
+        "--python", default=sys.executable, help="interpreter that runs the hook (path or PATH name)"
+    )
     parser.add_argument("--script", default=None, help="path to contract_hook.py")
     args = parser.parse_args(argv)
     targets = HARNESSES if args.harness == "all" else (args.harness,)
     if not args.uninstall:
-        missing = _missing_paths(args.python, args.script)
-        if missing:
-            for path in missing:
-                print(f"install_hooks: {path}: not found", file=sys.stderr)
+        problems = _unusable_paths(args.python, args.script)
+        if problems:
+            for path, reason in problems:
+                print(f"install_hooks: {path}: {reason}", file=sys.stderr)
             return 1
     try:
-        changes = _run(targets, args)
+        for harness in targets:
+            for change in _run((harness,), args):
+                detail = f" ({change.detail})" if change.detail else ""
+                print(f"{change.harness}: {change.action} {change.path}{detail}")
     except InstallError as error:
         print(f"install_hooks: {error}", file=sys.stderr)
         return 1
-    for change in changes:
-        detail = f" ({change.detail})" if change.detail else ""
-        print(f"{change.harness}: {change.action} {change.path}{detail}")
     return 0
 
 

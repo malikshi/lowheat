@@ -5,7 +5,7 @@ used_by: none
 rules:   Load the hook modules by file path — the skill directory name is not a Python package. Never call the real rtk, semble, or harness binaries: inject runners, `which` lookups, and a temporary cache root.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added policy, encoding, budget, and entry-point tests for the three-harness contract hook
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | regression tests for the empty-query nudge: pattern aliases, the directory the call carries, and the placeholder fallback
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites; on review: a rewrite carries no permissionDecision, shlex quoting defuses a substitution in the suggestion, a glob keeps `**/` out of the find hint, and a closed stdout still exits 0; second pass: a glob with a slash gets the grep rung, while `**/**/*.py` still collapses to a find form; third pass: a glob with no find form says the grep rung is a content search
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites; on review: a rewrite carries no permissionDecision, shlex quoting defuses a substitution in the suggestion, a glob keeps `**/` out of the find hint, and a closed stdout still exits 0; second pass: a glob with a slash gets the grep rung, while `**/**/*.py` still collapses to a find form; third pass: a glob with no find form says the grep rung is a content search; fourth pass: the reason ends on its last command, and the content-search note stays out when rtk is absent
 """
 
 from __future__ import annotations
@@ -470,6 +470,15 @@ class DiscoveryPolicyTestCase(HookTestCase):
 
         self.assertIn("rtk find '*.py'", decision.reason)
 
+    def test_nudge_ends_on_the_last_command_it_suggests(self):
+        payload = self.grep_payload(session="s-tail")
+        payload["tool_input"]["path"] = "/home/me/My Docs/src"
+
+        decision = self.decide(payload, CLAUDE_ENV)
+
+        self.assertTrue(decision.reason.endswith("'/home/me/My Docs/src'"))
+        self.assertNotIn("src'.", decision.reason)
+
     def test_glob_nudge_without_a_find_form_says_the_grep_is_a_content_search(self):
         payload = {
             "session_id": "s-glob-slash",
@@ -494,6 +503,21 @@ class DiscoveryPolicyTestCase(HookTestCase):
 
         decision = self.decide(payload, CLAUDE_ENV)
 
+        self.assertNotIn(
+            "searches file contents instead of listing the files", decision.reason
+        )
+
+    def test_content_search_note_needs_the_grep_rung_it_describes(self):
+        payload = {
+            "session_id": "s-glob-no-rtk",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Glob",
+            "tool_input": {"pattern": "src/*.py"},
+        }
+
+        decision = self.decide(payload, CLAUDE_ENV, which=self.which(rtk=None))
+
+        self.assertEqual(decision.kind, "deny")
         self.assertNotIn(
             "searches file contents instead of listing the files", decision.reason
         )
