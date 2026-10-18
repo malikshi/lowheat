@@ -5,7 +5,7 @@ used_by: none
 rules:   Load the hook modules by file path — the skill directory name is not a Python package. Never call the real rtk, semble, or harness binaries: inject runners, `which` lookups, and a temporary cache root.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added policy, encoding, budget, and entry-point tests for the three-harness contract hook
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | regression tests for the empty-query nudge: pattern aliases, the directory the call carries, and the placeholder fallback
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites; on review: a rewrite carries no permissionDecision, shlex quoting defuses a substitution in the suggestion, a glob keeps `**/` out of the find hint, and a closed stdout still exits 0; second pass: a glob with a slash gets the grep rung, while `**/**/*.py` still collapses to a find form; third pass: a glob with no find form says the grep rung is a content search; fourth pass: the reason ends on its last command, and the content-search note stays out when rtk is absent
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites; on review: a rewrite carries no permissionDecision, shlex quoting defuses a substitution in the suggestion, a glob keeps `**/` out of the find hint, and a closed stdout still exits 0; second pass: a glob with a slash gets the grep rung, while `**/**/*.py` still collapses to a find form; third pass: a glob with no find form says the grep rung is a content search; fourth pass: the reason ends on its last command, and the content-search note stays out when rtk is absent; fifth pass: a 200k-prefix pattern must strip inside two seconds
 """
 
 from __future__ import annotations
@@ -506,6 +506,15 @@ class DiscoveryPolicyTestCase(HookTestCase):
         self.assertNotIn(
             "searches file contents instead of listing the files", decision.reason
         )
+
+    def test_find_pattern_strip_stays_linear_on_a_large_pattern(self):
+        pattern = "**/" * 200_000
+
+        start = time.perf_counter()
+        hook_policy._find_pattern(pattern)
+        elapsed = time.perf_counter() - start
+
+        self.assertLess(elapsed, 2.0)
 
     def test_content_search_note_needs_the_grep_rung_it_describes(self):
         payload = {

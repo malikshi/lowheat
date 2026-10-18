@@ -6,7 +6,7 @@ used_by: README.md → the hook wiring section
 related: contract_hook.py is the script every entry runs; hook_harness.py names the three harnesses.
 rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone; fourth pass: the check requires an executable file (a directory or /dev/null passed it before), a bare PATH name resolves to its absolute path, a failed move drops its staged file, an empty hooks object the pristine backup carried restores byte for byte, and a later harness failure still prints what landed
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone; fourth pass: the check requires an executable file (a directory or /dev/null passed it before), a bare PATH name resolves to its absolute path, a failed move drops its staged file, an empty hooks object the pristine backup carried restores byte for byte, and a later harness failure still prints what landed; fifth pass: a bare or relative interpreter is absolutized, since the harness runs from its own directory, and an empty event list the pristine file carried also counts as a match
 """
 
 from __future__ import annotations
@@ -278,13 +278,17 @@ def _remove_file(path: Path, harness: str, dry_run: bool) -> Change:
 
 
 def _without_empty_hooks(data: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the settings object with an empty hooks key removed.
+    """Return the settings object with empty hooks entries removed.
 
-    Rules:   Stripping our handlers can leave `"hooks": {}` behind where the pristine file never had the key, so compare objects through this view — otherwise a file that returns to its original state is rewritten instead of restored.
+    Rules:   Stripping our handlers can leave `"hooks": {}` or an empty event list behind where the pristine file never had one, so compare objects through this view — otherwise a file that returns to its original state is rewritten instead of restored. The stored object keeps its shape; only this comparison drops the empty entries.
     """
-    if data.get("hooks") == {}:
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return dict(data)
+    kept = {key: value for key, value in hooks.items() if value != []}
+    if not kept:
         return {key: value for key, value in data.items() if key != "hooks"}
-    return dict(data)
+    return {**data, "hooks": kept}
 
 
 def uninstall(harness: str, home: Path | str, dry_run: bool = False) -> list[Change]:
@@ -340,13 +344,13 @@ def _run(targets: Iterable[str], args: argparse.Namespace) -> list[Change]:
 
 
 def _resolve_interpreter(python: str) -> str:
-    """Return the interpreter path a harness should run.
+    """Return the absolute interpreter path a harness should run.
 
-    Rules:   A bare name such as `python3` resolves through PATH, because the harness runs the command through a shell and a recorded absolute path survives a later PATH change; anything carrying a path separator is used as given.
+    Rules:   A bare name such as `python3` resolves through PATH and a relative path resolves against the installer's working directory, because the harness runs the command from its own directory and a recorded relative path would either fail or pick a different program; an absolute path is kept as given.
     """
-    if os.sep in python:
-        return python
-    return shutil.which(python) or python
+    if os.sep not in python:
+        return str(Path(shutil.which(python) or python).resolve())
+    return str(Path(python).resolve())
 
 
 def _unusable_paths(python: str, script: str | None) -> list[tuple[str, str]]:

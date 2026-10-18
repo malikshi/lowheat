@@ -4,7 +4,7 @@ exports: class ClaudeInstallTestCase | class GrokInstallTestCase | class Command
 used_by: none
 rules:   Load the installer by file path — the skill directory name is not a Python package. Every case runs against a temporary home directory; never touch the real harness configs.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted; third pass: the CLI refuses a missing interpreter or script and still unwires a vanished checkout; fourth pass: unusable interpreter shapes, PATH-name resolution, the pristine empty hooks object, the staged-file cleanup, and what a partial run reports
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted; third pass: the CLI refuses a missing interpreter or script and still unwires a vanished checkout; fourth pass: unusable interpreter shapes, PATH-name resolution, the pristine empty hooks object, the staged-file cleanup, and what a partial run reports; fifth pass: a relative interpreter is absolutized or refused, and a pristine empty event list restores byte for byte
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import importlib
 import io
 import contextlib
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -549,6 +550,18 @@ class InstallerSafetyTestCase(InstallerTestCase):
         self.assertEqual(changes[0].action, "restore")
         self.assertEqual(path.read_text(encoding="utf-8"), original)
 
+    def test_uninstall_restores_a_pristine_empty_event_list(self):
+        path = install_hooks.claude_settings_path(self.home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        original = '{"model": "x", "hooks": {"PreToolUse": []}}'
+        path.write_text(original, encoding="utf-8")
+
+        self.install(CLAUDE)
+        changes = self.uninstall(CLAUDE)
+
+        self.assertEqual(changes[0].action, "restore")
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
+
     def test_hook_timeout_stays_within_the_recommended_budget(self):
         self.assertLessEqual(install_hooks.HOOK_TIMEOUT_SECONDS, 10)
 
@@ -666,6 +679,37 @@ class InstallerCliTestCase(InstallerTestCase):
         commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
         self.assertTrue(any("/python3" in command for command in commands))
         self.assertFalse(any(command.startswith("python3 ") for command in commands))
+
+    def test_cli_absolutizes_a_relative_interpreter(self):
+        stub = Path(self._tmp.name) / "relpython"
+        stub.write_text("#!/bin/sh\n", encoding="utf-8")
+        stub.chmod(0o755)
+        path = install_hooks.claude_settings_path(self.home)
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        os.chdir(self._tmp.name)
+
+        code, out, _ = self.run_main(
+            ["--harness", CLAUDE, "--home", str(self.home), "--python", "./relpython"]
+        )
+
+        self.assertEqual(code, 0)
+        self.assertIn("claude: write", out)
+        commands = handler_commands(self.read_json(path)["hooks"]["PreToolUse"])
+        self.assertTrue(any(str(stub) in command for command in commands))
+
+    def test_cli_refuses_a_relative_interpreter_that_is_not_there(self):
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        os.chdir(self._tmp.name)
+
+        code, _, err = self.run_main(
+            ["--harness", CLAUDE, "--home", str(self.home), "--python", "./missing-python"]
+        )
+
+        self.assertEqual(code, 1)
+        self.assertIn("is not a file", err)
+        self.assertFalse(install_hooks.claude_settings_path(self.home).exists())
 
     def test_cli_refuses_a_missing_script_before_writing(self):
         code, _, err = self.run_main(
