@@ -4,7 +4,7 @@ exports: class ClaudeInstallTestCase | class GrokInstallTestCase | class Command
 used_by: none
 rules:   Load the installer by file path — the skill directory name is not a Python package. Every case runs against a temporary home directory; never touch the real harness configs.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted; third pass: the CLI refuses a missing interpreter or script and still unwires a vanished checkout
 """
 
 from __future__ import annotations
@@ -548,16 +548,14 @@ class InstallerCliTestCase(InstallerTestCase):
         return code, stdout.getvalue(), stderr.getvalue()
 
     def test_cli_wires_one_harness_under_the_given_home(self):
-        code, out, _ = self.run_main(
-            ["--harness", CLAUDE, "--home", str(self.home), "--python", PYTHON]
-        )
+        code, out, _ = self.run_main(["--harness", CLAUDE, "--home", str(self.home)])
 
         self.assertEqual(code, 0)
         self.assertIn("claude: write", out)
         self.assertTrue(install_hooks.claude_settings_path(self.home).exists())
 
     def test_cli_wires_all_three_harnesses_by_default(self):
-        code, out, _ = self.run_main(["--home", str(self.home), "--python", PYTHON])
+        code, out, _ = self.run_main(["--home", str(self.home)])
 
         self.assertEqual(code, 0)
         for harness in install_hooks.HARNESSES:
@@ -572,7 +570,7 @@ class InstallerCliTestCase(InstallerTestCase):
         self.assertFalse(install_hooks.grok_hooks_path(self.home).exists())
 
     def test_cli_uninstall_removes_the_wiring_it_added(self):
-        self.run_main(["--home", str(self.home), "--python", PYTHON])
+        self.run_main(["--home", str(self.home)])
 
         code, out, _ = self.run_main(["--home", str(self.home), "--uninstall"])
 
@@ -596,6 +594,39 @@ class InstallerCliTestCase(InstallerTestCase):
 
         self.assertEqual(code, 0)
         self.assertIn("unchanged", out)
+
+    def test_cli_refuses_a_missing_interpreter_before_writing(self):
+        path = self.write_claude_settings()
+        original = path.read_text(encoding="utf-8")
+
+        code, _, err = self.run_main(
+            ["--harness", CLAUDE, "--home", str(self.home), "--python", "/nonexistent/python"]
+        )
+
+        self.assertEqual(code, 1)
+        self.assertIn("/nonexistent/python: not found", err)
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_cli_refuses_a_missing_script_before_writing(self):
+        code, _, err = self.run_main(
+            ["--harness", CLAUDE, "--home", str(self.home), "--script", "/nonexistent/hook.py"]
+        )
+
+        self.assertEqual(code, 1)
+        self.assertIn("/nonexistent/hook.py: not found", err)
+        self.assertFalse(install_hooks.claude_settings_path(self.home).exists())
+
+    def test_cli_uninstalls_when_the_script_is_already_gone(self):
+        self.install(CLAUDE)
+        path = install_hooks.claude_settings_path(self.home)
+
+        code, out, _ = self.run_main(
+            ["--harness", CLAUDE, "--home", str(self.home), "--uninstall", "--script", "/nonexistent/hook.py"]
+        )
+
+        self.assertEqual(code, 0)
+        self.assertIn("claude: write", out)
+        self.assertNotIn(install_hooks.MARKER, path.read_text(encoding="utf-8"))
 
     def test_unknown_harness_raises(self):
         with self.assertRaises(install_hooks.InstallError):

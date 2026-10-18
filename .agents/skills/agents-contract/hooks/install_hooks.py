@@ -6,7 +6,7 @@ used_by: README.md → the hook wiring section
 related: contract_hook.py is the script every entry runs; hook_harness.py names the three harnesses.
 rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
-agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced
+agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone
 """
 
 from __future__ import annotations
@@ -324,10 +324,24 @@ def _run(targets: Iterable[str], args: argparse.Namespace) -> list[Change]:
     return changes
 
 
+def _missing_paths(python: str, script: str | None) -> list[str]:
+    """Return the interpreter and hook script paths that do not exist.
+
+    Rules:   A harness runs the hook file by absolute path, so a path that does not exist installs a hook that never starts while the installer still reports success. Validate exactly what the command will run: the interpreter, and the script the installer would resolve.
+    """
+    candidates = [os.path.expanduser(python)]
+    candidates.append(
+        os.path.expanduser(script)
+        if script
+        else str(Path(__file__).with_name(HOOK_SCRIPT_NAME))
+    )
+    return [path for path in candidates if not Path(path).exists()]
+
+
 def main(argv=None) -> int:
     """Wire or unwire the contract hook for the harnesses named on the command line.
 
-    Rules:   Default to all three harnesses under the real home; report every file touched so the caller can see exactly what changed and revert with --uninstall.
+    Rules:   Default to all three harnesses under the real home; report every file touched so the caller can see exactly what changed and revert with --uninstall. Refuse a wiring run whose interpreter or script does not exist, before anything is written — an unwire still runs, because the checkout may already be gone.
     """
     parser = argparse.ArgumentParser(
         description="Wire the agents-contract hook into Claude Code, Grok, and Command Code."
@@ -340,6 +354,12 @@ def main(argv=None) -> int:
     parser.add_argument("--script", default=None, help="path to contract_hook.py")
     args = parser.parse_args(argv)
     targets = HARNESSES if args.harness == "all" else (args.harness,)
+    if not args.uninstall:
+        missing = _missing_paths(args.python, args.script)
+        if missing:
+            for path in missing:
+                print(f"install_hooks: {path}: not found", file=sys.stderr)
+            return 1
     try:
         changes = _run(targets, args)
     except InstallError as error:
