@@ -89,16 +89,17 @@ def project_settings_path(harness: str, root: Path | str) -> Path:
     raise InstallError(f"unknown harness: {harness}")
 
 
-def project_handler_command(python: str) -> str:
+def project_handler_command(python: str | None = None) -> str:
     """Return a hook command that works from any checkout of the project.
 
-    Rules:   A project settings file is committed, so it must not carry the installing machine's absolute paths — a teammate who clones the repo would run a script that does not exist, and the hook fails open, so the rules would silently stop being enforced for them. The project install vendors the skill into `<root>/.agents/skills/agents-contract`, so the script is addressed relative to the workspace root. Claude Code and Grok export CLAUDE_PROJECT_DIR and Command Code exports COMMANDCODE_PROJECT_DIR; fall back to the working directory when neither is set, and keep the fail-open suffix.
+    Rules:   A project settings file is committed, so it must not carry the installing machine's absolute paths — neither the script nor the interpreter. A pinned `/usr/bin/python3.11` fails on a teammate's machine that has only `python3`, and the hook fails open, so the rules would silently stop being enforced for them. Resolve `python3` through PATH instead, honouring an explicit `python` only when the caller passes one. The project install vendors the skill into `<root>/.agents/skills/agents-contract`, so the script is addressed relative to the workspace root. Claude Code and Grok export CLAUDE_PROJECT_DIR and Command Code exports COMMANDCODE_PROJECT_DIR; fall back to the working directory when neither is set, and keep the fail-open suffix.
     """
     relative = (
         Path(".agents") / "skills" / SKILL_NAME / "hooks" / HOOK_SCRIPT_NAME
     ).as_posix()
     directory = "${CLAUDE_PROJECT_DIR:-${COMMANDCODE_PROJECT_DIR:-.}}"
-    return f"{shlex.quote(python)} \"{directory}/{relative}\"{FAIL_OPEN_SUFFIX}"
+    interpreter = shlex.quote(python) if python else "python3"
+    return f'{interpreter} "{directory}/{relative}"{FAIL_OPEN_SUFFIX}'
 
 
 def handler_command(python: str, script: str) -> str:
@@ -263,13 +264,12 @@ def install(
 
     Rules:   Every harness merges — ours are appended last so a foreign guard keeps running first, and an earlier copy of ours is replaced so a re-run or a moved checkout never duplicates it. Grok gets no SessionStart group because it ignores one there. In user scope the interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or the working directory. In project scope the settings file is committed, so the command addresses the vendored skill relative to the workspace root instead — an absolute path there would break for every other clone.
     """
-    interpreter = _resolve_interpreter(str(python or sys.executable))
     if root is not None:
-        command = project_handler_command(interpreter)
+        command = project_handler_command()
         base = Path(root)
     else:
         command = handler_command(
-            interpreter,
+            _resolve_interpreter(str(python or sys.executable)),
             str(
                 Path(
                     os.path.expanduser(script or Path(__file__).with_name(HOOK_SCRIPT_NAME))

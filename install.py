@@ -144,34 +144,69 @@ def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     return action
 
 
-def find_conflicts(plans: dict[str, HarnessPlan], chosen: tuple[str, ...]) -> list[Path]:
+def find_conflicts(
+    plans: dict[str, HarnessPlan], chosen: tuple[str, ...], contract_dir: Path
+) -> list[Path]:
     """Return existing files an install would overwrite with different content.
 
-    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own AGENTS.md and overwriting it destroys their instructions, so it must be refused rather than replaced.
+    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions, so it must be refused rather than replaced. Grok's rules files count too: they are written by apply_plan outside `links`, so guarding only `links` left a user's own .grok/rules/RTK.md silently clobbered.
     """
     conflicts: list[Path] = []
+
+    def note(target: Path, expected: bytes) -> None:
+        if target in conflicts or target.is_symlink() or not target.is_file():
+            return
+        if target.read_bytes() != expected:
+            conflicts.append(target)
+
     for harness, plan in plans.items():
         if harness not in chosen:
             continue
         for target, source in plan.links.items():
-            if target in conflicts:
-                continue
-            if target.is_symlink() or not target.is_file():
-                continue
-            if target.read_bytes() != source.read_bytes():
-                conflicts.append(target)
+            note(target, source.read_bytes())
+        if plan.rules_dir is not None:
+            for name, text in render_grok_rules(contract_dir).items():
+                note(plan.rules_dir / name, text.encode())
     return conflicts
 
 
-def backup(target: Path) -> Path:
-    """Copy target to a sibling .bak before it is overwritten.
+def find_vendored_edits(root: Path, skill_dir: Path) -> list[Path]:
+    """Return files inside a vendored skill copy that the source does not have.
 
-    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Return the path written so the caller can report it.
+    Rules:   vendor_skill replaces the directory wholesale, which is what keeps a stale module from surviving an upgrade — but that would also delete a teammate's local addition. Report only files absent from the source, so a pure copy is replaced silently and a modified one is refused instead.
     """
-    candidate = target.with_name(target.name + ".bak")
+    target = root / ".agents" / "skills" / skill_dir.name
+    if not target.is_dir():
+        return []
+    source_files = {
+        path.relative_to(skill_dir)
+        for path in skill_dir.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+    return sorted(
+        path
+        for path in target.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.suffix != ".pyc"
+        and path.relative_to(target) not in source_files
+    )
+
+
+def backup(target: Path, into: Path | None = None) -> Path:
+    """Copy target to a .bak before it is overwritten.
+
+    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. `into` moves the backup to another directory, which a vendored-skill backup requires: vendor_skill replaces that whole directory, so a .bak written beside the file is deleted by the very operation it was meant to protect against. Return the path written so the caller can report it.
+    """
+    if into is None:
+        directory, stem = target.parent, target.name
+    else:
+        directory, stem = into, f"{target.parent.name}-{target.name}"
+    directory.mkdir(parents=True, exist_ok=True)
+    candidate = directory / f"{stem}.bak"
     counter = 1
     while candidate.exists():
-        candidate = target.with_name(f"{target.name}.bak{counter}")
+        candidate = directory / f"{stem}.bak{counter}"
         counter += 1
     shutil.copyfile(target, candidate)
     return candidate
@@ -269,27 +304,46 @@ def main(argv: list[str] | None = None) -> int:
 
     home = Path(args.home).expanduser()
     chosen = HARNESSES if args.harness == "all" else (args.harness,)
+    project_root = None if args.scope == "user" else Path(args.root).expanduser().resolve()
+    if project_root is not None and project_root == _HERE:
+        print(
+            f"install: {project_root} is the lowheat source checkout, not a project — "
+            "project scope would duplicate contract/ back into the repo root",
+            file=sys.stderr,
+        )
+        return 1
     plans = (
         plan_harnesses(home)
         if args.scope == "user"
-        else plan_project(Path(args.root).expanduser().resolve())
+        else plan_project(project_root)
     )
 
-    conflicts = find_conflicts(plans, chosen)
+    conflicts = find_conflicts(plans, chosen, CONTRACT_DIR)
+    vendored: list[Path] = []
+    if project_root is not None and not args.no_hooks:
+        vendored = find_vendored_edits(project_root, SKILL_DIR)
+        conflicts.extend(vendored)
     if conflicts and not args.force:
         for path in conflicts:
             print(f"install: refusing to overwrite {path}", file=sys.stderr)
+        if vendored:
+            print(
+                "install: local edits inside the vendored skill are deleted by a reinstall",
+                file=sys.stderr,
+            )
         print(
             "install: that file is not ours; re-run with --force to keep a .bak and replace it",
             file=sys.stderr,
         )
         return 1
     if conflicts:
+        keep = project_root / ".agents" / "removed-skill-edits" if project_root else None
         for path in conflicts:
+            into = keep if path in vendored else None
             if args.dry_run:
                 print(f"install: would back up {path} to {path.name}.bak")
             else:
-                print(f"install: backed up {path} to {backup(path).name}")
+                print(f"install: backed up {path} to {backup(path, into)}")
 
     if not args.dry_run:
         mirror = sync_contract_mirror(CONTRACT_DIR, SKILL_DIR)
@@ -309,7 +363,6 @@ def main(argv: list[str] | None = None) -> int:
         for action in apply_plan(unique, CONTRACT_DIR, args.dry_run):
             print(action)
 
-    project_root = None if args.scope == "user" else Path(args.root).expanduser().resolve()
     if project_root is not None and not args.no_hooks:
         for action in vendor_skill(project_root, SKILL_DIR, args.dry_run):
             print(action)

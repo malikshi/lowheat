@@ -55,6 +55,7 @@ python3 install.py --dry-run              # show what would change
 python3 install.py --harness grok         # one harness
 python3 install.py --no-hooks             # contract only, no hook wiring
 python3 install.py --scope project --root /path/to/repo   # commit with the repo
+python3 install.py --scope project --root . --force       # replace a foreign AGENTS.md
 ```
 
 Each harness gets the shape it can actually read:
@@ -82,6 +83,16 @@ so the hook can run there at all.
 
 A broken symlink contributes nothing and fails silently — every emitted path is
 checked before the run reports success, and a re-run reports `unchanged`.
+
+**Nothing is overwritten by accident.** The installer refuses to replace any
+existing file whose contents differ from the contract — a project's own
+`AGENTS.md`, a hand-written `.grok/rules/RTK.md`, or an edit inside the vendored
+skill — and exits 1 without touching it. `--force` replaces it only after
+writing a `.bak`; local edits removed from the vendored skill go to
+`.agents/removed-skill-edits/`, because a backup written beside them would be
+deleted by the same reinstall. Project scope also refuses to run against the
+lowheat checkout itself, where it would duplicate `contract/` back into the repo
+root.
 
 ### Keeping the mirror in sync
 

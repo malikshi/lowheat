@@ -153,7 +153,7 @@ class ConflictGuardTestCase(unittest.TestCase):
     def test_foreign_agents_md_is_reported_once_as_a_conflict(self) -> None:
         (self.root / "AGENTS.md").write_text("MY OWN RULES\n", encoding="utf-8")
 
-        conflicts = install.find_conflicts(self.plans, self.chosen)
+        conflicts = install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
 
         self.assertEqual([self.root / "AGENTS.md"], conflicts)
 
@@ -186,13 +186,86 @@ class ConflictGuardTestCase(unittest.TestCase):
     def test_a_matching_file_is_not_a_conflict_so_re_runs_stay_quiet(self) -> None:
         self.apply()
 
-        self.assertEqual([], install.find_conflicts(self.plans, self.chosen))
+        self.assertEqual(
+            [], install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
+        )
 
     def test_a_symlink_is_never_a_conflict(self) -> None:
         agents = self.root / "AGENTS.md"
         agents.symlink_to(install.CONTRACT_DIR / "RTK.md")
 
-        self.assertEqual([], install.find_conflicts(self.plans, self.chosen))
+        self.assertEqual(
+            [], install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
+        )
+
+    def test_a_foreign_grok_rules_file_is_a_conflict(self) -> None:
+        rules = self.root / ".grok" / "rules"
+        rules.mkdir(parents=True)
+        (rules / "RTK.md").write_text("MY OWN\n", encoding="utf-8")
+
+        conflicts = install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
+
+        self.assertEqual([rules / "RTK.md"], conflicts)
+
+    def test_install_refuses_a_foreign_grok_rules_file(self) -> None:
+        rules = self.root / ".grok" / "rules"
+        rules.mkdir(parents=True)
+        own = rules / "RTK.md"
+        own.write_text("MY OWN\n", encoding="utf-8")
+
+        code = install.main(
+            ["--scope", "project", "--root", str(self.root), "--no-hooks"]
+        )
+
+        self.assertEqual(1, code)
+        self.assertEqual("MY OWN\n", own.read_text(encoding="utf-8"))
+
+    def test_local_edits_inside_the_vendored_skill_are_a_conflict(self) -> None:
+        vendored = self.root / ".agents" / "skills" / "agents-contract"
+        vendored.mkdir(parents=True)
+        (vendored / "custom.py").write_text("LOCAL\n", encoding="utf-8")
+
+        self.assertEqual(
+            [vendored / "custom.py"],
+            install.find_vendored_edits(self.root, install.SKILL_DIR),
+        )
+
+    def test_a_pristine_vendored_skill_is_not_a_conflict(self) -> None:
+        install.vendor_skill(self.root, install.SKILL_DIR, False)
+
+        self.assertEqual(
+            [], install.find_vendored_edits(self.root, install.SKILL_DIR)
+        )
+
+    def test_force_keeps_vendored_edits_outside_the_replaced_directory(self) -> None:
+        vendored = self.root / ".agents" / "skills" / "agents-contract"
+        vendored.mkdir(parents=True)
+        (vendored / "custom.py").write_text("LOCAL\n", encoding="utf-8")
+
+        code = install.main(["--scope", "project", "--root", str(self.root), "--force"])
+
+        self.assertEqual(0, code)
+        kept = self.root / ".agents" / "removed-skill-edits"
+        self.assertEqual(
+            "LOCAL\n", (kept / "agents-contract-custom.py.bak").read_text(encoding="utf-8")
+        )
+        self.assertFalse((vendored / "custom.py").exists())
+
+    def test_project_scope_refuses_the_source_checkout_itself(self) -> None:
+        before = sorted(p.name for p in install._HERE.iterdir())
+
+        code = install.main(["--scope", "project", "--root", str(install._HERE), "--no-hooks"])
+
+        self.assertEqual(1, code)
+        self.assertEqual(before, sorted(p.name for p in install._HERE.iterdir()))
+
+    def test_project_hook_command_does_not_pin_an_absolute_interpreter(self) -> None:
+        install.main(["--scope", "project", "--root", str(self.root)])
+
+        settings = (self.root / ".claude" / "settings.json").read_text(encoding="utf-8")
+
+        self.assertIn('"command": "python3 ', settings)
+        self.assertNotIn(sys.executable, settings)
 
     def apply(self) -> None:
         install.main(["--scope", "project", "--root", str(self.root), "--no-hooks"])
