@@ -6,6 +6,7 @@ rules:   Load the installer by file path — the skill directory name is not a P
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted; third pass: the CLI refuses a missing interpreter or script and still unwires a vanished checkout; fourth pass: unusable interpreter shapes, PATH-name resolution, the pristine empty hooks object, the staged-file cleanup, and what a partial run reports; fifth pass: a relative interpreter is absolutized or refused, and a pristine empty event list restores byte for byte
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 7bacda42 | added the unchanged-on-reinstall case after a false `write` hid a moved checkout's dead hook path
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | af6c3f93-421d-42c3-b551-cc47dbd0d494 | the handler command now carries `; exit 0` in every assertion, and a matcher test proves commandcode's group reaches the SHELL, SEARCH, and GLOB display names it matches against
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import io
 import contextlib
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -387,8 +389,31 @@ class CommandCodeInstallTestCase(InstallerTestCase):
         data = self.read_json(path)
 
         group = data["hooks"]["PreToolUse"][0]
-        self.assertEqual(group["matcher"], "SHELL")
+        self.assertEqual(group["matcher"], "^(SHELL|SEARCH|GLOB)$")
         self.assertIn(SCRIPT, group["hooks"][0]["command"])
+
+    def test_commandcode_matcher_covers_the_discovery_tools(self):
+        self.install(COMMANDCODE)
+
+        matcher = self.read_json(install_hooks.commandcode_settings_path(self.home))["hooks"][
+            "PreToolUse"
+        ][0]["matcher"]
+
+        for display_name in ("SHELL", "SEARCH", "GLOB", "READ", "WRITE", "EDIT"):
+            with self.subTest(display_name=display_name):
+                matched = bool(re.search(matcher, display_name, re.IGNORECASE))
+                self.assertEqual(matched, display_name in ("SHELL", "SEARCH", "GLOB"))
+
+    def test_commandcode_matcher_skips_the_prefixed_display_names(self):
+        self.install(COMMANDCODE)
+
+        matcher = self.read_json(install_hooks.commandcode_settings_path(self.home))["hooks"][
+            "PreToolUse"
+        ][0]["matcher"]
+
+        for display_name in ("SHELL_OUTPUT", "SHELL_TASKS", "TOOL_SEARCH"):
+            with self.subTest(display_name=display_name):
+                self.assertFalse(re.search(matcher, display_name, re.IGNORECASE))
 
     def test_install_preserves_existing_keys(self):
         path = install_hooks.commandcode_settings_path(self.home)
@@ -475,12 +500,19 @@ class InstallerSafetyTestCase(InstallerTestCase):
     def test_handler_command_runs_the_script_with_the_interpreter(self):
         command = install_hooks.handler_command(PYTHON, SCRIPT)
 
-        self.assertEqual(command, f"{PYTHON} {SCRIPT}")
+        self.assertEqual(command, f"{PYTHON} {SCRIPT}; exit 0")
+
+    def test_handler_command_forces_a_zero_exit_so_a_dead_script_never_blocks(self):
+        command = install_hooks.handler_command(PYTHON, SCRIPT)
+
+        self.assertTrue(command.endswith("; exit 0"))
 
     def test_handler_command_quotes_paths_that_hold_a_space(self):
         command = install_hooks.handler_command("/opt/py thon/python3", "/opt/low heat/hook.py")
 
-        self.assertEqual(command, "'/opt/py thon/python3' '/opt/low heat/hook.py'")
+        self.assertEqual(
+            command, "'/opt/py thon/python3' '/opt/low heat/hook.py'; exit 0"
+        )
 
     def test_install_writes_the_quoted_interpreter_into_the_settings(self):
         path = install_hooks.claude_settings_path(self.home)
@@ -494,7 +526,8 @@ class InstallerSafetyTestCase(InstallerTestCase):
         command = install_hooks.handler_command("~/venv/bin/python", "~/hook.py")
 
         self.assertEqual(
-            command, f"{Path.home() / 'venv/bin/python'} {Path.home() / 'hook.py'}"
+            command,
+            f"{Path.home() / 'venv/bin/python'} {Path.home() / 'hook.py'}; exit 0",
         )
 
     def test_install_expands_a_tilde_script_path(self):

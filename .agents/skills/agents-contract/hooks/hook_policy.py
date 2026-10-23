@@ -1,13 +1,14 @@
 """hook_policy.py — Command Style and discovery decisions the contract hook enforces.
 
-exports: BUDGET_LIMIT | CACHE_DIR_NAME | RTK_BIN | RTK_TIMEOUT_SECONDS | SEMBLE_BIN | SESSION_CONTEXT | SHELL_BUDGET_KEY | STATE_MAX_AGE_DAYS | consume | decide | default_cache_root | discovery_budget_key | deny_text | discovery_text | rtk_rewrite | semble_cli_ready | semble_mcp_tool | session_state_path
+exports: BUDGET_LIMIT | CACHE_DIR_NAME | RTK_BIN | RTK_TIMEOUT_SECONDS | SEMBLE_BIN | SESSION_CONTEXT | SHELL_BUDGET_KEY | STATE_MAX_AGE_DAYS | budget_spent | consume | decide | default_cache_root | discovery_budget_key | deny_text | discovery_text | rtk_rewrite | semble_cli_ready | semble_mcp_tool | session_state_path
 used_by: .agents/skills/agents-contract/hooks/contract_hook.py → decide [cascade]
-used_by: tests/test_contract_hook.py → consume, decide, session_state_path [cascade]
+used_by: tests/test_contract_hook.py → budget_spent, consume, decide, session_state_path [cascade]
 related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Command Style and the tool ladder are the rules enforced here.
-rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty.
+rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty. Once a budget is provably spent, answer noop() before any binary lookup or shebang probe — the hook runs inside every tool call and that work cannot change the answer.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects; second pass: every leading `**/` is stripped and a pattern that still holds a slash gets the grep rung, because find rejects those too; third pass: that rung is labelled a content search, since the call asked for a file list; fourth pass: the reason ends on the last suggested command, because the sentence period turned `.` into `..`, and the `**/` strip is index-based after a 600 KB pattern took 16.6 s
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | af6c3f93-421d-42c3-b551-cc47dbd0d494 | read 7,611 hook audits and found commandcode's matcher never reached grep/glob, so the discovery nudge had never fired; added budget_spent for a read-only fast path on the refusal and discovery checks (one rtk spawn per session, not one per call), and fixed semble_mcp_tool naming a bare semble__search on Command Code, which mounts the mcp__ prefix
 """
 
 from __future__ import annotations
@@ -146,6 +147,27 @@ def _spend(path: Path, key: str, limit: int) -> bool:
     return True
 
 
+def budget_spent(
+    session_id: str,
+    key: str,
+    limit: int = BUDGET_LIMIT,
+    cache_root: Path | None = None,
+) -> bool:
+    """Report whether a budget is already used up, without spending or locking.
+
+    Rules:   True only when the state file proves the unit is gone — a missing file, an unreadable one, or a non-object parse reads as not spent, so the caller falls through to consume() and that call decides. This is the read-only fast path: it lets a hook answer "no opinion" without paying for an rtk lookup on every later tool call.
+    """
+    path = session_state_path(session_id, cache_root)
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(state, dict):
+        return False
+    value = state.get(key, 0)
+    return isinstance(value, int) and value >= limit
+
+
 def _prune_stale(root: Path, now: float) -> None:
     """Delete state files no session can still be using.
 
@@ -234,9 +256,9 @@ def semble_cli_ready(path: str | None) -> bool:
 def semble_mcp_tool(harness: str) -> str:
     """Return the semble MCP tool name one harness exposes.
 
-    Rules:   Claude Code qualifies MCP tools as mcp__<server>__<tool> and Grok names them <server>__<tool>; name the tool a harness can actually call.
+    Rules:   Claude Code and Command Code qualify MCP tools as mcp__<server>__<tool> — Command Code mounts the same prefix, so a bare <server>__<tool> names a tool that does not exist there; Grok names them <server>__<tool>. Name the tool a harness can actually call.
     """
-    prefix = "mcp__" if harness == hook_harness.HARNESS_CLAUDE else ""
+    prefix = "" if harness == hook_harness.HARNESS_GROK else "mcp__"
     return f"{prefix}semble__search"
 
 
@@ -372,8 +394,12 @@ def _shell_decision(
 ) -> Decision:
     """Return the rewrite or single refusal a shell command earns.
 
-    Rules:   A harness that can rewrite gets the rtk form silently; Command Code cannot rewrite, so it gets one refusal per session carrying the command to re-issue; a command rtk leaves alone is never touched.
+    Rules:   A harness that can rewrite gets the rtk form silently; Command Code cannot rewrite, so it gets one refusal per session carrying the command to re-issue; a command rtk leaves alone is never touched. Check the spent budget before the rtk lookup for the refusal harness: the hook runs inside every tool call, and rtk costs a subprocess on a call whose answer can no longer change.
     """
+    session = hook_harness.session_id(payload, harness, env)
+    can_rewrite = harness in (hook_harness.HARNESS_CLAUDE, hook_harness.HARNESS_GROK)
+    if not can_rewrite and budget_spent(session, SHELL_BUDGET_KEY, cache_root=cache_root):
+        return Decision.noop()
     if not lookup(RTK_BIN):
         return Decision.noop()
     arguments = hook_harness.tool_input(payload, harness)
@@ -383,9 +409,8 @@ def _shell_decision(
     rewritten = rtk_rewrite(command, run)
     if rewritten is None:
         return Decision.noop()
-    if harness in (hook_harness.HARNESS_CLAUDE, hook_harness.HARNESS_GROK):
+    if can_rewrite:
         return Decision.rewrite({**arguments, "command": rewritten}, REWRITE_REASON)
-    session = hook_harness.session_id(payload, harness, env)
     if consume(session, SHELL_BUDGET_KEY, cache_root=cache_root):
         return Decision.deny(deny_text(rewritten))
     return Decision.noop()
@@ -400,16 +425,19 @@ def _discovery_decision(
 ) -> Decision:
     """Return the one refusal a native search earns per session.
 
-    Rules:   Check the launchable rungs before spending the budget — a nudge that names nothing the harness can run must not consume the call, and the budget is spent even when the model later retries the same tool.
+    Rules:   Check the launchable rungs before spending the budget — a nudge that names nothing the harness can run must not consume the call, and the budget is spent even when the model later retries the same tool. Check the spent budget before the rung lookups: the shebang probe costs a file read, and a spent budget cannot change its answer.
     """
+    name = hook_harness.tool_name(payload, harness)
+    session = hook_harness.session_id(payload, harness, env)
+    key = discovery_budget_key(name)
+    if budget_spent(session, key, cache_root=cache_root):
+        return Decision.noop()
     semble_path = lookup(SEMBLE_BIN)
     has_rtk = bool(lookup(RTK_BIN))
     has_semble_cli = semble_cli_ready(semble_path)
     if not (has_rtk or has_semble_cli):
         return Decision.noop()
-    name = hook_harness.tool_name(payload, harness)
-    session = hook_harness.session_id(payload, harness, env)
-    if not consume(session, discovery_budget_key(name), cache_root=cache_root):
+    if not consume(session, key, cache_root=cache_root):
         return Decision.noop()
     return Decision.deny(
         discovery_text(

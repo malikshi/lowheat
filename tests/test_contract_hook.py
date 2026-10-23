@@ -6,6 +6,7 @@ rules:   Load the hook modules by file path — the skill directory name is not 
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added policy, encoding, budget, and entry-point tests for the three-harness contract hook
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | regression tests for the empty-query nudge: pattern aliases, the directory the call carries, and the placeholder fallback
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | asserted both the rewrite reason and the refusal name `rtk bypass`, the route the engine never rewrites; on review: a rewrite carries no permissionDecision, shlex quoting defuses a substitution in the suggestion, a glob keeps `**/` out of the find hint, and a closed stdout still exits 0; second pass: a glob with a slash gets the grep rung, while `**/**/*.py` still collapses to a find form; third pass: a glob with no find form says the grep rung is a content search; fourth pass: the reason ends on its last command, and the content-search note stays out when rtk is absent; fifth pass: a 200k-prefix pattern must strip inside two seconds
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | af6c3f93-421d-42c3-b551-cc47dbd0d494 | regression tests for the spent-budget fast path (a second commandcode shell call must not spawn rtk, while a rewriting harness still must) and for the mcp__-qualified semble tool name Command Code mounts
 """
 
 from __future__ import annotations
@@ -238,6 +239,31 @@ class ShellPolicyTestCase(HookTestCase):
 
         self.assertEqual(other.kind, "deny")
 
+    def test_commandcode_skips_the_rtk_lookup_once_the_budget_is_spent(self):
+        calls = []
+
+        def counting_runner(args, input=None, capture_output=None, text=None, timeout=None):
+            calls.append(args)
+            return rtk_runner()(args, input, capture_output, text, timeout)
+
+        self.decide(commandcode_payload(), COMMANDCODE_ENV, run=counting_runner)
+        self.decide(commandcode_payload(), COMMANDCODE_ENV, run=counting_runner)
+
+        self.assertEqual(len(calls), 1)
+
+    def test_rewriting_harnesses_never_go_quiet_after_one_command(self):
+        calls = []
+
+        def counting_runner(args, input=None, capture_output=None, text=None, timeout=None):
+            calls.append(args)
+            return rtk_runner()(args, input, capture_output, text, timeout)
+
+        self.decide(claude_payload(), CLAUDE_ENV, run=counting_runner)
+        second = self.decide(claude_payload(), CLAUDE_ENV, run=counting_runner)
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(second.kind, "rewrite")
+
     def test_no_decision_when_rtk_is_not_installed(self):
         for payload, env in (
             (claude_payload(), CLAUDE_ENV),
@@ -369,6 +395,19 @@ class DiscoveryPolicyTestCase(HookTestCase):
         decision = self.decide(payload, GROK_ENV)
 
         self.assertIn("semble__search", decision.reason)
+
+    def test_nudge_names_the_qualified_mcp_tool_for_commandcode(self):
+        payload = {
+            "session_id": "s-cc-mcp",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "grep",
+            "tool_display_name": "SEARCH",
+            "tool_input": {"pattern": "retry budget"},
+        }
+        decision = self.decide(payload, COMMANDCODE_ENV)
+
+        self.assertIn("mcp__semble__search", decision.reason)
+        self.assertNotIn(" the semble MCP semble__search", decision.reason)
 
     def test_nudge_skips_a_cli_that_is_installed_but_cannot_run(self):
         decision = self.decide(self.grep_payload(), CLAUDE_ENV, which=self.which(shebang="#!/nonexistent/python3"))
@@ -740,6 +779,26 @@ class BudgetTestCase(HookTestCase):
         hook_policy._prune_stale(blocker, time.time())
 
         self.assertTrue(blocker.exists())
+
+    def test_budget_spent_reports_false_before_anything_is_spent(self):
+        self.assertFalse(hook_policy.budget_spent("s", "shell", cache_root=self.cache_root))
+
+    def test_budget_spent_reads_true_after_the_unit_is_gone(self):
+        hook_policy.consume("s", "shell", cache_root=self.cache_root)
+
+        self.assertTrue(hook_policy.budget_spent("s", "shell", cache_root=self.cache_root))
+
+    def test_budget_spent_does_not_spend_the_unit(self):
+        hook_policy.budget_spent("s", "shell", cache_root=self.cache_root)
+
+        self.assertTrue(hook_policy.consume("s", "shell", cache_root=self.cache_root))
+
+    def test_budget_spent_reads_false_on_a_state_it_cannot_parse(self):
+        path = hook_policy.session_state_path("s", cache_root=self.cache_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{not json", encoding="utf-8")
+
+        self.assertFalse(hook_policy.budget_spent("s", "shell", cache_root=self.cache_root))
 
     def test_session_ids_cannot_escape_the_cache_directory(self):
         path = hook_policy.session_state_path("../../etc/passwd", cache_root=self.cache_root)

@@ -174,10 +174,10 @@ One hook script serves all three harnesses:
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` | rewrites a shell command to its `rtk` form via `hookSpecificOutput.updatedInput`, and injects the session digest |
 | Grok | `~/.grok/hooks/contract.json` | same rewrite rules; Grok also reads `~/.claude/settings.json` and deduplicates handlers that run the same command. It ignores hook output on SessionStart, so it gets no digest |
-| Command Code | `~/.commandcode/settings.json` | cannot rewrite tool input, so it refuses one raw command per session with the rtk form to re-issue, and injects the session digest |
+| Command Code | `~/.commandcode/settings.json` | cannot rewrite tool input, so it refuses one raw command per session with the rtk form to re-issue, and injects the session digest. Its matcher names the display names `SHELL`, `SEARCH`, and `GLOB` — a bare `SHELL` skipped the discovery nudges entirely, because Command Code matches a regex against those display names rather than the tool id |
 
 The first native `Grep` and the first native `Glob` of a session are each
-refused once on Claude Code and Grok, with the cheapest rung the hook has
+refused once on every wired harness, with the cheapest rung the hook has
 verified it can run: the semble MCP tool, then `semble search` when the CLI can
 launch, then `rtk grep`. A `semble` shim on `PATH` whose interpreter is gone is
 detected — the hook reads the shim's shebang and drops that rung rather than
@@ -199,7 +199,13 @@ python3 .agents/skills/agents-contract/hooks/install_hooks.py --uninstall
 `--harness claude|grok|commandcode|all` narrows the run. The installer merges
 rather than overwrites, keeps every existing hook and key, and copies the
 pristine file to `<name>.lowheat-bak` before the first write — including the
-Grok hook file, which it creates rather than owns. `--uninstall` removes our
+Grok hook file, which it creates rather than owns. Every wired command ends on
+`; exit 0`, because Command Code reads exit `2` from `PreToolUse` as a refusal:
+when this checkout moved from `/root/lowheat` to `/home/git/lowheat`, the
+recorded absolute script path went dead and the resulting `No such file or
+directory` blocked tool calls outright (three on 2026-10-23, the day of the
+move). The refusal travels in the hook's JSON, so forcing a zero exit loses
+nothing. `--uninstall` removes our
 handlers and writes that copy back when only the hook wiring had changed, so the
 file returns byte for byte (`cmp` verified on both); a file that gained foreign
 handlers since the install keeps them, and the Grok file is deleted only when
@@ -224,6 +230,15 @@ one payload in, one reply holding only `updatedInput`, and `rtk gain --history`
 records `rtk git status --short --branch` executing. One process cost stays:
 every shell tool call spawns `rtk hook claude` to ask for the rewrite, bounded
 by a 3 s timeout.
+
+That `rtk` spawn is skipped once it can no longer change the answer. On Command
+Code the refusal is budgeted to one per session, so the hook reads the spent
+budget first and returns no opinion without spawning anything; the rewriting
+harnesses keep paying it, because they rewrite every shell call. What remains is
+interpreter start: measured here over 40 calls, 105 ms median and 154 ms p90 for
+a Command Code payload after the first, against 7,611 recorded real calls at a
+138 ms median and 364 ms p95. `python3 -S` bought no measurable time, so the hook
+does not depend on it.
 
 Verified end to end on all three harnesses — the model emits the raw command and
 `rtk gain --history` records the rtk form running:

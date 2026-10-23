@@ -8,6 +8,7 @@ rules:   Merge, never overwrite: keep every existing key and every foreign handl
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone; fourth pass: the check requires an executable file (a directory or /dev/null passed it before), a bare PATH name resolves to its absolute path, a failed move drops its staged file, an empty hooks object the pristine backup carried restores byte for byte, and a later harness failure still prints what landed; fifth pass: a bare or relative interpreter is absolutized, since the harness runs from its own directory, and an empty event list the pristine file carried also counts as a match
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 7bacda42 | _upsert now reports `unchanged` when the merge leaves the file byte-identical: every re-run wrote a false `write`, so `--dry-run` could not tell current wiring from a moved checkout whose absolute hook path is dead
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | af6c3f93-421d-42c3-b551-cc47dbd0d494 | audits showed a 2,504-fire run from a dead /root/lowheat path and 3 exit-2 blocks: the handler command now ends on `; exit 0` so a moved checkout fails open, since Command Code reads exit 2 from PreToolUse as a refusal; commandcode's matcher now names SHELL|SEARCH|GLOB, because a bare SHELL never matched the discovery tools and the nudge had never fired
 """
 
 from __future__ import annotations
@@ -35,8 +36,9 @@ HOOK_SCRIPT_NAME = "contract_hook.py"
 MARKER = HOOK_SCRIPT_NAME
 HOOK_TIMEOUT_SECONDS = 10
 HOOK_MATCHER = "Bash|Grep|Glob"
-COMMANDCODE_MATCHER = "SHELL"
+COMMANDCODE_MATCHER = "^(SHELL|SEARCH|GLOB)$"
 BACKUP_SUFFIX = ".lowheat-bak"
+FAIL_OPEN_SUFFIX = "; exit 0"
 
 
 class InstallError(RuntimeError):
@@ -74,9 +76,9 @@ def commandcode_settings_path(home: Path | str) -> Path:
 def handler_command(python: str, script: str) -> str:
     """Return the shell command a harness runs for the contract hook.
 
-    Rules:   Both paths are absolute — a hook runs with the workspace as its working directory, so a relative path would resolve elsewhere or fail a folder-trust check. Expand `~` first: quoting the path stops the shell from expanding it, and a hook that cannot start is a silent failure. Quote each one for the shell: a space in a path would otherwise split the command into a program that does not exist, and a metacharacter would inject a second command the harness runs on every matching tool call.
+    Rules:   Both paths are absolute — a hook runs with the workspace as its working directory, so a relative path would resolve elsewhere or fail a folder-trust check. Expand `~` first: quoting the path stops the shell from expanding it, and a hook that cannot start is a silent failure. Quote each one for the shell: a space in a path would otherwise split the command into a program that does not exist, and a metacharacter would inject a second command the harness runs on every matching tool call. End on `; exit 0` so a checkout that moved after install fails open: a harness reads exit 2 from PreToolUse as a block, so a dead script path would otherwise refuse every guarded tool call instead of letting it run. The deny decision travels in the hook's JSON, never in an exit code, so forcing 0 loses no refusal.
     """
-    return f"{shlex.quote(os.path.expanduser(python))} {shlex.quote(os.path.expanduser(script))}"
+    return f"{shlex.quote(os.path.expanduser(python))} {shlex.quote(os.path.expanduser(script))}{FAIL_OPEN_SUFFIX}"
 
 
 def _handler(python: str, script: str) -> dict[str, Any]:
