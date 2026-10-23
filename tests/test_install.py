@@ -141,5 +141,62 @@ class ProjectScopeTestCase(unittest.TestCase):
         self.assertTrue(all("unchanged" in action for action in actions), actions)
 
 
+class ConflictGuardTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(
+            lambda: __import__("shutil").rmtree(self.root, ignore_errors=True)
+        )
+        self.plans = install.plan_project(self.root)
+        self.chosen = install.HARNESSES
+
+    def test_foreign_agents_md_is_reported_once_as_a_conflict(self) -> None:
+        (self.root / "AGENTS.md").write_text("MY OWN RULES\n", encoding="utf-8")
+
+        conflicts = install.find_conflicts(self.plans, self.chosen)
+
+        self.assertEqual([self.root / "AGENTS.md"], conflicts)
+
+    def test_install_refuses_a_foreign_agents_md_and_leaves_it_intact(self) -> None:
+        agents = self.root / "AGENTS.md"
+        agents.write_text("MY OWN RULES\n", encoding="utf-8")
+
+        code = install.main(
+            ["--scope", "project", "--root", str(self.root), "--no-hooks"]
+        )
+
+        self.assertEqual(1, code)
+        self.assertEqual("MY OWN RULES\n", agents.read_text(encoding="utf-8"))
+
+    def test_force_replaces_a_foreign_agents_md_and_keeps_a_backup(self) -> None:
+        agents = self.root / "AGENTS.md"
+        agents.write_text("MY OWN RULES\n", encoding="utf-8")
+
+        code = install.main(
+            ["--scope", "project", "--root", str(self.root), "--no-hooks", "--force"]
+        )
+
+        self.assertEqual(0, code)
+        self.assertNotEqual("MY OWN RULES\n", agents.read_text(encoding="utf-8"))
+        self.assertEqual(
+            "MY OWN RULES\n",
+            (self.root / "AGENTS.md.bak").read_text(encoding="utf-8"),
+        )
+
+    def test_a_matching_file_is_not_a_conflict_so_re_runs_stay_quiet(self) -> None:
+        self.apply()
+
+        self.assertEqual([], install.find_conflicts(self.plans, self.chosen))
+
+    def test_a_symlink_is_never_a_conflict(self) -> None:
+        agents = self.root / "AGENTS.md"
+        agents.symlink_to(install.CONTRACT_DIR / "RTK.md")
+
+        self.assertEqual([], install.find_conflicts(self.plans, self.chosen))
+
+    def apply(self) -> None:
+        install.main(["--scope", "project", "--root", str(self.root), "--no-hooks"])
+
+
 if __name__ == "__main__":
     unittest.main()

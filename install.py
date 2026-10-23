@@ -144,6 +144,39 @@ def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     return action
 
 
+def find_conflicts(plans: dict[str, HarnessPlan], chosen: tuple[str, ...]) -> list[Path]:
+    """Return existing files an install would overwrite with different content.
+
+    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own AGENTS.md and overwriting it destroys their instructions, so it must be refused rather than replaced.
+    """
+    conflicts: list[Path] = []
+    for harness, plan in plans.items():
+        if harness not in chosen:
+            continue
+        for target, source in plan.links.items():
+            if target in conflicts:
+                continue
+            if target.is_symlink() or not target.is_file():
+                continue
+            if target.read_bytes() != source.read_bytes():
+                conflicts.append(target)
+    return conflicts
+
+
+def backup(target: Path) -> Path:
+    """Copy target to a sibling .bak before it is overwritten.
+
+    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Return the path written so the caller can report it.
+    """
+    candidate = target.with_name(target.name + ".bak")
+    counter = 1
+    while candidate.exists():
+        candidate = target.with_name(f"{target.name}.bak{counter}")
+        counter += 1
+    shutil.copyfile(target, candidate)
+    return candidate
+
+
 def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
     """Write source's contents to target and report what happened.
 
@@ -221,6 +254,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--dry-run", action="store_true", help="report, do not write")
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing AGENTS.md, keeping a .bak of it",
+    )
+    parser.add_argument(
         "--no-hooks", action="store_true", help="skip the RTK/discovery hook wiring"
     )
     args = parser.parse_args(argv)
@@ -236,6 +274,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.scope == "user"
         else plan_project(Path(args.root).expanduser().resolve())
     )
+
+    conflicts = find_conflicts(plans, chosen)
+    if conflicts and not args.force:
+        for path in conflicts:
+            print(f"install: refusing to overwrite {path}", file=sys.stderr)
+        print(
+            "install: that file is not ours; re-run with --force to keep a .bak and replace it",
+            file=sys.stderr,
+        )
+        return 1
+    if conflicts:
+        for path in conflicts:
+            if args.dry_run:
+                print(f"install: would back up {path} to {path.name}.bak")
+            else:
+                print(f"install: backed up {path} to {backup(path).name}")
 
     if not args.dry_run:
         mirror = sync_contract_mirror(CONTRACT_DIR, SKILL_DIR)
