@@ -94,6 +94,16 @@ deleted by the same reinstall. Project scope also refuses to run against the
 lowheat checkout itself, where it would duplicate `contract/` back into the repo
 root.
 
+A vendored copy records the hash of every file it installed in
+`.agents/skills/agents-contract/.vendored.json`, which is what makes the check
+precise: **a file edited in place is refused, while a stale copy is replaced
+normally.** Without that record the two are indistinguishable, and the only safe
+choice is to refuse both — which would make every upgrade need `--force`. Commit
+the manifest with the rest of the vendored skill; it is what a teammate's clone
+compares against. If it is missing or unreadable, the installer falls back to
+refusing any difference, since a wrong refusal costs one `--force` and a wrong
+replace loses the edit.
+
 ### Keeping the mirror in sync
 
 `references/contract.md` is written by `install.py` from `contract/AGENTS.md`

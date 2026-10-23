@@ -9,6 +9,7 @@ agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-
 from __future__ import annotations
 
 import importlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -266,6 +267,47 @@ class ConflictGuardTestCase(unittest.TestCase):
 
         self.assertIn('"command": "python3 ', settings)
         self.assertNotIn(sys.executable, settings)
+
+    def test_an_in_place_edit_to_a_vendored_file_is_a_conflict(self) -> None:
+        install.vendor_skill(self.root, install.SKILL_DIR, False)
+        edited = self.root / ".agents" / "skills" / "agents-contract" / "SKILL.md"
+        edited.write_text("MY LOCAL EDIT\n", encoding="utf-8")
+
+        self.assertEqual(
+            [edited], install.find_vendored_edits(self.root, install.SKILL_DIR)
+        )
+
+    def test_an_in_place_edit_is_refused_and_preserved(self) -> None:
+        install.vendor_skill(self.root, install.SKILL_DIR, False)
+        edited = self.root / ".agents" / "skills" / "agents-contract" / "SKILL.md"
+        edited.write_text("MY LOCAL EDIT\n", encoding="utf-8")
+
+        code = install.main(["--scope", "project", "--root", str(self.root)])
+
+        self.assertEqual(1, code)
+        self.assertEqual("MY LOCAL EDIT\n", edited.read_text(encoding="utf-8"))
+
+    def test_a_stale_vendored_copy_is_replaceable_even_when_upstream_moved_on(self) -> None:
+        source = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(source, ignore_errors=True))
+        shutil.copytree(install.SKILL_DIR, source, dirs_exist_ok=True)
+        install.vendor_skill(self.root, source, False)
+        (source / "SKILL.md").write_text("UPSTREAM MOVED ON\n", encoding="utf-8")
+
+        self.assertEqual([], install.find_vendored_edits(self.root, source))
+
+    def test_a_vendored_copy_without_a_manifest_refuses_any_difference(self) -> None:
+        install.vendor_skill(self.root, install.SKILL_DIR, False)
+        manifest = (
+            self.root / ".agents" / "skills" / "agents-contract" / ".vendored.json"
+        )
+        manifest.unlink()
+        edited = self.root / ".agents" / "skills" / "agents-contract" / "SKILL.md"
+        edited.write_text("MY LOCAL EDIT\n", encoding="utf-8")
+
+        self.assertEqual(
+            [edited], install.find_vendored_edits(self.root, install.SKILL_DIR)
+        )
 
     def apply(self) -> None:
         install.main(["--scope", "project", "--root", str(self.root), "--no-hooks"])
