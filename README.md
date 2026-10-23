@@ -61,6 +61,13 @@ All six install under the project root and are picked up automatically. A
 symlink to a checkout works as well as a copy, and re-syncs on every
 `git pull`.
 
+A symlink re-syncs the content the harness reads, not the hook wiring. The
+installer records absolute interpreter and script paths, so a checkout that
+moves leaves every harness running a hook path that no longer exists — and the
+hook fails open, so the rules silently stop being enforced. `--dry-run` is the
+check: current wiring prints `unchanged`, a moved checkout prints `write`.
+Re-run the installer to repoint it.
+
 ### Keeping the mirror in sync
 
 `references/contract.md` is a byte-identical copy of `AGENTS.md`; the skill

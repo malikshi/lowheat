@@ -5,6 +5,7 @@ used_by: none
 rules:   Load the installer by file path — the skill directory name is not a Python package. Every case runs against a temporary home directory; never touch the real harness configs.
 agent:   grok-4.6 | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | added merge, idempotence, backup, uninstall, and safety tests for the three-harness wiring
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok merge and uninstall tests: foreign handlers survive, the pristine copy comes back, and the file is deleted only when ours filled it; on review: a foreign handler inside our own group survives install and uninstall, paths with spaces are quoted into the handler command, and a failed move leaves the settings file byte-identical; second pass: a symlinked settings file keeps its link through install and uninstall, and a tilde path is expanded before it is quoted; third pass: the CLI refuses a missing interpreter or script and still unwires a vanished checkout; fourth pass: unusable interpreter shapes, PATH-name resolution, the pristine empty hooks object, the staged-file cleanup, and what a partial run reports; fifth pass: a relative interpreter is absolutized or refused, and a pristine empty event list restores byte for byte
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 7bacda42 | added the unchanged-on-reinstall case after a false `write` hid a moved checkout's dead hook path
 """
 
 from __future__ import annotations
@@ -201,6 +202,16 @@ class ClaudeInstallTestCase(InstallerTestCase):
 
         self.assertNotIn("/old/contract_hook.py", " ".join(commands))
         self.assertIn(SCRIPT, " ".join(commands))
+
+    def test_reinstalling_current_wiring_reports_unchanged(self):
+        path = self.write_claude_settings()
+
+        self.install(CLAUDE)
+        original = path.read_text(encoding="utf-8")
+        changes = self.install(CLAUDE)
+
+        self.assertEqual(changes[0].action, "unchanged")
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_uninstall_removes_only_our_handlers(self):
         path = self.write_claude_settings()

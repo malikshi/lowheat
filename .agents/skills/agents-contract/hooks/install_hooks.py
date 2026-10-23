@@ -7,12 +7,14 @@ related: contract_hook.py is the script every entry runs; hook_harness.py names 
 rules:   Merge, never overwrite: keep every existing key and every foreign handler, replace only handlers whose command carries MARKER, and copy the pristine file to BACKUP_SUFFIX once before the first write. A malformed target or a hooks key that is not an object raises InstallError with the file byte-identical — never write a half-parsed config. Every harness gets the same command string, because Grok loads the Claude settings file too and deduplicates handlers that run the same thing. The Grok hook file is one the installer creates, so its uninstall deletes that file only when stripping our handlers left nothing else in it.
 agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: per-harness settings paths, marker-based merge and uninstall, one-shot backup, dry-run
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | Grok now merges like the others and keeps foreign handlers: uninstall restores the pristine copy, writes the stripped file when it gained foreign content, and deletes only an empty file ours alone filled; on review: shlex.quote both paths in the handler command (a space installed a dead hook, a metacharacter injected a second command), the strip removes only MARKER handlers so a foreign handler inside our group survives, and the settings write stages beside the target and moves with os.replace; second pass: expand `~` before quoting, which quoting had frozen, and resolve a symlinked settings file so a dotfiles link survives while its target is replaced; third pass: the CLI refuses a missing interpreter or script before writing, while an unwire still runs when the checkout is gone; fourth pass: the check requires an executable file (a directory or /dev/null passed it before), a bare PATH name resolves to its absolute path, a failed move drops its staged file, an empty hooks object the pristine backup carried restores byte for byte, and a later harness failure still prints what landed; fifth pass: a bare or relative interpreter is absolutized, since the harness runs from its own directory, and an empty event list the pristine file carried also counts as a match
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 7bacda42 | _upsert now reports `unchanged` when the merge leaves the file byte-identical: every re-run wrote a false `write`, so `--dry-run` could not tell current wiring from a moved checkout whose absolute hook path is dead
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import json
 import os
 import shlex
@@ -206,13 +208,16 @@ def _upsert(
 ) -> Change:
     """Merge our groups into a settings file, one event at a time.
 
-    Rules:   Ours are appended last so a foreign guard keeps running first, and any earlier copy of ours is removed first so a re-run or a moved checkout replaces it instead of duplicating it.
+    Rules:   Ours are appended last so a foreign guard keeps running first, and any earlier copy of ours is removed first so a re-run or a moved checkout replaces it instead of duplicating it. Report `unchanged` when the merge leaves the file byte-identical: a re-run against current wiring must not rewrite the file, because that turns every `--dry-run` into a false `write` and hides real drift from a moved checkout.
     """
     data = _read_settings(path)
+    pristine = copy.deepcopy(data)
     hooks = _hooks_object(data, path)
     for event, groups in groups_by_event.items():
         existing = _strip_ours(hooks.get(event, []), path)
         hooks[event] = existing + groups
+    if data == pristine:
+        return Change(harness, path, "unchanged")
     return _write(path, data, harness, "write", dry_run)
 
 
