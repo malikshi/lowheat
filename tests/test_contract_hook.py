@@ -50,6 +50,12 @@ COMMANDCODE_ENV = {"COMMANDCODE_HOOK_EVENT": "PreToolUse", "COMMANDCODE_SESSION_
 REWRITABLE = "git status"
 REWRITTEN = "rtk git status"
 
+SESSION_START_PAYLOAD = {
+    "session_id": "s-context",
+    "hook_event_name": "SessionStart",
+    "source": "startup",
+}
+
 
 def claude_payload(command: str = REWRITABLE, session: str = "s-claude") -> dict:
     return {
@@ -651,6 +657,23 @@ class SessionContextTestCase(HookTestCase):
         decision = self.decide(payload, GROK_ENV)
 
         self.assertEqual(decision.kind, "noop")
+
+    def test_digest_paths_are_absolute_so_a_foreign_repo_can_follow_them(self):
+        decision = self.decide(SESSION_START_PAYLOAD, CLAUDE_ENV)
+
+        self.assertIn(str(hook_policy.CHECKER_PATH), decision.text)
+        self.assertIn(str(hook_policy.CONTRACT_PATH), decision.text)
+        self.assertTrue(hook_policy.CHECKER_PATH.is_absolute())
+        self.assertTrue(hook_policy.CONTRACT_PATH.is_absolute())
+
+    def test_digest_paths_resolve_to_files_that_actually_exist(self):
+        self.assertTrue(hook_policy.CHECKER_PATH.is_file())
+        self.assertTrue(hook_policy.CONTRACT_PATH.is_file())
+
+    def test_digest_no_longer_names_a_bare_relative_agents_md(self):
+        decision = self.decide(SESSION_START_PAYLOAD, CLAUDE_ENV)
+
+        self.assertNotIn("Details: AGENTS.md", decision.text)
 
     def test_unrelated_events_are_ignored(self):
         payload = {"session_id": "s", "hook_event_name": "PostToolUse", "tool_name": "Bash"}

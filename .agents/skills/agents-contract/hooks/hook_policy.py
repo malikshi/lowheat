@@ -1,14 +1,14 @@
 """hook_policy.py — Command Style and discovery decisions the contract hook enforces.
 
-exports: BUDGET_LIMIT | CACHE_DIR_NAME | RTK_BIN | RTK_TIMEOUT_SECONDS | SEMBLE_BIN | SESSION_CONTEXT | SHELL_BUDGET_KEY | STATE_MAX_AGE_DAYS | budget_spent | consume | decide | default_cache_root | discovery_budget_key | deny_text | discovery_text | rtk_rewrite | semble_cli_ready | semble_mcp_tool | session_state_path
+exports: BUDGET_LIMIT | CACHE_DIR_NAME | CHECKER_PATH | CONTRACT_PATH | RTK_BIN | RTK_TIMEOUT_SECONDS | SEMBLE_BIN | SESSION_CONTEXT | SHELL_BUDGET_KEY | SKILL_ROOT | STATE_MAX_AGE_DAYS | budget_spent | consume | decide | default_cache_root | discovery_budget_key | deny_text | discovery_text | rtk_rewrite | semble_cli_ready | semble_mcp_tool | session_state_path
 used_by: .agents/skills/agents-contract/hooks/contract_hook.py → decide [cascade]
 used_by: tests/test_contract_hook.py → budget_spent, consume, decide, session_state_path [cascade]
 related: hook_harness.py holds detection and the reply shapes; AGENTS.md → Command Style and the tool ladder are the rules enforced here.
 rules:   Never block on a state the hook cannot read: a missing binary, an unreadable cache, a failed rtk lookup, or an unknown tool all resolve to Decision.noop(). Each deny is bounded by BUDGET_LIMIT per session and key, so a harness that ignores the reason cannot loop. A refusal must name a command the model can run as written, so no suggested argument is ever empty. Once a budget is provably spent, answer noop() before any binary lookup or shebang probe — the hook runs inside every tool call and that work cannot change the answer.
-agent:   grok-build | xai | 2026-10-17 | 01a14a7c-788f-7061-83bb-6dded52bc3b5 | first cut: rtk-owned rewrite lookup, bounded deny budgets on a per-session state file, discovery nudge with the exact ladder command
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | fixed the empty-query nudge: Grok's list_dir sends target_directory, so a call with no pattern now quotes a placeholder and the directory it carries
 agent:   grok-build | xai | 2026-10-18 | 01a14ad3-ab3e-74b1-81d5-fc6f08b61af7 | both reasons now name `rtk bypass`, the one form the engine leaves untouched — the rewrite path has no budget, so an agent that needs the full output has no other route; on review: shlex.quote replaces json.dumps for the suggested pattern and directory (JSON quoting left `$(...)` live for the shell), and the rtk find form drops a leading `**/` that find rejects; second pass: every leading `**/` is stripped and a pattern that still holds a slash gets the grep rung, because find rejects those too; third pass: that rung is labelled a content search, since the call asked for a file list; fourth pass: the reason ends on the last suggested command, because the sentence period turned `.` into `..`, and the `**/` strip is index-based after a 600 KB pattern took 16.6 s
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | af6c3f93-421d-42c3-b551-cc47dbd0d494 | read 7,611 hook audits and found commandcode's matcher never reached grep/glob, so the discovery nudge had never fired; added budget_spent for a read-only fast path on the refusal and discovery checks (one rtk spawn per session, not one per call), and fixed semble_mcp_tool naming a bare semble__search on Command Code, which mounts the mcp__ prefix
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | the digest named AGENTS.md, RTK.md, and semble.md as bare relative paths, which resolve only inside this checkout — a harness running in another repo got three dead pointers and went hunting; the digest now carries the absolute checker path and the absolute references/contract.md, resolved from SKILL_ROOT so a symlinked or copied skill both work, and both are computed once at import rather than per SessionStart
 """
 
 from __future__ import annotations
@@ -57,6 +57,10 @@ _DIRECTORY_KEYS = ("path", "target_directory", "directory")
 _PATTERN_PLACEHOLDER = "<pattern>"
 _RECURSIVE_PREFIX = "**/"
 
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+CHECKER_PATH = SKILL_ROOT / "scripts" / "codedna_check.py"
+CONTRACT_PATH = SKILL_ROOT / "references" / "contract.md"
+
 SESSION_CONTEXT = (
     "agents-contract (lowheat) is active. Command Style: shell commands run through rtk, the "
     "proxy that compresses their output — this session's PreToolUse hook rewrites a command to "
@@ -65,7 +69,9 @@ SESSION_CONTEXT = (
     "Grep/Glob; the first native Grep and the first native Glob call each session are refused once "
     "with the cheapest rung that actually runs (the semble MCP tool, the semble CLI when it "
     "executes, or rtk grep). Native Read stays correct for reading a file once its location is "
-    "known. Details: AGENTS.md → Command Style, RTK.md, semble.md."
+    f"known. Run the CodeDNA checker at {CHECKER_PATH} — never search the filesystem for it. "
+    f"The contract text is at {CONTRACT_PATH}; AGENTS.md at the repo root shadows it as the "
+    "source of truth."
 )
 
 

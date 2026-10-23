@@ -157,7 +157,7 @@ class CodednaCheckTestCase(unittest.TestCase):
         self.assertTrue(any("description" in finding for finding in findings), findings)
 
     def test_contract_examples_break_no_rule(self) -> None:
-        contract = Path(__file__).resolve().parents[1] / "AGENTS.md"
+        contract = Path(__file__).resolve().parents[1] / "contract" / "AGENTS.md"
         text = contract.read_text(encoding="utf-8")
         self.assertEqual([], self.checker.check_examples(text, "AGENTS.md"))
 

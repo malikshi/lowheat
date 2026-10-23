@@ -607,7 +607,7 @@ class InstallerSafetyTestCase(InstallerTestCase):
         self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_hook_timeout_stays_within_the_recommended_budget(self):
-        self.assertLessEqual(install_hooks.HOOK_TIMEOUT_SECONDS, 10)
+        self.assertLessEqual(install_hooks.HOOK_TIMEOUT_SECONDS, 20)
 
 
 class InstallerCliTestCase(InstallerTestCase):

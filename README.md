@@ -1,31 +1,33 @@
 # lowheat
 
 Minimal agent-operations bootstrap — the single, self-contained multi-agent
-workspace contract lives in `AGENTS.md`.
+workspace contract lives in `contract/AGENTS.md`.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
-| `AGENTS.md` | Canonical contract — operating principles, Work Loop, engineering standards, CodeDNA, execution & delivery, environment |
-| `RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
-| `semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
-| `caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
-| `ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
+| `install.py` | Per-harness installer — symlinks the contract where each harness reads it, writes Grok's rules files, syncs the skill mirror, and wires the hook |
+| `contract/AGENTS.md` | Canonical contract — operating principles, Work Loop, engineering standards, CodeDNA, execution & delivery, environment |
+| `contract/RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
+| `contract/semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
+| `contract/caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
+| `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
-| `.agents/skills/agents-contract/references/contract.md` | Verbatim mirror of `AGENTS.md` (do not edit directly — re-sync from `AGENTS.md`) |
+| `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 languages, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
-| `.agents/skills/agents-contract/hooks/` | Contract hook — harness detection, the Command Style and discovery decisions, and the installer that wires Claude Code, Grok, and Command Code |
+| `.agents/skills/agents-contract/hooks/` | Contract hook — harness detection, the Command Style and discovery decisions, and the hook wiring for Claude Code, Grok, and Command Code |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
 | `tests/test_contract_hook.py` | Tests for the hook policy, reply shapes, deny budgets, and entry point |
-| `tests/test_install_hooks.py` | Tests for the installer merge, backup, and uninstall paths |
+| `tests/test_install.py` | Tests for the per-harness install shapes, Grok rules rendering, and the mirror |
+| `tests/test_install_hooks.py` | Tests for the hook merge, backup, and uninstall paths |
 | `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
 | `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
 | `LICENSE` | MIT |
 
 ## Contract structure
 
-`AGENTS.md` is the cross-agent source of truth. Six top-level sections:
+`contract/AGENTS.md` is the cross-agent source of truth. Six top-level sections:
 
 | Section | Covers |
 |---|---|
@@ -45,46 +47,42 @@ cd lowheat
 
 ## Installation
 
-Copy the contract, its companion references, and its skill into your project
-root so every agent session picks them up:
+One command wires the contract into every harness, with no hand-copied files:
 
-| File | Copy to | Purpose |
+```bash
+python3 install.py                        # all harnesses, user scope
+python3 install.py --dry-run              # show what would change
+python3 install.py --harness grok         # one harness
+python3 install.py --no-hooks             # contract only, no hook wiring
+```
+
+Each harness gets the shape it can actually read:
+
+| Harness | What lands | Why |
 |---|---|---|
-| `AGENTS.md` | project root | Cross-agent source of truth |
-| `RTK.md` | project root | RTK command reference — the CLI proxy that compresses shell output |
-| `semble.md` | project root | Semble code-search reference — the discovery ladder, CLI verbs, and caveats |
-| `caveman.md` | project root | Caveman reply-mode reference — terse replies, commit and review formats, optional layer |
-| `ponytail.md` | project root | Ponytail posture reference — the laziness ladder and its conventions |
-| `.agents/skills/agents-contract/` | project root | Skill encoding the contract as executable steps |
+| Claude Code | `~/.claude/AGENTS.md`, `~/.claude/CLAUDE.md` → `contract/AGENTS.md` | Expands `@path` imports, so one link reaches the whole contract and its companions |
+| Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md` | Same — it expands `@path` imports and reads `AGENTS.md`, not `CLAUDE.md` |
+| Grok | `~/.grok/AGENTS.md` link, plus each companion as `~/.grok/rules/*.md` | **Does not expand imports.** Verified on grok 1.0.67: a marker inside an `@`-imported file was absent from the instruction context, so the companions ship as standalone rules files Grok scans |
 
-All six install under the project root and are picked up automatically. A
-symlink to a checkout works as well as a copy, and re-syncs on every
-`git pull`.
+The Grok row is the one worth knowing: the same single `AGENTS.md` serves all
+three harnesses, but Grok would have silently received only that file and lost
+RTK, caveman, ponytail, and semble. `install.py` emits the companions there
+instead of relying on a mechanism Grok does not have. The hook script upgrades
+the same way: `install.py` wires it after the links, so a moved checkout
+repoints in one run.
 
-A symlink re-syncs the content the harness reads, not the hook wiring. The
-installer records absolute interpreter and script paths, so a checkout that
-moves leaves every harness running a hook path that no longer exists — and the
-hook fails open, so the rules silently stop being enforced. `--dry-run` is the
-check: current wiring prints `unchanged`, a moved checkout prints `write`.
-Re-run the installer to repoint it.
+A broken symlink contributes nothing and fails silently — every emitted path is
+checked before the run reports success.
 
 ### Keeping the mirror in sync
 
-`references/contract.md` is a byte-identical copy of `AGENTS.md`; the skill
-reads it when the steps in `SKILL.md` need detail. Edit `AGENTS.md` only, then
-re-sync:
+`references/contract.md` is written by `install.py` from `contract/AGENTS.md`
+on every run; do not edit either copy by hand. Edit `contract/AGENTS.md`, then
+re-run the installer. To verify without writing:
 
 ```bash
-cp AGENTS.md .agents/skills/agents-contract/references/contract.md
+cmp contract/AGENTS.md .agents/skills/agents-contract/references/contract.md
 ```
-
-Verify the mirror matches `AGENTS.md` (no output means in sync):
-
-```bash
-cmp AGENTS.md .agents/skills/agents-contract/references/contract.md
-```
-
-Both commands were verified on this repo.
 
 Run the contract's own checks:
 
@@ -283,6 +281,14 @@ Semble is a **discovery** aid, not a replacement for the native tools. Use it
 to find *where* something lives, then read that file directly; keep native
 Read/Grep/Glob for exact `line:content`, all occurrences of a literal string,
 and lossless reads.
+
+The MCP tool is `mcp__semble__search` on Claude Code and Command Code,
+`semble__search` on Grok, whose catalog carries no `mcp__` prefix. Calling the
+wrong name fails with `Tool not found`, so use the server's name from
+`search_tool` / the tool list rather than assuming one prefix. On Grok both the
+direct `semble__search` tool and the `search_tool` → `use_tool` route reach the
+same key, and a server whose handshake is still running is missing from the
+first prompt — send a second prompt before concluding it is absent.
 
 Install (optional):
 

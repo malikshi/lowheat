@@ -25,7 +25,14 @@ every occurrence, and its snippets are truncated to a line budget.
 Locating code is not reading it. Take the first rung that answers the question:
 
 1. **Semble MCP** — `search` / `find_related`, when the MCP server is
-   connected. Fastest to call, no shell round-trip.
+   connected. Fastest to call, no shell round-trip. The qualified name is
+   harness-specific: `mcp__semble__search` on Claude Code and Command Code,
+   `semble__search` on Grok, whose catalog carries no `mcp__` prefix. Calling
+   the wrong one fails with `Tool not found`. On Grok the tool is also callable
+   directly under that name; `search_tool` → `use_tool` is the meta-tool path to
+   the same catalog key, and a server whose handshake is still running is absent
+   from the first prompt, so send a second one before concluding the tool does
+   not exist.
 2. **Semble CLI** — `semble search "<query>" .` when the MCP is not wired in
    but the binary is on PATH.
 3. **`rtk grep`** — a lossy survey: 0–90%+ smaller than native grep output

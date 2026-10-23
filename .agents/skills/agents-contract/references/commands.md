@@ -55,7 +55,10 @@ Locating code is not reading it. Try the cheap rungs first, native is the
 fallback: semble MCP (`search` / `find_related`) → semble CLI
 (`semble search "<q>" .`) → `rtk grep` (lossy survey) → native Grep/Glob
 (exact, never lossy). Reads stay native — `rtk read` is byte-identical to
-`cat`.
+`cat`. The MCP tool is `mcp__semble__search` on Claude Code and Command Code,
+`semble__search` on Grok, whose catalog carries no `mcp__` prefix. On Grok
+`search_tool` → `use_tool` reaches the same key, and a server still handshaking
+is missing from the first prompt.
 
 ## Catalogue
 

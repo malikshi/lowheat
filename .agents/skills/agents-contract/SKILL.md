@@ -11,9 +11,11 @@ Engineering Standards (Definition of Done, Verification, Coding Style, CodeDNA,
 Testing, Security), Execution & Delivery (Command Style, Communication Style,
 Git Workflow, Code Review), and the Environment notes as executable steps. The
 full contract text lives in `references/contract.md`; the RTK command
-catalogue lives in `references/commands.md`; the caveman, ponytail, and semble
-companion catalogues live in `caveman.md`, `ponytail.md`, and `semble.md`
-beside the contract. Read them when the steps below need detail.
+catalogue lives in `references/commands.md`. The caveman, ponytail, and semble
+companion catalogues live beside the contract itself, as `caveman.md`,
+`ponytail.md`, and `semble.md` in the checkout's `contract/` directory — not
+inside this skill directory, so do not look for them here. Read them when the
+steps below need detail.
 
 ## 1. Start a task — the Work Loop
 
@@ -135,7 +137,10 @@ Apply on every task, not just code changes:
 - Locate code down the discovery ladder, trying the cheap rungs first: semble
   MCP → semble CLI → `rtk grep` → native Grep/Glob. Native is the fallback when
   the earlier rungs return nothing or you need every occurrence; reads stay
-  native (`rtk read` equals `cat`).
+  native (`rtk read` equals `cat`). The MCP tool is `mcp__semble__search` on
+  Claude Code and Command Code, `semble__search` on Grok — the wrong name fails
+  with `Tool not found`. On Grok `search_tool` → `use_tool` reaches the same
+  key, and a server still handshaking is missing from the first prompt.
 - Wrap shell commands through RTK by default (`rtk git status`,
   `rtk pytest -q`); run raw only when exact bytes or parseable structure are
   the requirement, or when RTK is unavailable or the subcommand is
@@ -199,9 +204,14 @@ it, once no caller remains; after editing, check `used_by:` targets especially
 `[cascade]`-tagged ones; append a new `agent:` line in the form above, keep only
 the last 5 entries, and drop the oldest when adding a 6th (full history is in
 git). Run this skill's checker after any annotation edit — it ships at
-`scripts/codedna_check.py` beside this file, and an install that omits the
-scripts directory skips the run: with no flags it checks L1 headers (missing
-files/fields, `filename —` form, field order, dead `used_by:` targets,
+`scripts/codedna_check.py` beside this file. Never search the filesystem for
+it: a `find /` sweep is slow enough to be killed. The script sits one level
+below this `SKILL.md`, so in user scope the path is
+`~/.commandcode/skills/agents-contract/scripts/codedna_check.py` (likewise
+`~/.claude/skills/...` and `~/.grok/skills/...`), and in a project checkout it
+is `.agents/skills/agents-contract/scripts/codedna_check.py`. An install that
+omits the scripts directory skips the run: with no flags it checks L1 headers
+(missing files/fields, `filename —` form, field order, dead `used_by:` targets,
 `exports:` names absent from the file body, agent-entry shape and the 5-entry
 cap) and comment content (prose,
 commented-out code, TODO markers outside `Rules:`/`message:`) across Python,

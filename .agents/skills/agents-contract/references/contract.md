@@ -426,9 +426,15 @@ new `agent:` line to the module header in the form `model-id | provider |
 YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
 5 entries; drop the oldest when adding a 6th. Full history is in git. Run the
 checker the agents-contract skill ships after any annotation edit:
-`scripts/codedna_check.py` inside the skill directory the harness reports —
-`.agents/skills/agents-contract/scripts/codedna_check.py` in this repository's
-checkout — and skip the run when an install ships no script. With no flags it
+`scripts/codedna_check.py` beside that skill's `SKILL.md`. Resolve the path from
+the skill directory the harness reports and never search the filesystem for it —
+a `find /` sweep for this script is slow enough to be killed. In user scope the
+skill is symlinked into each harness config directory, so the path is
+`~/.commandcode/skills/agents-contract/scripts/codedna_check.py`,
+`~/.claude/skills/agents-contract/scripts/codedna_check.py`, or
+`~/.grok/skills/agents-contract/scripts/codedna_check.py`; in a project-scope
+checkout it is `.agents/skills/agents-contract/scripts/codedna_check.py`.
+Skip the run when an install ships no script. With no flags it
 checks L1 headers (missing
 files/fields, `filename — description` form, field order, `used_by:` targets
 that do not exist, `exports:` names absent from the file body, agent-entry
@@ -541,6 +547,13 @@ opening move.** Take the first rung that answers the question:
 
 1. **Semble MCP** — `search` / `find_related`, when the MCP server is
    connected. Ranked chunks with file and line at a fraction of grep+read cost.
+   The qualified name is harness-specific: `mcp__semble__search` on Claude Code
+   and Command Code, `semble__search` on Grok, whose catalog carries no `mcp__`
+   prefix. Calling the wrong one fails with `Tool not found`. On Grok the tool
+   is also callable directly under that name; `search_tool` → `use_tool` is the
+   meta-tool path to the same catalog key, and a server whose handshake is still
+   running is absent from the first prompt, so send a second one before
+   concluding the tool does not exist.
 2. **Semble CLI** — `semble search "<query>" . --max-snippet-lines 10` when
    the MCP is not wired in but the binary is on PATH.
 3. **`rtk grep`** — a lossy survey: 0–90%+ smaller than native grep output

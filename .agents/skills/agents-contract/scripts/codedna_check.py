@@ -2,7 +2,7 @@
 
 exports: DEFAULT_IGNORED_DIRS | SOURCE_SUFFIXES | TOOL_OWNED_DIRS | LanguageProfile | check_file | check_comment_content | check_examples | collect_source_files | main
 used_by: tests/test_codedna_check.py → main, check_file, check_comment_content, check_examples, collect_source_files, DEFAULT_IGNORED_DIRS, TOOL_OWNED_DIRS [cascade]
-used_by: AGENTS.md → CodeDNA editing protocol (checker mentions)
+used_by: contract/AGENTS.md → CodeDNA editing protocol (checker mentions)
 related: codedna_spec.py, codedna_masking.py, codedna_headers.py, codedna_content.py hold the split implementation.
 rules:   Read-only — report findings carrying line numbers; never rewrite a file. The sibling imports need this directory on sys.path first — the bootstrap below stays above them for direct execution and for importlib path loading. Re-export every name the tests load; the split must stay invisible from the command line.
 agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | rewrite: line-numbered findings, 15 language profiles, comment-content scan, agent-entry shape, field order, header-window relief
