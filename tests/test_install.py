@@ -90,5 +90,56 @@ class MirrorTestCase(unittest.TestCase):
         )
 
 
+class ProjectScopeTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(
+            lambda: __import__("shutil").rmtree(self.root, ignore_errors=True)
+        )
+
+    def apply(self, dry_run: bool = False) -> list[str]:
+        actions: list[str] = []
+        emitted: set = set()
+        for plan in install.plan_project(self.root).values():
+            unique = install.HarnessPlan(
+                plan.harness,
+                {t: s for t, s in plan.links.items() if t not in emitted},
+                plan.rules_dir,
+                plan.copy,
+            )
+            emitted.update(unique.links)
+            actions.extend(install.apply_plan(unique, install.CONTRACT_DIR, dry_run))
+        return actions
+
+    def test_project_install_writes_real_files_not_symlinks(self) -> None:
+        self.apply()
+
+        for name in ("AGENTS.md", "CLAUDE.md", "RTK.md", "semble.md"):
+            path = self.root / name
+            self.assertTrue(path.is_file(), path)
+            self.assertFalse(path.is_symlink(), path)
+
+    def test_project_install_carries_no_absolute_path_to_the_source_checkout(self) -> None:
+        self.apply()
+
+        for path in self.root.rglob("*"):
+            if path.is_file() and path.suffix in {".md", ".json"}:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+                self.assertNotIn(str(install.CONTRACT_DIR), text, path)
+
+    def test_project_files_keep_the_imports_that_reach_the_companions(self) -> None:
+        self.apply()
+
+        contract = (self.root / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("@RTK.md", contract)
+
+    def test_second_project_run_reports_unchanged(self) -> None:
+        self.apply()
+
+        actions = self.apply()
+
+        self.assertTrue(all("unchanged" in action for action in actions), actions)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -33,12 +33,13 @@ HOME_DIR = {
 class HarnessPlan:
     """One harness's install shape and the paths it needs.
 
-    Rules:   `links` maps a path to create to the contract file it should resolve to; `rules_dir` names the directory Grok scans for companion files. A harness that expands imports gets `links` only, because its one AGENTS.md already reaches the companions.
+    Rules:   `links` maps a path to create to the contract file it should resolve to; `rules_dir` names the directory Grok scans for companion files. A harness that expands imports gets `links` only, because its one AGENTS.md already reaches the companions. `copy` writes the file's contents instead of a symlink — required for project scope, where a link into the installer's checkout is dead on any other clone.
     """
 
     harness: str
     links: dict[Path, Path]
     rules_dir: Path | None
+    copy: bool = False
 
 
 def render_grok_rules(contract_dir: Path) -> dict[str, str]:
@@ -85,21 +86,44 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
 def plan_project(root: Path) -> dict[str, HarnessPlan]:
     """Return the project-scope shape, rooted at one repository.
 
-    Rules:   A project install writes at the repo root so the file travels with the repository and every teammate gets it on clone. Claude Code and Command Code read <root>/AGENTS.md; Grok scans <root>/.grok/rules. Claude additionally reads <root>/CLAUDE.md, which is written as a link so the two can never disagree.
+    Rules:   A project install lands real files, not links: the settings and contract are committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone — it loads no contract and, because the hook fails open, silently stops enforcing. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, so the imports resolve in place. Grok scans `<root>/.grok/rules`.
     """
     agent = root / "AGENTS.md"
     plans = {
         "claude": HarnessPlan(
-            "claude", {agent: CONTRACT_DIR / "AGENTS.md", root / "CLAUDE.md": CONTRACT_DIR / "AGENTS.md"}, None
+            "claude",
+            {agent: CONTRACT_DIR / "AGENTS.md", root / "CLAUDE.md": CONTRACT_DIR / "AGENTS.md"},
+            None,
+            copy=True,
         ),
         "commandcode": HarnessPlan(
-            "commandcode", {agent: CONTRACT_DIR / "AGENTS.md"}, None
+            "commandcode", {agent: CONTRACT_DIR / "AGENTS.md"}, None, copy=True
         ),
         "grok": HarnessPlan(
-            "grok", {agent: CONTRACT_DIR / "AGENTS.md"}, root / ".grok" / "rules"
+            "grok", {agent: CONTRACT_DIR / "AGENTS.md"}, root / ".grok" / "rules", copy=True
         ),
     }
+    for name in COMPANIONS:
+        plans["claude"].links[root / name] = CONTRACT_DIR / name
     return plans
+
+
+def vendor_skill(root: Path, skill_dir: Path, dry_run: bool) -> list[str]:
+    """Copy the skill beside the project's contract so its hook can run there.
+
+    Rules:   The project hook command addresses the script through the workspace root, so the skill must exist inside the project — a path into the installer's checkout would be dead on any other clone. Replace rather than merge, because a partial copy from an earlier version leaves stale modules that import cleanly and behave wrongly. Skip the caches so a vendored copy stays reviewable in a diff.
+    """
+    target = root / ".agents" / "skills" / skill_dir.name
+    if dry_run:
+        return [f"project: vendor {target} (dry run)"]
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(
+        skill_dir,
+        target,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    return [f"project: vendored {target}"]
 
 
 def _link(target: Path, source: Path, dry_run: bool = False) -> str:
@@ -120,19 +144,38 @@ def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     return action
 
 
-def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
-    """Create one harness's links and Grok rule files, reporting each change.
+def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
+    """Write source's contents to target and report what happened.
 
-    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing and fails silently in every harness. Report every action in file order so a partial run shows exactly what landed.
+    Rules:   Compare bytes so a re-run reports `unchanged` instead of rewriting — a project install is committed, and a spurious write would show as churn in every diff. Write through a staged sibling and move it into place so a concurrent read never sees a partial file. A dry run reports the decision and writes nothing.
+    """
+    same = target.is_file() and not target.is_symlink() and target.read_bytes() == source.read_bytes()
+    if same:
+        return "unchanged"
+    action = "replaced" if (target.is_symlink() or target.exists()) else "wrote"
+    if dry_run:
+        return action
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staged = target.with_name(target.name + ".staged")
+    shutil.copyfile(source, staged)
+    os.replace(staged, target)
+    return action
+
+
+def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
+    """Create one harness's links or copies and Grok rule files, reporting each change.
+
+    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing and fails silently in every harness. Report every action in file order so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract.
     """
     actions: list[str] = []
+    writer = _copy if plan.copy else _link
     for target, source in plan.links.items():
         if dry_run:
-            actions.append(f"{plan.harness}: {_link(target, source, dry_run=True)} {target}")
+            actions.append(f"{plan.harness}: {writer(target, source, dry_run=True)} {target}")
             continue
-        action = _link(target, source)
+        action = writer(target, source)
         if not target.exists():
-            raise SystemExit(f"install: {target} does not resolve after linking")
+            raise SystemExit(f"install: {target} does not resolve after writing")
         actions.append(f"{plan.harness}: {action} {target}")
     if plan.rules_dir is None:
         return actions
@@ -206,17 +249,23 @@ def main(argv: list[str] | None = None) -> int:
             plan.harness,
             {t: s for t, s in plan.links.items() if t not in emitted},
             plan.rules_dir,
+            plan.copy,
         )
         emitted.update(unique.links)
         for action in apply_plan(unique, CONTRACT_DIR, args.dry_run):
             print(action)
 
-    if not args.no_hooks and not args.dry_run and args.scope == "user":
+    project_root = None if args.scope == "user" else Path(args.root).expanduser().resolve()
+    if project_root is not None and not args.no_hooks:
+        for action in vendor_skill(project_root, SKILL_DIR, args.dry_run):
+            print(action)
+
+    if not args.no_hooks and not args.dry_run:
         sys.path.insert(0, str(SKILL_DIR / "hooks"))
         import install_hooks
 
         for harness in chosen:
-            for change in install_hooks.install(harness, home):
+            for change in install_hooks.install(harness, home, root=project_root):
                 print(f"hooks: {change.action} {change.path}")
     return 0
 

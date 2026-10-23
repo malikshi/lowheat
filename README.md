@@ -54,25 +54,34 @@ python3 install.py                        # all harnesses, user scope
 python3 install.py --dry-run              # show what would change
 python3 install.py --harness grok         # one harness
 python3 install.py --no-hooks             # contract only, no hook wiring
+python3 install.py --scope project --root /path/to/repo   # commit with the repo
 ```
 
 Each harness gets the shape it can actually read:
 
-| Harness | What lands | Why |
+| Harness | User scope | Project scope |
 |---|---|---|
-| Claude Code | `~/.claude/AGENTS.md`, `~/.claude/CLAUDE.md` → `contract/AGENTS.md` | Expands `@path` imports, so one link reaches the whole contract and its companions |
-| Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md` | Same — it expands `@path` imports and reads `AGENTS.md`, not `CLAUDE.md` |
-| Grok | `~/.grok/AGENTS.md` link, plus each companion as `~/.grok/rules/*.md` | **Does not expand imports.** Verified on grok 1.0.67: a marker inside an `@`-imported file was absent from the instruction context, so the companions ship as standalone rules files Grok scans |
+| Claude Code | `~/.claude/AGENTS.md`, `~/.claude/CLAUDE.md` → `contract/AGENTS.md` | `<root>/AGENTS.md` + companions, `CLAUDE.md` |
+| Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md` | `<root>/AGENTS.md` + companions |
+| Grok | `~/.grok/AGENTS.md` link, plus each companion as `~/.grok/rules/*.md` | same, under `<root>/.grok/rules/` |
 
 The Grok row is the one worth knowing: the same single `AGENTS.md` serves all
 three harnesses, but Grok would have silently received only that file and lost
 RTK, caveman, ponytail, and semble. `install.py` emits the companions there
-instead of relying on a mechanism Grok does not have. The hook script upgrades
-the same way: `install.py` wires it after the links, so a moved checkout
-repoints in one run.
+instead of relying on a mechanism Grok does not have.
+
+**User scope links; project scope copies.** A user install symlinks, so a
+`git pull` in the checkout re-syncs what every harness reads. A project install
+writes real files, because its output is committed: a symlink into the
+installing machine's checkout resolves to nothing on a teammate's clone, and
+because the hook fails open, their rules would silently stop being enforced.
+For the same reason a project hook addresses the vendored skill through
+`${CLAUDE_PROJECT_DIR:-${COMMANDCODE_PROJECT_DIR:-.}}` rather than an absolute
+path. Project scope also vendors `.agents/skills/agents-contract` into the repo
+so the hook can run there at all.
 
 A broken symlink contributes nothing and fails silently — every emitted path is
-checked before the run reports success.
+checked before the run reports success, and a re-run reports `unchanged`.
 
 ### Keeping the mirror in sync
 
@@ -93,37 +102,23 @@ python3 -m pytest tests
 
 ### Direct download (curl)
 
-Prefer cloning (above) for the full repo; to pull individual files without git:
-
-**AGENTS.md** → project root
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/AGENTS.md -o AGENTS.md
-```
-
-**RTK.md** → project root
+Prefer cloning (above) for the full repo; to pull individual files without git.
+Every contract file lives under `contract/` in the repository, so fetch it from
+there and write it where the harness reads it — `AGENTS.md` and the companions
+side by side in the project root, or the companions alone in `.grok/rules/`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/RTK.md -o RTK.md
+mkdir -p .grok/rules
+for f in AGENTS.md RTK.md semble.md caveman.md ponytail.md; do
+  curl -fsSL "https://raw.githubusercontent.com/malikshi/lowheat/main/contract/$f" -o "$f"
+done
+for f in RTK.md semble.md caveman.md ponytail.md; do
+  cp "$f" ".grok/rules/$f"
+done
 ```
 
-**semble.md** → project root
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/semble.md -o semble.md
-```
-
-**caveman.md** → project root
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/caveman.md -o caveman.md
-```
-
-**ponytail.md** → project root
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/malikshi/lowheat/main/ponytail.md -o ponytail.md
-```
+That reproduces what `install.py --scope project` does, minus the skill vendoring
+and hook wiring, so prefer the installer unless you genuinely cannot clone.
 
 ## Required binary: RTK
 

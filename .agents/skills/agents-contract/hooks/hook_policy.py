@@ -70,8 +70,8 @@ SESSION_CONTEXT = (
     "with the cheapest rung that actually runs (the semble MCP tool, the semble CLI when it "
     "executes, or rtk grep). Native Read stays correct for reading a file once its location is "
     f"known. Run the CodeDNA checker at {CHECKER_PATH} — never search the filesystem for it. "
-    f"The contract text is at {CONTRACT_PATH}; AGENTS.md at the repo root shadows it as the "
-    "source of truth."
+    f"The contract text is at {CONTRACT_PATH} — a mirror of the source at "
+    "contract/AGENTS.md in this checkout, and the text your project install copied in."
 )
 
 

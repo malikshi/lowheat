@@ -33,6 +33,7 @@ from hook_harness import HARNESS_CLAUDE, HARNESS_COMMANDCODE, HARNESS_GROK
 
 HARNESSES = (HARNESS_CLAUDE, HARNESS_GROK, HARNESS_COMMANDCODE)
 HOOK_SCRIPT_NAME = "contract_hook.py"
+SKILL_NAME = "agents-contract"
 MARKER = HOOK_SCRIPT_NAME
 HOOK_TIMEOUT_SECONDS = 20
 HOOK_MATCHER = "Bash|Grep|Glob"
@@ -71,6 +72,33 @@ def grok_hooks_path(home: Path | str) -> Path:
 def commandcode_settings_path(home: Path | str) -> Path:
     """Return the Command Code user settings file under home."""
     return Path(home) / ".commandcode" / "settings.json"
+
+
+def project_settings_path(harness: str, root: Path | str) -> Path:
+    """Return the project-scope settings file one harness reads under root.
+
+    Rules:   Each harness uses a different project path, so never reuse the user path here: Grok scans `<root>/.grok/hooks/*.json`, while Claude Code and Command Code read `<root>/.claude/settings.json` and `<root>/.commandcode/settings.json`. An unknown harness raises InstallError, matching _settings_path.
+    """
+    base = Path(root)
+    if harness == HARNESS_GROK:
+        return base / ".grok" / "hooks" / "contract.json"
+    if harness == HARNESS_CLAUDE:
+        return base / ".claude" / "settings.json"
+    if harness == HARNESS_COMMANDCODE:
+        return base / ".commandcode" / "settings.json"
+    raise InstallError(f"unknown harness: {harness}")
+
+
+def project_handler_command(python: str) -> str:
+    """Return a hook command that works from any checkout of the project.
+
+    Rules:   A project settings file is committed, so it must not carry the installing machine's absolute paths — a teammate who clones the repo would run a script that does not exist, and the hook fails open, so the rules would silently stop being enforced for them. The project install vendors the skill into `<root>/.agents/skills/agents-contract`, so the script is addressed relative to the workspace root. Claude Code and Grok export CLAUDE_PROJECT_DIR and Command Code exports COMMANDCODE_PROJECT_DIR; fall back to the working directory when neither is set, and keep the fail-open suffix.
+    """
+    relative = (
+        Path(".agents") / "skills" / SKILL_NAME / "hooks" / HOOK_SCRIPT_NAME
+    ).as_posix()
+    directory = "${CLAUDE_PROJECT_DIR:-${COMMANDCODE_PROJECT_DIR:-.}}"
+    return f"{shlex.quote(python)} \"{directory}/{relative}\"{FAIL_OPEN_SUFFIX}"
 
 
 def handler_command(python: str, script: str) -> str:
@@ -229,30 +257,52 @@ def install(
     python: str | None = None,
     script: str | None = None,
     dry_run: bool = False,
+    root: Path | str | None = None,
 ) -> list[Change]:
-    """Wire the contract hook into one harness under home.
+    """Wire the contract hook into one harness under home or root.
 
-    Rules:   Every harness merges — ours are appended last so a foreign guard keeps running first, and an earlier copy of ours is replaced so a re-run or a moved checkout never duplicates it. Grok gets no SessionStart group because it ignores one there. The interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or on the working directory.
+    Rules:   Every harness merges — ours are appended last so a foreign guard keeps running first, and an earlier copy of ours is replaced so a re-run or a moved checkout never duplicates it. Grok gets no SessionStart group because it ignores one there. In user scope the interpreter and script resolve to absolute paths at install time, so the harness never depends on PATH or the working directory. In project scope the settings file is committed, so the command addresses the vendored skill relative to the workspace root instead — an absolute path there would break for every other clone.
     """
     interpreter = _resolve_interpreter(str(python or sys.executable))
-    target = str(
-        Path(os.path.expanduser(script or Path(__file__).with_name(HOOK_SCRIPT_NAME))).resolve()
-    )
+    if root is not None:
+        command = project_handler_command(interpreter)
+        base = Path(root)
+    else:
+        command = handler_command(
+            interpreter,
+            str(
+                Path(
+                    os.path.expanduser(script or Path(__file__).with_name(HOOK_SCRIPT_NAME))
+                ).resolve()
+            ),
+        )
+        base = Path(home)
+
+    def group(matcher: str | None) -> dict[str, Any]:
+        if matcher:
+            return {
+                "matcher": matcher,
+                "hooks": [{"type": "command", "command": command, "timeout": HOOK_TIMEOUT_SECONDS}],
+            }
+        return {"hooks": [{"type": "command", "command": command, "timeout": HOOK_TIMEOUT_SECONDS}]}
+
     if harness == HARNESS_GROK:
-        groups = {"PreToolUse": [_group(HOOK_MATCHER, interpreter, target)]}
-        return [_upsert(grok_hooks_path(home), groups, HARNESS_GROK, dry_run)]
+        groups = {"PreToolUse": [group(HOOK_MATCHER)]}
+        return [_upsert(project_settings_path(harness, base) if root else grok_hooks_path(base), groups, HARNESS_GROK, dry_run)]
     if harness == HARNESS_CLAUDE:
         groups = {
-            "PreToolUse": [_group(HOOK_MATCHER, interpreter, target)],
-            "SessionStart": [_group(None, interpreter, target)],
+            "PreToolUse": [group(HOOK_MATCHER)],
+            "SessionStart": [group(None)],
         }
-        return [_upsert(claude_settings_path(home), groups, HARNESS_CLAUDE, dry_run)]
+        path = project_settings_path(harness, base) if root else claude_settings_path(base)
+        return [_upsert(path, groups, HARNESS_CLAUDE, dry_run)]
     if harness == HARNESS_COMMANDCODE:
         groups = {
-            "PreToolUse": [_group(COMMANDCODE_MATCHER, interpreter, target)],
-            "SessionStart": [_group(None, interpreter, target)],
+            "PreToolUse": [group(COMMANDCODE_MATCHER)],
+            "SessionStart": [group(None)],
         }
-        return [_upsert(commandcode_settings_path(home), groups, HARNESS_COMMANDCODE, dry_run)]
+        path = project_settings_path(harness, base) if root else commandcode_settings_path(base)
+        return [_upsert(path, groups, HARNESS_COMMANDCODE, dry_run)]
     raise InstallError(f"unknown harness: {harness}")
 
 
@@ -298,12 +348,21 @@ def _without_empty_hooks(data: Mapping[str, Any]) -> dict[str, Any]:
     return {**data, "hooks": kept}
 
 
-def uninstall(harness: str, home: Path | str, dry_run: bool = False) -> list[Change]:
-    """Remove the contract hook from one harness under home.
+def uninstall(
+    harness: str,
+    home: Path | str,
+    dry_run: bool = False,
+    root: Path | str | None = None,
+) -> list[Change]:
+    """Remove the contract hook from one harness under home or root.
 
-    Rules:   Remove only handlers carrying MARKER; leave every other hook in place and drop an event key that ends up empty. When the stripped result matches the pristine backup, write that backup back verbatim so the file returns byte for byte, comparing through _without_empty_hooks so an empty hooks key left by the strip still counts as a match. When it does not match, write the stripped object instead. Delete the Grok hook file only when nothing else remains in it and no backup claims it. A file that never held our handlers is left alone.
+    Rules:   Remove only handlers carrying MARKER; leave every other hook in place and drop an event key that ends up empty. When the stripped result matches the pristine backup, write that backup back verbatim so the file returns byte for byte, comparing through _without_empty_hooks so an empty hooks key left by the strip still counts as a match. When it does not match, write the stripped object instead. Delete the Grok hook file only when nothing else remains in it and no backup claims it. A file that never held our handlers is left alone. A project-scope run reads the project settings file, so a project unwire never touches the user wiring.
     """
-    path = _settings_path(harness, home)
+    path = (
+        project_settings_path(harness, root)
+        if root is not None
+        else _settings_path(harness, home)
+    )
     if not path.exists():
         return [Change(harness, path, "unchanged")]
     text = _read_text(path)
