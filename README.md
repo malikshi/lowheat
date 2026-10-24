@@ -71,6 +71,12 @@ three harnesses, but Grok would have silently received only that file and lost
 RTK, caveman, ponytail, and semble. `install.py` emits the companions there
 instead of relying on a mechanism Grok does not have.
 
+Because the contract text ends in `@RTK.md`, `@semble.md`, `@caveman.md`, and
+`@ponytail.md` imports, every harness that receives `AGENTS.md` also receives
+those four files beside it — in either scope, and for any `--harness` subset.
+A Command Code-only project install would otherwise commit a contract whose
+four imports resolve to nothing.
+
 **User scope links; project scope copies.** A user install symlinks, so a
 `git pull` in the checkout re-syncs what every harness reads. A project install
 writes real files, because its output is committed: a symlink into the

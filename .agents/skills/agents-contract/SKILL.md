@@ -13,9 +13,12 @@ Git Workflow, Code Review), and the Environment notes as executable steps. The
 full contract text lives in `references/contract.md`; the RTK command
 catalogue lives in `references/commands.md`. The caveman, ponytail, and semble
 companion catalogues live beside the contract itself, as `caveman.md`,
-`ponytail.md`, and `semble.md` in the checkout's `contract/` directory — not
-inside this skill directory, so do not look for them here. Read them when the
-steps below need detail.
+`ponytail.md`, and `semble.md` — in the checkout's `contract/` directory,
+reached through the `@RTK.md`, `@semble.md`, `@caveman.md`, and `@ponytail.md`
+imports at the end of the contract, and in a project install beside the root
+`AGENTS.md`, which is the same directory as `references/contract.md`'s source.
+They are never inside this skill directory, so do not look for them here. Read
+them when the steps below need detail.
 
 ## 1. Start a task — the Work Loop
 

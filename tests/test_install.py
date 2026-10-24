@@ -1,14 +1,16 @@
 """test_install.py — Tests for the per-harness contract installer.
 
-exports: class InstallerTestCase | class GrokRulesTestCase | class MirrorTestCase
+exports: class InstallerTestCase | class GrokRulesTestCase | class MirrorTestCase | class ProjectScopeTestCase | class DryRunTestCase | class ConflictGuardTestCase
 used_by: none
 rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home so a test never rewrites real harness configs, and every emitted link must resolve to the contract source.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | first cut: asserted the per-harness shapes after Grok was found not to expand @-imports, so it needs the companions as standalone rules files while the other two get one symlink
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | added the per-harness companion-import check: the existing project case applies every plan at once, so Claude's companions satisfied the imports for all three and the commandcode-only case went untested. Each subtest now gets its own root.
 """
 
 from __future__ import annotations
 
 import importlib
+import re
 import shutil
 import sys
 import tempfile
@@ -134,12 +136,47 @@ class ProjectScopeTestCase(unittest.TestCase):
         contract = (self.root / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("@RTK.md", contract)
 
+    def test_every_project_harness_resolves_the_companion_imports_it_ships(self) -> None:
+        for harness in install.HARNESSES:
+            with self.subTest(harness=harness):
+                root = Path(tempfile.mkdtemp())
+                self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+                install.main(
+                    [
+                        "--scope",
+                        "project",
+                        "--root",
+                        str(root),
+                        "--harness",
+                        harness,
+                        "--no-hooks",
+                    ]
+                )
+                contract = (root / "AGENTS.md").read_text(encoding="utf-8")
+                imported = re.findall(r"^@(\S+)$", contract, re.MULTILINE)
+                self.assertTrue(imported, harness)
+                missing = [name for name in imported if not (root / name).is_file()]
+                self.assertEqual([], missing, harness)
+
     def test_second_project_run_reports_unchanged(self) -> None:
         self.apply()
 
         actions = self.apply()
 
         self.assertTrue(all("unchanged" in action for action in actions), actions)
+
+
+class DryRunTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.home = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.home, ignore_errors=True))
+
+    def test_dry_run_reports_the_hook_wiring_and_writes_nothing(self) -> None:
+        install.main(
+            ["--home", str(self.home), "--harness", "commandcode", "--dry-run"]
+        )
+
+        self.assertFalse((self.home / ".commandcode" / "settings.json").exists())
 
 
 class ConflictGuardTestCase(unittest.TestCase):

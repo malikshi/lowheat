@@ -3,8 +3,9 @@
 exports: HARNESSES | HarnessPlan | find_conflicts | find_vendored_edits | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror | vendor_skill
 used_by: README.md → the install section
 related: contract/AGENTS.md is the source; contract/*.md are its companions; .agents/skills/agents-contract/hooks/install_hooks.py wires the hook.
-rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a vendored copy records its installed hashes in .vendored.json, so an in-place edit is refused while a stale upstream copy stays replaceable.
+rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. The contract text ends in `@`-imports for its four companions, so any harness receiving AGENTS.md must receive them beside it, in every scope and every harness subset; attaching them to one plan leaves the others loading a contract with dangling pointers. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a vendored copy records its installed hashes in .vendored.json, so an in-place edit is refused while a stale upstream copy stays replaceable.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | closed the last overwrite gap: provenance was unknowable from a path comparison alone, so a vendored file edited in place was replaced silently; vendor_skill now writes .vendored.json and find_vendored_edits diffs against it, which also keeps a stale upstream copy replaceable
+agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | plan_project attached the companions to claude only, though all three plans share the root AGENTS.md whose tail imports them — a commandcode-only project install loaded the contract with four dangling @-pointers. Companions now attach to every plan; main's emitted-set dedup keeps a multi-harness run to one write each. Also dry_run now reports hook changes instead of silently skipping them.
 """
 
 from __future__ import annotations
@@ -89,7 +90,7 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
 def plan_project(root: Path) -> dict[str, HarnessPlan]:
     """Return the project-scope shape, rooted at one repository.
 
-    Rules:   A project install lands real files, not links: the settings and contract are committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone — it loads no contract and, because the hook fails open, silently stops enforcing. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, so the imports resolve in place. Grok scans `<root>/.grok/rules`.
+    Rules:   A project install lands real files, not links: the settings and contract are committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone — it loads no contract and, because the hook fails open, silently stops enforcing. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, so the imports resolve in place. Those imports are in the contract text, so every harness that gets `<root>/AGENTS.md` needs the companions there too — including a Command Code-only install, which expands `@`-imports and would otherwise load the contract with four dangling pointers. Grok scans `<root>/.grok/rules`; it does not expand imports, so the root companions are unused there and the rules directory carries them whole.
     """
     agent = root / "AGENTS.md"
     plans = {
@@ -106,8 +107,9 @@ def plan_project(root: Path) -> dict[str, HarnessPlan]:
             "grok", {agent: CONTRACT_DIR / "AGENTS.md"}, root / ".grok" / "rules", copy=True
         ),
     }
-    for name in COMPANIONS:
-        plans["claude"].links[root / name] = CONTRACT_DIR / name
+    for plan in plans.values():
+        for name in COMPANIONS:
+            plan.links[root / name] = CONTRACT_DIR / name
     return plans
 
 
@@ -417,13 +419,17 @@ def main(argv: list[str] | None = None) -> int:
         for action in vendor_skill(project_root, SKILL_DIR, args.dry_run):
             print(action)
 
-    if not args.no_hooks and not args.dry_run:
+    if not args.no_hooks:
         sys.path.insert(0, str(SKILL_DIR / "hooks"))
         import install_hooks
 
         for harness in chosen:
-            for change in install_hooks.install(harness, home, root=project_root):
-                print(f"hooks: {change.action} {change.path}")
+            changes = install_hooks.install(
+                harness, home, root=project_root, dry_run=args.dry_run
+            )
+            for change in changes:
+                detail = f" ({change.detail})" if change.detail else ""
+                print(f"hooks: {change.action} {change.path}{detail}")
     return 0
 
 
