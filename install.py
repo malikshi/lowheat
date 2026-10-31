@@ -1,15 +1,15 @@
 """install.py — Put the contract in front of every harness that reads it.
 
-exports: HARNESSES | HarnessPlan | find_conflicts | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror
+exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | detect | find_conflicts | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror
 used_by: README.md → the install section
-used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, SKILL_DIR, HarnessPlan, apply_plan, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
+used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness; never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it and reads the one it needs on demand. Claude Code and Command Code get symlinks in user scope; Grok gets the companions as standalone files in a rules directory it scans, because it does not expand imports. Every user-scope harness also gets the skill linked into its skills directory, so the agent reads the same skill the checkout carries instead of a stale vendored copy. A broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first.
-agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | closed the last overwrite gap: provenance was unknowable from a path comparison alone, so a vendored file edited in place was replaced silently; vendor_skill now writes .vendored.json and find_vendored_edits diffs against it, which also keeps a stale upstream copy replaceable
-agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | plan_project attached the companions to claude only, though all three plans share the root AGENTS.md whose tail imports them — a commandcode-only project install loaded the contract with four dangling @-pointers. Companions now attach to every plan; main's emitted-set dedup keeps a multi-harness run to one write each. Also dry_run now reports hook changes instead of silently skipping them.
-agent:   fx | unknown | 2026-10-31 | unknown | removed the hook runtime and installer wiring, then deleted the one-shot cleanup tool; install now writes the contract only
+rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first.
 agent:   fx | unknown | 2026-10-31 | unknown | user scope now links the companions beside AGENTS.md and links the skill into each harness skills directory; the skill mirror also syncs commands.md from RTK.md, closing the stale global-copy and catalogue drift
 agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: AGENTS.md drops @-imports, CodeDNA moves to its own companion, and the skill mirrors contract plus CodeDNA plus RTK on demand
+agent:   fx | unknown | 2026-10-31 | unknown | replaced the three hardcoded harnesses with a HarnessSpec registry and added detection, Codex, OpenCode, Factory, Kilo, Pi, Cline, Gemini, Cursor, Aider, and Qwen adapters
+agent:   fx | unknown | 2026-10-31 | unknown | added Aider's config file, dropped Gemini's duplicate skill link because Gemini discovers the central .agents/skills, and verified Command Code, Grok, and OpenCode load Contract-Version 2026-10-31
+agent:   fx | unknown | 2026-10-31 | unknown | added fx, hermes, claw, jcode, omp, forge, smelt, codewhale, and copilot adapters; fx now gets regular instruction files and a real skill copy because it refuses symlinks
 """
 
 from __future__ import annotations
@@ -18,39 +18,98 @@ import argparse
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 CONTRACT_DIR = _HERE / "contract"
 SKILL_DIR = _HERE / ".agents" / "skills" / "agents-contract"
 COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md")
-HARNESSES = ("claude", "commandcode", "grok")
 
-HOME_DIR = {
-    "claude": ".claude",
-    "commandcode": ".commandcode",
-    "grok": ".grok",
-}
+
+@dataclass(frozen=True)
+class HarnessSpec:
+    """One harness's installation surface.
+
+    Rules:   `memory` names the files the harness reads as global instructions; each resolves to AGENTS.md. `global_base` overrides the directory those files land in (Jcode uses the home directory). `companions` is `beside` when the harness reads sibling files, or `rules` when it scans a directory of standalone rule documents. `project_alias` adds a project-root filename for a harness that does not read AGENTS.md. `project_rules_dir` writes the companions as standalone files under that directory. `global_files` and `project_files` map extra config files to a file under `contract/`. `skill_dir` is unset for harnesses that discover the central `.agents/skills` or read no skills. `copy_global` writes real files because fx refuses symlinked instructions; `copy_skill` recursively copies the skill because fx refuses linked skill directories. `global_install` is false for project-only harnesses whose global memory is UI-managed.
+    """
+
+    name: str
+    binaries: tuple[str, ...]
+    config_dir: str
+    memory: tuple[str, ...]
+    skill_dir: str | None = "skills"
+    companions: str = "beside"
+    project_alias: str | None = None
+    project_rules_dir: str | None = None
+    global_base: str | None = None
+    global_files: tuple[tuple[str, str], ...] = ()
+    project_files: tuple[tuple[str, str], ...] = ()
+    copy_global: bool = False
+    copy_skill: bool = False
+    global_install: bool = True
+    tier: str = "native"
+
+
+SPECS = (
+    HarnessSpec("claude", ("claude",), ".claude", ("AGENTS.md", "CLAUDE.md"), project_alias="CLAUDE.md"),
+    HarnessSpec("codex", ("codex",), ".codex", ("AGENTS.md",)),
+    HarnessSpec("commandcode", ("commandcode", "command-code"), ".commandcode", ("AGENTS.md",)),
+    HarnessSpec("grok", ("grok",), ".grok", ("AGENTS.md",), companions="rules", project_rules_dir=".grok/rules"),
+    HarnessSpec("opencode", ("opencode",), ".config/opencode", ("AGENTS.md",), skill_dir=None),
+    HarnessSpec("factory", ("droid",), ".factory", ("AGENTS.md",)),
+    HarnessSpec("kilo", ("kilo", "kilocode"), ".config/kilo", ("AGENTS.md",), skill_dir=None),
+    HarnessSpec("pi", ("pi",), ".pi/agent", ("AGENTS.md",)),
+    HarnessSpec("cline", ("cline",), ".agents", ("AGENTS.md",)),
+    HarnessSpec("agents", (), ".agents", ("AGENTS.md",), tier="agents"),
+    HarnessSpec("gemini", ("gemini",), ".gemini", ("GEMINI.md",), skill_dir=None, project_alias="GEMINI.md", tier="agents"),
+    HarnessSpec("crush", ("crush",), ".config/crush", ("CRUSH.md",), skill_dir=None, project_alias="CRUSH.md", tier="agents"),
+    HarnessSpec("cursor", ("cursor",), ".cursor", (), skill_dir=None, global_install=False, tier="agents"),
+    HarnessSpec("continue", ("cn",), ".continue", (), skill_dir=None, global_install=False, project_files=((".continue/rules/agents-contract.md", "continue.md"),), tier="alias"),
+    HarnessSpec("aider", ("aider",), ".aider", (), skill_dir=None, project_alias="CONVENTIONS.md", global_files=((".aider.conf.yml", "aider.conf.yml"),), project_files=((".aider.conf.yml", "aider.conf.yml"),), tier="alias"),
+    HarnessSpec("qwen", ("qwen", "qwen-code"), ".qwen", ("QWEN.md",), skill_dir=None, project_alias="QWEN.md", tier="alias"),
+    HarnessSpec("fx", ("fx",), ".fx", ("AGENTS.md",), copy_global=True, copy_skill=True, tier="agents"),
+    HarnessSpec("hermes", ("hermes",), ".hermes", (), skill_dir="skills", tier="agents"),
+    HarnessSpec("claw", ("openclaw", "claw"), ".openclaw", ("AGENTS.md",), skill_dir=None, global_base=".openclaw/workspace", tier="agents"),
+    HarnessSpec("jcode", ("jcode",), ".jcode", ("AGENTS.md",), skill_dir="skills", global_base="", tier="agents"),
+    HarnessSpec("omp", ("omp",), ".omp/agent", ("AGENTS.md",), skill_dir=None, tier="agents"),
+    HarnessSpec("forge", ("forge",), "forge", ("AGENTS.md",), skill_dir="skills", tier="agents"),
+    HarnessSpec("smelt", ("smelt",), ".config/smelt", ("AGENTS.md",), skill_dir="skills", tier="agents"),
+    HarnessSpec("codewhale", ("codewhale", "codew"), ".codewhale", (), skill_dir="skills", tier="agents"),
+    HarnessSpec("copilot", ("copilot",), ".copilot", (), skill_dir=None, global_files=((".copilot/copilot-instructions.md", "AGENTS.md"),), tier="agents"),
+)
+
+HARNESSES = tuple(spec.name for spec in SPECS)
+HOME_DIR = {spec.name: spec.config_dir for spec in SPECS}
+SPEC_BY_NAME = {spec.name: spec for spec in SPECS}
 
 
 @dataclass(frozen=True)
 class HarnessPlan:
     """One harness's install shape and the paths it needs.
 
-    Rules:   `links` maps a path to create to the contract file it should resolve to; `rules_dir` names the directory Grok scans for companion files. Every harness gets the companions because AGENTS.md names them by bare filename for on-demand reads. `copy` writes the file's contents instead of a symlink — required for project scope, where a link into the installer's checkout is dead on any other clone.
+    Rules:   `links` maps a path to create to the contract or skill source. `rules_dir` names a directory whose companion files are written whole because that harness scans it. `copy` writes contents instead of a symlink, required for project scope where a link into the installer's checkout is dead on another clone.
     """
 
     harness: str
     links: dict[Path, Path]
     rules_dir: Path | None
     copy: bool = False
+    dirs: dict[Path, Path] = field(default_factory=dict)
+
+
+def detect(spec: HarnessSpec, home: Path) -> bool:
+    """Return whether a harness looks installed under one home.
+
+    Rules:   A binary on PATH or an existing config directory counts. Detection never proves the harness loaded the contract; it only decides which adapters `--harness auto` selects.
+    """
+    return any(shutil.which(binary) for binary in spec.binaries) or (home / spec.config_dir).is_dir()
 
 
 def render_grok_rules(contract_dir: Path) -> dict[str, str]:
-    """Return the companion files Grok needs as standalone rule documents.
+    """Return the companion files a rules-directory harness needs as standalone documents.
 
-    Rules:   Grok reads every `*.md` directly inside a rules directory as a user rule and does not expand `@`-imports, so each companion ships whole. Keep the filename stem: Grok loads the directory alphabetically, and a stable order keeps the prompt cache warm.
+    Rules:   These harnesses read every `*.md` directly inside the rules directory, so each companion ships whole. Keep the filename stem: a stable alphabetical order keeps the prompt cache warm.
     """
     return {
         name: (contract_dir / name).read_text(encoding="utf-8")
@@ -83,56 +142,71 @@ def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> list[Path]:
     ]
 
 
-def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
-    """Return the user-scope install shape for each harness under one home.
+def _companion_links(base: Path) -> dict[Path, Path]:
+    """Return the companion links that live beside one harness's AGENTS.md.
 
-    Rules:   Resolve every target under the caller's home so a test can point at a temporary directory and never touch real configs. Claude Code reads CLAUDE.md and AGENTS.md, so it gets both; Command Code reads AGENTS.md only. Both land beside the harness's own config directory, which is where each looks for global memory. Every harness gets the companions beside its AGENTS.md so the named references resolve on demand, and the skill linked into its skills directory so the loader reads the checkout's skill rather than a stale copy.
+    Rules:   The contract names each companion by bare filename, so a harness reading sibling files gets all five. A rules-directory harness gets none here because its whole companions are written into the rules directory instead.
+    """
+    return {base / name: CONTRACT_DIR / name for name in COMPANIONS}
+
+
+def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
+    """Return the user-scope install shape for every harness with global memory.
+
+    Rules:   Resolve every target under the caller's home so a test can point at a temporary directory and never touch real configs. Each spec supplies its memory filenames, companion mode, and skill directory. Harnesses whose global memory is UI-managed are skipped here and handled only in project scope.
     """
     plans: dict[str, HarnessPlan] = {}
-    for harness in HARNESSES:
-        base = home / HOME_DIR[harness]
-        links: dict[Path, Path] = {base / "AGENTS.md": CONTRACT_DIR / "AGENTS.md"}
-        if harness == "claude":
-            links[base / "CLAUDE.md"] = CONTRACT_DIR / "AGENTS.md"
-        if harness != "grok":
-            for name in COMPANIONS:
-                links[base / name] = CONTRACT_DIR / name
-        links[base / "skills" / SKILL_DIR.name] = SKILL_DIR
-        rules_dir = base / "rules" if harness == "grok" else None
-        plans[harness] = HarnessPlan(harness, links, rules_dir)
+    for spec in SPECS:
+        if not spec.global_install:
+            continue
+        if not spec.memory and not spec.global_files and not spec.skill_dir:
+            continue
+        base = home / spec.config_dir
+        memory_base = home / spec.global_base if spec.global_base is not None else base
+        links: dict[Path, Path] = {
+            memory_base / name: CONTRACT_DIR / "AGENTS.md" for name in spec.memory
+        }
+        dirs: dict[Path, Path] = {}
+        rules_dir = memory_base / "rules" if spec.companions == "rules" else None
+        if rules_dir is None and spec.memory:
+            links.update(_companion_links(memory_base))
+        if spec.skill_dir:
+            target = base / spec.skill_dir / SKILL_DIR.name
+            if spec.copy_skill:
+                dirs[target] = SKILL_DIR
+            else:
+                links[target] = SKILL_DIR
+        for target, source in spec.global_files:
+            links[home / target] = CONTRACT_DIR / source
+        plans[spec.name] = HarnessPlan(
+            spec.name, links, rules_dir, copy=spec.copy_global, dirs=dirs
+        )
     return plans
 
 
 def plan_project(root: Path) -> dict[str, HarnessPlan]:
     """Return the project-scope shape, rooted at one repository.
 
-    Rules:   A project install lands real files, not links: the contract is committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, where the contract's named references resolve for on-demand reads. Every harness plan carries the companions because they share one root AGENTS.md. Grok scans `<root>/.grok/rules`; its rules directory carries them whole as well.
+    Rules:   A project install lands real files, not links: the contract is committed, and a symlink into the installing machine's checkout is dead on another clone. Every plan shares root AGENTS.md and the companions so named references resolve. A harness that needs its own filename gets an alias; a rules-directory harness gets its companions written there too.
     """
     agent = root / "AGENTS.md"
-    plans = {
-        "claude": HarnessPlan(
-            "claude",
-            {agent: CONTRACT_DIR / "AGENTS.md", root / "CLAUDE.md": CONTRACT_DIR / "AGENTS.md"},
-            None,
-            copy=True,
-        ),
-        "commandcode": HarnessPlan(
-            "commandcode", {agent: CONTRACT_DIR / "AGENTS.md"}, None, copy=True
-        ),
-        "grok": HarnessPlan(
-            "grok", {agent: CONTRACT_DIR / "AGENTS.md"}, root / ".grok" / "rules", copy=True
-        ),
-    }
-    for plan in plans.values():
-        for name in COMPANIONS:
-            plan.links[root / name] = CONTRACT_DIR / name
+    plans: dict[str, HarnessPlan] = {}
+    for spec in SPECS:
+        links: dict[Path, Path] = {agent: CONTRACT_DIR / "AGENTS.md"}
+        if spec.project_alias:
+            links[root / spec.project_alias] = CONTRACT_DIR / "AGENTS.md"
+        links.update(_companion_links(root))
+        for target, source in spec.project_files:
+            links[root / target] = CONTRACT_DIR / source
+        rules_dir = root / spec.project_rules_dir if spec.project_rules_dir else None
+        plans[spec.name] = HarnessPlan(spec.name, links, rules_dir, copy=True)
     return plans
 
 
 def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     """Point target at source and report what happened.
 
-    Rules:   Replace a stale link or an existing file, because a leftover copy shadows the contract and drifts from it — that is the failure this script exists to end. Remove a real directory only when the caller has already backed it up and chosen --force, since a skill directory is not a file to unlink. Create the parent directory first; a harness directory may not exist yet. A dry run reports the same decision and changes nothing, so `--dry-run` distinguishes current wiring (`unchanged`) from real drift.
+    Rules:   Replace a stale link or an existing file, because a leftover copy shadows the contract and drifts from it — that is the failure this script exists to end. Remove a real directory only when the caller has already backed it up and chosen --force, since a skill directory is not a file to unlink. Create the parent directory first; a harness directory may not exist yet. A dry run reports the same decision and changes nothing.
     """
     current = target.is_symlink() and Path(os.path.realpath(target)) == source
     if current:
@@ -150,12 +224,27 @@ def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     return action
 
 
+def _same_tree(left: Path, right: Path) -> bool:
+    """Return whether two directories contain the same relative files and bytes.
+
+    Rules:   A copied skill is idempotent only when its file set and contents match; otherwise the next install must refresh it. Ignore directory mtimes, which every copy changes.
+    """
+    if not left.is_dir() or left.is_symlink() or not right.is_dir():
+        return False
+    left_files = {path.relative_to(left) for path in left.rglob("*") if path.is_file()}
+    right_files = {path.relative_to(right) for path in right.rglob("*") if path.is_file()}
+    return left_files == right_files and all(
+        (left / name).read_bytes() == (right / name).read_bytes()
+        for name in left_files
+    )
+
+
 def find_conflicts(
     plans: dict[str, HarnessPlan], chosen: tuple[str, ...], contract_dir: Path
 ) -> list[Path]:
     """Return existing files an install would overwrite with different content.
 
-    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions, so it must be refused rather than replaced. A directory target is always refused because the only directory this script links is the skill, and a real directory there belongs to the user. Grok's rules files count too: they are written by apply_plan outside `links`, so guarding only `links` left a user's own .grok/rules/RTK.md silently clobbered.
+    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions, so it must be refused rather than replaced. A directory target is always refused because the only directory this script links is the skill, and a real directory there belongs to the user. Rules-directory files count too: they are written by apply_plan outside `links`.
     """
     conflicts: list[Path] = []
 
@@ -181,6 +270,11 @@ def find_conflicts(
                 note_directory(target)
             else:
                 note(target, source.read_bytes())
+        for target, source in plan.dirs.items():
+            if target.is_symlink() or not target.exists():
+                continue
+            if not _same_tree(target, source) and target not in conflicts:
+                conflicts.append(target)
         if plan.rules_dir is not None:
             for name, text in render_grok_rules(contract_dir).items():
                 note(plan.rules_dir / name, text.encode())
@@ -190,7 +284,7 @@ def find_conflicts(
 def backup(target: Path) -> Path:
     """Copy target to a .bak before it is overwritten.
 
-    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Copy a real directory recursively, since the only directory target is a skill and --force must preserve it whole. Return the path written so the caller can report it.
+    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Copy a real directory recursively, since the only directory target is a skill and --force must preserve it whole. Return the path written so the caller reports it.
     """
     directory, stem = target.parent, target.name
     directory.mkdir(parents=True, exist_ok=True)
@@ -209,7 +303,7 @@ def backup(target: Path) -> Path:
 def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
     """Write source's contents to target and report what happened.
 
-    Rules:   Compare bytes so a re-run reports `unchanged` instead of rewriting — a project install is committed, and a spurious write would show as churn in every diff. Write through a staged sibling and move it into place so a concurrent read never sees a partial file. A dry run reports the decision and writes nothing.
+    Rules:   Compare bytes so a re-run reports `unchanged` instead of rewriting — a project install is committed, and a spurious write shows as churn. Write through a staged sibling and move it into place so a concurrent read never sees a partial file. A dry run reports the decision and writes nothing.
     """
     same = target.is_file() and not target.is_symlink() and target.read_bytes() == source.read_bytes()
     if same:
@@ -225,9 +319,9 @@ def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
 
 
 def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
-    """Create one harness's links or copies and Grok rule files, reporting each change.
+    """Create one harness's links or copies and rules files, reporting each change.
 
-    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing and fails silently in every harness. Report every action in file order so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract.
+    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing. Report every action so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract.
     """
     actions: list[str] = []
     writer = _copy if plan.copy else _link
@@ -239,6 +333,26 @@ def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str
         if not target.exists():
             raise SystemExit(f"install: {target} does not resolve after writing")
         actions.append(f"{plan.harness}: {action} {target}")
+    for target, source in plan.dirs.items():
+        same = _same_tree(target, source)
+        if dry_run:
+            action = "unchanged" if same else ("replaced" if target.is_symlink() or target.exists() else "wrote")
+            actions.append(f"{plan.harness}: {action} {target}")
+            continue
+        if same:
+            actions.append(f"{plan.harness}: unchanged {target}")
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staged = target.with_name(target.name + ".staged")
+        if staged.exists():
+            shutil.rmtree(staged)
+        shutil.copytree(source, staged)
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        elif target.exists():
+            shutil.rmtree(target)
+        os.replace(staged, target)
+        actions.append(f"{plan.harness}: wrote {target}")
     if plan.rules_dir is None:
         return actions
     for name, text in render_grok_rules(contract_dir).items():
@@ -260,23 +374,39 @@ def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str
     return actions
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Wire the contract into every harness, then sync the skill mirror.
+def print_harnesses(home: Path) -> None:
+    """Print the adapter registry with detection status.
 
-    Rules:   Refuse to run when the contract source is missing — a half-installed contract is worse than none, because the harness would load a stale copy. Print every action; exit 0 whether or not anything changed, so a re-run is safe in a script.
+    Rules:   Report the tier and every candidate binary so a missing install is actionable. Detection is advisory, not proof that the harness loads the contract.
+    """
+    for spec in SPECS:
+        status = "detected" if detect(spec, home) else "missing"
+        print(
+            f"{spec.name:12} {spec.tier:7} {status:8} "
+            f"config={spec.config_dir} binaries={','.join(spec.binaries) or '-'}"
+        )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Wire the contract into harnesses, then sync the skill mirror.
+
+    Rules:   Refuse to run when the contract source is missing — a half-installed contract is worse than none. Print every action; exit 0 whether or not anything changed, so a re-run is safe in a script. `--list-harnesses` and `--detect` are read-only.
     """
     parser = argparse.ArgumentParser(
         description="Install the lowheat contract into each harness."
     )
     parser.add_argument("--home", default=str(Path.home()), help="home to wire")
     parser.add_argument(
-        "--harness", choices=(*HARNESSES, "all"), default="all", help="which to wire"
+        "--harness",
+        choices=(*HARNESSES, "all", "auto"),
+        default="all",
+        help="which to wire; auto selects detected harnesses",
     )
     parser.add_argument(
         "--scope",
         choices=("user", "project"),
         default="user",
-        help="user scope wires ~/.<harness>; project scope writes the repo root",
+        help="user scope wires harness config dirs; project scope writes the repo root",
     )
     parser.add_argument(
         "--root", default=".", help="project root for --scope project"
@@ -285,16 +415,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="overwrite an existing AGENTS.md, keeping a .bak of it",
+        help="overwrite an existing contract file, keeping a .bak of it",
+    )
+    parser.add_argument(
+        "--list-harnesses",
+        action="store_true",
+        help="print supported harnesses and exit",
+    )
+    parser.add_argument(
+        "--detect",
+        action="store_true",
+        help="print harness detection status and exit",
     )
     args = parser.parse_args(argv)
+
+    home = Path(args.home).expanduser()
+    if args.list_harnesses or args.detect:
+        print_harnesses(home)
+        return 0
 
     if not (CONTRACT_DIR / "AGENTS.md").is_file():
         print(f"install: {CONTRACT_DIR / 'AGENTS.md'} is missing", file=sys.stderr)
         return 1
 
-    home = Path(args.home).expanduser()
-    chosen = HARNESSES if args.harness == "all" else (args.harness,)
     project_root = None if args.scope == "user" else Path(args.root).expanduser().resolve()
     if project_root is not None and project_root == _HERE:
         print(
@@ -303,6 +446,17 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+    if args.harness == "all":
+        chosen = HARNESSES
+    elif args.harness == "auto":
+        chosen = tuple(spec.name for spec in SPECS if detect(spec, home))
+        if not chosen:
+            print("install: no harness detected under this home", file=sys.stderr)
+            return 1
+    else:
+        chosen = (args.harness,)
+
     plans = (
         plan_harnesses(home)
         if args.scope == "user"
@@ -338,8 +492,10 @@ def main(argv: list[str] | None = None) -> int:
             {t: s for t, s in plan.links.items() if t not in emitted},
             plan.rules_dir,
             plan.copy,
+            plan.dirs,
         )
         emitted.update(unique.links)
+        emitted.update(unique.dirs)
         for action in apply_plan(unique, CONTRACT_DIR, args.dry_run):
             print(action)
 

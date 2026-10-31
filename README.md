@@ -7,21 +7,24 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 
 | Path | Purpose |
 |---|---|
-| `install.py` | Per-harness installer — symlinks the contract, companions, and skill where each harness reads them, writes Grok's rules files, and syncs the skill references |
+| `install.py` | Adapter-driven installer — links or copies the contract, companions, aliases, skill, and rules files where each harness reads them |
 | `contract/AGENTS.md` | Canonical thin contract — operating principles, Work Loop, engineering standards, execution & delivery, environment |
 | `contract/codedna.md` | Full CodeDNA convention — module headers, function annotations, inline rules, checker behaviour |
 | `contract/RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
 | `contract/semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
 | `contract/caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
+| `contract/aider.conf.yml` | Aider config that reads the project `CONVENTIONS.md` alias |
+| `contract/continue.md` | Continue project rule that points at `AGENTS.md` and its companions |
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
 | `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/codedna.md` | Byte-identical mirror of `contract/codedna.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/commands.md` | Byte-identical mirror of `contract/RTK.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 file suffixes, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
-| `tests/test_install.py` | Tests for the per-harness install shapes, Grok rules rendering, skill links, and all three mirrors |
+| `tests/test_install.py` | Tests for the adapter registry, per-harness install shapes, Grok rules rendering, skill links, and all three mirrors |
 | `tests/test_docs.py` | Tests for contract thinness, version line, named companions, skill mirrors, and reference paths |
+| `HARNESSES.md` | Supported harnesses, install surfaces, verified versions, and smoke-test status |
 | `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
 | `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
 | `LICENSE` | MIT |
@@ -55,39 +58,59 @@ cd lowheat
 One command wires the contract into every harness, with no hand-copied files:
 
 ```bash
-python3 install.py                        # all harnesses, user scope
+python3 install.py                        # all supported harnesses, user scope
 python3 install.py --dry-run              # show what would change
+python3 install.py --list-harnesses       # registry, binaries, config dirs
+python3 install.py --detect               # installed vs missing
+python3 install.py --harness auto         # only detected harnesses
 python3 install.py --harness grok         # one harness
 python3 install.py --scope project --root /path/to/repo   # commit with the repo
 python3 install.py --scope project --root . --force       # replace a foreign AGENTS.md
 ```
 
-Each harness gets the shape it can actually read:
+Each harness gets the shape it can actually read. User scope links; project
+scope copies.
 
 | Harness | User scope | Project scope |
 |---|---|---|
-| Claude Code | `~/.claude/AGENTS.md`, `~/.claude/CLAUDE.md` → `contract/AGENTS.md`, companions beside them, skill at `~/.claude/skills/agents-contract` | `<root>/AGENTS.md` + companions, `CLAUDE.md` |
-| Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md`, companions beside it, skill at `~/.commandcode/skills/agents-contract` | `<root>/AGENTS.md` + companions |
-| Grok | `~/.grok/AGENTS.md` link, each companion as `~/.grok/rules/*.md`, skill at `~/.grok/skills/agents-contract` | same, under `<root>/.grok/rules/` |
+| Claude Code | `~/.claude/{AGENTS,CLAUDE}.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions, `CLAUDE.md` |
+| Codex | `~/.codex/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
+| Command Code | `~/.commandcode/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
+| Grok | `~/.grok/AGENTS.md`, `.grok/rules/*.md`, `skills/agents-contract` | `AGENTS.md`, companions, `.grok/rules/*.md` |
+| OpenCode | `~/.config/opencode/AGENTS.md`, companions | `AGENTS.md`, companions |
+| Factory Droid | `~/.factory/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
+| Kilo | `~/.config/kilo/AGENTS.md`, companions | `AGENTS.md`, companions |
+| Pi | `~/.pi/agent/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
+| Central `.agents` | `~/.agents/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
+| Cline | `~/.agents/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
+| Gemini CLI | `~/.gemini/GEMINI.md`, companions | `GEMINI.md`, companions |
+| Crush | `~/.config/crush/CRUSH.md`, companions | `CRUSH.md`, companions |
+| Qwen Code | `~/.qwen/QWEN.md`, companions | `QWEN.md`, companions |
+| fx | `~/.fx/AGENTS.md`, companions as regular files, `~/.fx/skills/agents-contract` | `AGENTS.md`, companions |
+| Hermes | `~/.hermes/skills/agents-contract`; project instructions only | `AGENTS.md`, companions |
+| OpenClaw / claw | `~/.openclaw/workspace/AGENTS.md`, companions; `.agents/skills` fallback | `AGENTS.md`, companions |
+| Jcode | `~/AGENTS.md`, companions, `~/.jcode/skills/agents-contract` | `AGENTS.md`, companions |
+| OMP | `~/.omp/agent/AGENTS.md`, companions; `.agents/skills` fallback | `AGENTS.md`, companions |
+| Forge | `~/forge/AGENTS.md`, companions, `~/forge/skills/agents-contract` | `AGENTS.md`, companions |
+| Smelt | `~/.config/smelt/AGENTS.md`, companions, `~/.config/smelt/skills/agents-contract` | `AGENTS.md`, companions |
+| Codewhale | `~/.codewhale/skills/agents-contract`; project instructions only | `AGENTS.md`, companions |
+| Copilot CLI | `~/.copilot/copilot-instructions.md`; `.agents/skills` fallback | `AGENTS.md`, companions |
+| Aider | `~/.aider.conf.yml` → reads project `CONVENTIONS.md` | `CONVENTIONS.md`, `.aider.conf.yml`, companions |
+| Cursor | — (project only) | `AGENTS.md`, companions |
+| Continue | — (project only) | `AGENTS.md`, companions, `.continue/rules/agents-contract.md` |
 
-The Grok row is the one worth knowing: the same `AGENTS.md` serves all three
-harnesses, but Grok would have silently received only that file and lost the
-companions the contract names. `install.py` emits them there as standalone
-rules instead of relying on a mechanism Grok does not have.
+The Grok row is the one worth knowing: Grok scans standalone rule files and
+does not expand imports, so its companions are written into `.grok/rules`.
+Every other adapter receives the five companions beside the contract or alias;
+`AGENTS.md` names them by bare filename for on-demand reads.
 
-`AGENTS.md` names `codedna.md`, `RTK.md`, `semble.md`, `caveman.md`, and
-`ponytail.md` by bare filename for on-demand reads. Every harness that receives
-the contract also receives those five files — beside `AGENTS.md` for Claude Code
-and Command Code, as `.grok/rules/*.md` for Grok — in either scope and for any
-`--harness` subset, so a named reference always resolves without loading every
-reference into context up front.
-
-**User scope links; project scope copies.** A user install symlinks the
+**User scope normally links; project scope copies.** A user install symlinks the
 contract, companions, and skill, so a `git pull` in the checkout re-syncs what
 every harness reads; Grok's rules directory is refreshed on each installer run.
-A project install writes real files, because its output is committed: a symlink
-into the installing machine's checkout resolves to nothing on a teammate's
-clone.
+`fx` is the exception: it refuses symlinked instructions and linked skill
+directories, so its adapter writes regular files and a real skill copy. A project
+install writes real files, because its output is committed: a symlink into the
+installing machine's checkout resolves to nothing on a teammate's clone.
 
 A broken symlink contributes nothing and fails silently — every emitted path is
 checked before the run reports success, and a re-run reports `unchanged`.

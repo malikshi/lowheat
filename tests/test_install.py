@@ -48,16 +48,127 @@ class InstallerTestCase(unittest.TestCase):
                         install.CONTRACT_DIR / name, plans[harness].links[base / name]
                     )
 
-    def test_user_scope_links_the_skill_into_each_harness(self) -> None:
+    def test_user_scope_links_the_skill_into_each_capable_harness(self) -> None:
         plans = install.plan_harnesses(self.home)
 
-        for harness in install.HARNESSES:
+        for spec in install.SPECS:
+            if not spec.global_install or not spec.skill_dir:
+                continue
+            with self.subTest(harness=spec.name):
+                base = self.home / spec.config_dir
+                target = base / spec.skill_dir / install.SKILL_DIR.name
+                if spec.copy_skill:
+                    self.assertEqual(install.SKILL_DIR, plans[spec.name].dirs[target])
+                else:
+                    self.assertEqual(install.SKILL_DIR, plans[spec.name].links[target])
+
+    def test_codex_opencode_factory_kilo_pi_and_cline_get_contracts(self) -> None:
+        plans = install.plan_harnesses(self.home)
+
+        for harness in ("codex", "opencode", "factory", "kilo", "pi", "cline"):
             with self.subTest(harness=harness):
                 base = self.home / install.HOME_DIR[harness]
                 self.assertEqual(
-                    install.SKILL_DIR,
-                    plans[harness].links[base / "skills" / install.SKILL_DIR.name],
+                    install.CONTRACT_DIR / "AGENTS.md", plans[harness].links[base / "AGENTS.md"]
                 )
+
+    def test_gemini_uses_gemini_md(self) -> None:
+        plan = install.plan_harnesses(self.home)["gemini"]
+        base = self.home / ".gemini"
+
+        self.assertEqual(install.CONTRACT_DIR / "AGENTS.md", plan.links[base / "GEMINI.md"])
+        self.assertNotIn(base / "AGENTS.md", plan.links)
+
+    def test_gemini_crush_and_qwen_use_their_aliases(self) -> None:
+        plans = install.plan_harnesses(self.home)
+
+        for harness, alias in (
+            ("gemini", "GEMINI.md"),
+            ("crush", "CRUSH.md"),
+            ("qwen", "QWEN.md"),
+        ):
+            with self.subTest(harness=harness):
+                base = self.home / install.HOME_DIR[harness]
+                self.assertEqual(
+                    install.CONTRACT_DIR / "AGENTS.md", plans[harness].links[base / alias]
+                )
+                self.assertNotIn(base / "AGENTS.md", plans[harness].links)
+
+    def test_aider_gets_global_config_and_project_alias(self) -> None:
+        user = install.plan_harnesses(self.home)["aider"]
+        project = install.plan_project(self.home)["aider"]
+
+        self.assertEqual(
+            install.CONTRACT_DIR / "aider.conf.yml",
+            user.links[self.home / ".aider.conf.yml"],
+        )
+        self.assertEqual(
+            install.CONTRACT_DIR / "AGENTS.md",
+            project.links[self.home / "CONVENTIONS.md"],
+        )
+        self.assertEqual(
+            install.CONTRACT_DIR / "aider.conf.yml",
+            project.links[self.home / ".aider.conf.yml"],
+        )
+
+    def test_continue_writes_a_project_rule(self) -> None:
+        project = install.plan_project(self.home)["continue"]
+
+        self.assertEqual(
+            install.CONTRACT_DIR / "continue.md",
+            project.links[self.home / ".continue/rules/agents-contract.md"],
+        )
+        self.assertNotIn("continue", install.plan_harnesses(self.home))
+
+    def test_named_harnesses_map_to_their_global_surfaces(self) -> None:
+        plans = install.plan_harnesses(self.home)
+        cases = {
+            "fx": self.home / ".fx" / "AGENTS.md",
+            "hermes": self.home / ".hermes" / "skills" / "agents-contract",
+            "claw": self.home / ".openclaw" / "workspace" / "AGENTS.md",
+            "jcode": self.home / "AGENTS.md",
+            "omp": self.home / ".omp" / "agent" / "AGENTS.md",
+            "forge": self.home / "forge" / "AGENTS.md",
+            "smelt": self.home / ".config" / "smelt" / "AGENTS.md",
+            "codewhale": self.home / ".codewhale" / "skills" / "agents-contract",
+            "copilot": self.home / ".copilot" / "copilot-instructions.md",
+        }
+
+        for harness, target in cases.items():
+            with self.subTest(harness=harness):
+                self.assertIn(target, plans[harness].links)
+
+        self.assertIn(
+            self.home / ".jcode" / "skills" / "agents-contract",
+            plans["jcode"].links,
+        )
+        self.assertIn(
+            self.home / "forge" / "skills" / "agents-contract",
+            plans["forge"].links,
+        )
+        self.assertTrue(plans["fx"].copy)
+        self.assertIn(
+            self.home / ".fx" / "skills" / "agents-contract",
+            plans["fx"].dirs,
+        )
+
+    def test_detect_accepts_a_config_directory(self) -> None:
+        (self.home / ".config" / "opencode").mkdir(parents=True)
+        absent = install.HarnessSpec(
+            "absent", ("definitely-not-installed-lowheat",), ".absent", ()
+        )
+
+        self.assertTrue(install.detect(install.SPEC_BY_NAME["opencode"], self.home))
+        self.assertFalse(install.detect(absent, self.home))
+
+    def test_auto_selects_only_detected_harnesses(self) -> None:
+        (self.home / ".gemini").mkdir(parents=True)
+
+        code = install.main(
+            ["--home", str(self.home), "--harness", "auto", "--dry-run"]
+        )
+
+        self.assertEqual(0, code)
 
     def test_commandcode_gets_agents_md_without_claude_filename(self) -> None:
         plans = install.plan_harnesses(self.home)
@@ -190,8 +301,10 @@ class ProjectScopeTestCase(unittest.TestCase):
                 {t: s for t, s in plan.links.items() if t not in emitted},
                 plan.rules_dir,
                 plan.copy,
+                plan.dirs,
             )
             emitted.update(unique.links)
+            emitted.update(unique.dirs)
             actions.extend(install.apply_plan(unique, install.CONTRACT_DIR, dry_run))
         return actions
 
@@ -218,6 +331,22 @@ class ProjectScopeTestCase(unittest.TestCase):
         self.assertNotRegex(contract, r"(?m)^@\S+$")
         for name in install.COMPANIONS:
             self.assertIn(name, contract)
+
+    def test_project_aliases_cover_non_agents_harnesses(self) -> None:
+        plans = install.plan_project(self.root)
+
+        for harness, alias in (
+            ("claude", "CLAUDE.md"),
+            ("gemini", "GEMINI.md"),
+            ("crush", "CRUSH.md"),
+            ("aider", "CONVENTIONS.md"),
+            ("qwen", "QWEN.md"),
+        ):
+            with self.subTest(harness=harness):
+                self.assertEqual(
+                    install.CONTRACT_DIR / "AGENTS.md",
+                    plans[harness].links[self.root / alias],
+                )
 
     def test_every_project_harness_ships_the_companions_it_names(self) -> None:
         for harness in install.HARNESSES:

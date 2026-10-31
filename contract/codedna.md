@@ -140,11 +140,10 @@ checker the agents-contract skill ships after any annotation edit:
 `scripts/codedna_check.py` beside that skill's `SKILL.md`. Resolve the path from
 the skill directory the harness reports and never search the filesystem for it —
 a `find /` sweep for this script is slow enough to be killed. In user scope the
-skill is symlinked into each harness config directory, so the path is
-`~/.commandcode/skills/agents-contract/scripts/codedna_check.py`,
-`~/.claude/skills/agents-contract/scripts/codedna_check.py`, or
-`~/.grok/skills/agents-contract/scripts/codedna_check.py`; in the lowheat
-checkout it is `.agents/skills/agents-contract/scripts/codedna_check.py`.
+skill is linked into each harness config directory, so the path is under that
+harness's `skills/agents-contract/scripts/codedna_check.py` (for example
+`~/.claude`, `~/.codex`, `~/.commandcode`, `~/.grok`, or `~/.agents`); in the
+lowheat checkout it is `.agents/skills/agents-contract/scripts/codedna_check.py`.
 Skip the run when an install ships no script. With no flags it
 checks L1 headers (missing
 files/fields, `filename — description` form, field order, `used_by:` targets
