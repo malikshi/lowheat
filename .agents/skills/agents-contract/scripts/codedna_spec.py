@@ -290,6 +290,7 @@ class LanguageProfile:
         triple_single_quotes: bool = False,
         raw_strings: bool = False,
         here_strings: bool = False,
+        php_mode: bool = False,
         prefixes: tuple[str, ...] | None = None,
     ) -> None:
         self.name = name
@@ -312,6 +313,7 @@ class LanguageProfile:
         self.triple_single_quotes = triple_single_quotes
         self.raw_strings = raw_strings
         self.here_strings = here_strings
+        self.php_mode = php_mode
         strip = list(self.line_markers) + list(self.word_markers)
         for marker in self.block_markers:
             strip.extend((marker.open, marker.close))
@@ -661,6 +663,7 @@ _register(
         "php",
         ("//", "#"),
         (_C_BLOCK,),
+        php_mode=True,
         prologue=("<?php", "<?"),
         prefixes=("//", "#", "/*", "*/"),
     ),
@@ -717,7 +720,7 @@ _register(
 )
 _register(
     (".ex", ".exs"),
-    _profile("elixir", ("#",),  prefixes=("#",)),
+    _profile("elixir", ("#",), triple_quotes=True, prefixes=("#",)),
 )
 _register(
     (".erl", ".hrl"),
@@ -788,7 +791,7 @@ _register(
 )
 _register(
     (".jl",),
-    _profile("julia", ("#",), (BlockMarker("#=", "=#", nested=True),),  prefixes=("#", "#=", "=#")),
+    _profile("julia", ("#",), (BlockMarker("#=", "=#", nested=True),), triple_quotes=True, prefixes=("#", "#=", "=#")),
 )
 _register(
     (".nim",),

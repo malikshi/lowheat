@@ -28,6 +28,7 @@ def mask_code(
     Rules:   Block markers are tried longest-first and before line markers; `nested` counts the opener again inside the body; an `at_line_start` marker opens only at column 0. String, template, and long-bracket interiors blank; JS templates track `${...}` nesting; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
     """
     js_family = profile.backtick == "js"
+    in_php = not profile.php_mode
     out: list[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -35,6 +36,21 @@ def mask_code(
         if c == "\n":
             out.append(c)
             i += 1
+            continue
+        if profile.php_mode and not in_php:
+            opener = _php_opener(text, i)
+            if opener:
+                out.append(opener)
+                i += len(opener)
+                in_php = True
+            else:
+                out.append(c)
+                i += 1
+            continue
+        if profile.php_mode and text.startswith("?>", i):
+            out.append("?>")
+            i += 2
+            in_php = False
             continue
         long_comment = _long_bracket_at(profile.long_bracket, text, i)
         if long_comment is not None:
@@ -159,6 +175,17 @@ def _regex_can_start(text: str, index: int) -> bool:
     while cursor >= 0 and (text[cursor].isalnum() or text[cursor] == "_"):
         cursor -= 1
     return text[cursor + 1:end] in _REGEX_KEYWORDS
+
+
+def _php_opener(text: str, index: int) -> str:
+    """Return the PHP open tag starting at one position, or an empty string.
+
+    Rules:   Both `<?php` and the short echo `<?=` switch modes; markup before an open tag is data, so its `#` lines never read as comments.
+    """
+    for opener in ("<?php", "<?="):
+        if text.startswith(opener, index):
+            return opener
+    return ""
 
 
 def _block_at(profile: LanguageProfile, text: str, index: int) -> BlockMarker | None:

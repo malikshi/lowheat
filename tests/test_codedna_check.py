@@ -1468,6 +1468,9 @@ FALSE_POSITIVE_CORPUS = [
     (".nim", 'let s = "# not a comment"\n'),
     (".jl", 's = "# not a comment"\n'),
     (".ps1", '$x = 1 # Rules: keep it.\nWrite-Host "# not a comment"\n'),
+    (".php", "?>\n# markup heading is output text\n<p># also output</p>\n<?php\necho 1;\n"),
+    (".ex", 'x = 1\n"""\n# not a comment\n"""\n'),
+    (".jl", 'x = 1\n"""\n# not a comment\n"""\n'),
 ]
 
 
