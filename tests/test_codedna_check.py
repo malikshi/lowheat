@@ -1367,6 +1367,12 @@ class EverySuffixTestCase(CodednaCheckTestCase):
                 self.assertEqual([], self.checker.check_file(path, self.root), suffix)
                 self.assertEqual([], self.checker.check_comment_content(path), suffix)
 
+    def test_at_prefixed_rem_header_is_clean(self) -> None:
+        text = language_header(".bat", "REM").replace("REM", "@REM") + "echo ok\n"
+        path = self.write("src/quiet.bat", text)
+        self.assertEqual([], self.checker.check_file(path, self.root))
+        self.assertEqual([], self.checker.check_comment_content(path))
+
     def test_uppercase_suffix_resolves_to_the_same_profile(self) -> None:
         text = language_fixture(".r", "#", "sample <- 1")
         upper = self.write("src/UPPER.R", text)

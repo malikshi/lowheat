@@ -169,7 +169,7 @@ DEFAULT_IGNORED_DIRS = (
 
 _MARKER_PREFIX = (
     r"(?://+|<!--|-->|/\*|\*/|\{-|-\}|\(\*|\*\)|<#|#>|"
-    r"=begin|=end|=pod|=cut|\*+|#+|;+|--+|%+|'+|!+|::+|(?i:REM)\b)"
+    r"=begin|=end|=pod|=cut|\*+|#+|;+|--+|%+|'+|!+|::+|@?(?i:REM)\b)"
 )
 _FIELD_LINE = re.compile(
     rf"^\s*(?:{_MARKER_PREFIX})?\s*(exports|used_by|related|rules|agent|message):\s*(.*)$"
@@ -331,7 +331,8 @@ class LanguageProfile:
             return False
         if any(stripped.startswith(p) for p in self.line_markers):
             return True
-        lowered = stripped.lower()
+        lowered = stripped[1:] if stripped.startswith("@") else stripped
+        lowered = lowered.lower()
         if any(_word_marker_at(lowered, word) for word in self.word_markers):
             return True
         return any(
@@ -347,10 +348,11 @@ class LanguageProfile:
         for prefix in self.strip_prefixes:
             if stripped.startswith(prefix):
                 return stripped[len(prefix):]
-        lowered = stripped.lower()
+        offset = 1 if stripped.startswith("@") else 0
+        lowered = stripped[offset:].lower()
         for word in self.word_markers:
             if _word_marker_at(lowered, word):
-                return stripped[len(word):]
+                return stripped[offset + len(word):]
         return None
 
     def is_directive(self, stripped: str) -> bool:
