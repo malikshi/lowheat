@@ -26,9 +26,14 @@ them short and factual; constraints still belong in `rules:`/`Rules:`.
 ## Scope
 
 Apply CodeDNA annotations to every source file in the project whose language
-supports comments: Python, Go, JavaScript, TypeScript, Rust, shell, and any
-other commented source language. Do not annotate documentation, plain text, or
-commentless data formats: `.md`, `.tex`, `.rst`, `.txt`, `.json`, and similar.
+supports comments. The checker covers Python, Go, JavaScript/JSX/mjs/cjs,
+TypeScript/TSX, Rust, shell (sh/bash/zsh), CSS, HTML/htm, C, C++, Objective-C,
+Objective-C++, C#, Java, Kotlin, Scala, Groovy, Swift, Ruby, PHP, Perl, Lua,
+Haskell, Elixir, Erlang, Clojure, Dart, SQL, PowerShell, batch, VB, F#, OCaml,
+R, Julia, Zig, Nim, Crystal, D, Solidity, HCL/Terraform, Fortran, Elm, and
+Vue/Svelte/Astro, with a safe generic fallback for any other commented source
+language. Do not annotate documentation, plain text, or commentless data
+formats: `.md`, `.tex`, `.rst`, `.txt`, `.json`, and similar.
 
 ## Module header (L1)
 
@@ -149,8 +154,12 @@ checks L1 headers (missing
 files/fields, `filename — description` form, field order, `used_by:` targets
 that do not exist, `exports:` names absent from the file body, agent-entry
 shape and the 5-entry cap) AND comment content (prose, commented-out code, TODO
-markers outside `Rules:`/`message:`), across Python, Go, JavaScript/JSX/mjs/cjs,
-TypeScript/TSX, Rust, shell, CSS, and HTML, with line numbers on every finding.
+markers outside `Rules:`/`message:`), across the language set above (C, C++,
+Objective-C, C#, Java, Kotlin, Scala, Groovy, Swift, Ruby, PHP, Perl, Lua,
+Haskell, Elixir, Erlang, Clojure, Dart, SQL, PowerShell, batch, VB, F#, OCaml,
+R, Julia, Zig, Nim, Crystal, D, Solidity, HCL/Terraform, Fortran, Elm,
+Vue/Svelte/Astro, and the earlier suffix set), with line numbers on every
+finding.
 `--skip-content` limits it to the header checks. It is line-based and errs toward
 reporting; a false positive is a signal that the comment belongs under
 `Rules:`/`message:`. When the scanned paths hold an `AGENTS.md`, it also lints

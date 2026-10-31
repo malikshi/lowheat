@@ -1,13 +1,13 @@
 """test_codedna_check.py — Tests for the CodeDNA L1 header drift checker.
 
-exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase
+exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase | class EverySuffixTestCase | class DialectContentTestCase | class CliEntryPointTestCase | language_header | language_fixture | prose_body
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | added masking edge tests after the split: template expressions, escapes, unterminated literals, tokenize failure, and heredoc quote handling; strengthened to pin mask_code output directly after an independent review
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | added prose-above-Python-docstring regression test after fixing the header-zone gap in codedna_content.py
 agent:   fx | unknown | 2026-10-31 | unknown | added regression tests for multiline block comments, trailing comments, incomplete agent entries, raw docstrings, unquoted CSS URLs, and example directives
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | added HTML regressions for `/*` in markup and a header closing line with an agent entry, plus shebang coverage across Python, the JS family, and shell
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | added the every-suffix matrix, per-family directive exemption, lookalike corpus, and a subprocess CLI determinism test
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import importlib.util
 import io
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -1144,6 +1145,438 @@ class MaskCodeEdgeTestCase(CodednaCheckTestCase):
         findings = self.checker.check_comment_content(path)
         self.assertEqual(1, len(findings), findings)
         self.assertIn("outside the permitted content", findings[0])
+
+
+# Rules: one row per supported suffix — marker, code line, optional file prologue. The Python row is
+# separate because its L1 header lives in a docstring; every other dialect proves its comment grammar.
+LANGUAGE_CASES = {
+    ".py": ("#", "x = 1"),
+    ".go": ("//", "package sample"),
+    ".js": ("//", "const x = 1;"),
+    ".jsx": ("//", "const x = 1;"),
+    ".mjs": ("//", "const x = 1;"),
+    ".cjs": ("//", "const x = 1;"),
+    ".ts": ("//", "const x: number = 1;"),
+    ".tsx": ("//", "const x: number = 1;"),
+    ".rs": ("//", "fn main() {}"),
+    ".sh": ("#", "echo ok"),
+    ".bash": ("#", "echo ok"),
+    ".zsh": ("#", "echo ok"),
+    ".css": ("/*", "body { margin: 0; }"),
+    ".html": ("<!--", "<p>hi</p>"),
+    ".htm": ("<!--", "<p>hi</p>"),
+    ".c": ("//", "int main(void) { return 0; }"),
+    ".h": ("//", "int helper(void);"),
+    ".cc": ("//", "int main() { return 0; }"),
+    ".cpp": ("//", "int main() { return 0; }"),
+    ".cxx": ("//", "int main() { return 0; }"),
+    ".hpp": ("//", "int helper();"),
+    ".hh": ("//", "int helper();"),
+    ".hxx": ("//", "int helper();"),
+    ".m": ("//", "int main(void) { return 0; }"),
+    ".mm": ("//", "int main() { return 0; }"),
+    ".cs": ("//", "class Sample { }"),
+    ".java": ("//", "class Sample { }"),
+    ".kt": ("//", "fun main() { }"),
+    ".kts": ("//", "val x = 1"),
+    ".scala": ("//", "object Sample { }"),
+    ".sc": ("//", "object Sample { }"),
+    ".groovy": ("//", "class Sample { }"),
+    ".gradle": ("//", "plugins { }"),
+    ".swift": ("//", "func main() { }"),
+    ".rb": ("#", "def sample; 1; end"),
+    ".rake": ("#", "task :sample do end"),
+    ".gemspec": ("#", "Gem::Specification.new"),
+    ".ru": ("#", "run lambda { |env| [200, {}, []] }"),
+    ".php": ("//", "function sample() { return 1; }"),
+    ".phtml": ("//", "<p>hi</p>"),
+    ".pl": ("#", "my $x = 1;"),
+    ".pm": ("#", "package Sample;"),
+    ".lua": ("--", "local x = 1"),
+    ".hs": ("--", "main = pure ()"),
+    ".lhs": ("--", "main = pure ()"),
+    ".ex": ("#", "defmodule Sample do end"),
+    ".exs": ("#", "defmodule Sample do end"),
+    ".erl": ("%", "-module(sample)."),
+    ".hrl": ("%", "-define(X, 1)."),
+    ".clj": (";", "(defn sample [] 1)"),
+    ".cljs": (";", "(defn sample [] 1)"),
+    ".cljc": (";", "(defn sample [] 1)"),
+    ".dart": ("//", "void main() {}"),
+    ".sql": ("--", "SELECT 1;"),
+    ".ps1": ("#", 'Write-Output "ok"'),
+    ".psm1": ("#", 'Write-Output "ok"'),
+    ".psd1": ("#", "@{ }"),
+    ".bat": ("REM", "echo ok"),
+    ".cmd": ("REM", "echo ok"),
+    ".vb": ("'", "Module Sample"),
+    ".vbs": ("'", 'WScript.Echo "ok"'),
+    ".frm": ("'", "Option Explicit"),
+    ".fs": ("//", "let sample = 1"),
+    ".fsi": ("//", "val sample : int"),
+    ".fsx": ("//", "let sample = 1"),
+    ".ml": ("(*", "let sample = 1"),
+    ".mli": ("(*", "val sample : int"),
+    ".r": ("#", "sample <- 1"),
+    ".jl": ("#", "sample = 1"),
+    ".zig": ("//", "pub fn main() void {}"),
+    ".nim": ("#", "let sample = 1"),
+    ".cr": ("#", "sample = 1"),
+    ".d": ("//", "void main() {}"),
+    ".sol": ("//", "contract Sample {}"),
+    ".tf": ("#", 'variable "sample" {}'),
+    ".tfvars": ("#", "sample = 1"),
+    ".hcl": ("#", 'variable "sample" {}'),
+    ".f": ("!", "      program sample"),
+    ".for": ("!", "      program sample"),
+    ".f90": ("!", "program sample"),
+    ".f95": ("!", "program sample"),
+    ".f03": ("!", "program sample"),
+    ".f08": ("!", "program sample"),
+    ".elm": ("--", "sample = 1"),
+    ".vue": ("<!--", "<template><div></div></template>"),
+    ".svelte": ("<!--", "<div></div>"),
+    ".astro": ("<!--", "<div></div>"),
+}
+PHP_PROLOGUE = "<?php\n"
+PROSE_BODY = "helper keeps the ledger warm."
+
+
+def language_header(suffix: str, marker: str) -> str:
+    """Return a well-formed L1 header in one dialect.
+
+    Rules:   Field order follows the contract; every fixture name matches its suffix so the header title is realistic.
+    """
+    name = "sample" + suffix
+    fields = (
+        "exports: none",
+        "used_by: none",
+        "rules:   none",
+        "agent:   test-agent | 9router | 2026-10-08 | s_test | added sample",
+    )
+    if marker == "(*":
+        return f"(* {name} — Example module used by the checker tests.\n" + "\n".join(fields) + "\n*)\n"
+    if marker == "/*":
+        return f"/* {name} — Example module used by the checker tests.\n" + "\n".join(fields) + "\n*/\n"
+    if marker == "<!--":
+        indented = "\n".join("     " + field for field in fields)
+        return f"<!-- {name} — Example module used by the checker tests.\n{indented}\n-->\n"
+    lines = [f"{marker} {name} — Example module used by the checker tests.", marker]
+    return "\n".join(lines + [f"{marker} {field}" for field in fields]) + "\n\n"
+
+
+def language_fixture(suffix: str, marker: str, code: str, extra: str = "") -> str:
+    """Return a complete fixture: optional prologue, header, code, and extra lines.
+
+    Rules:   A `.php`/`.phtml` file must open with its `<?php` prologue for the parser to see the header.
+    """
+    prologue = PHP_PROLOGUE if suffix in (".php", ".phtml") else ""
+    return prologue + language_header(suffix, marker) + code + "\n" + extra
+
+
+def prose_body(marker: str) -> str:
+    """Return one genuine prose comment in the marker's dialect.
+
+    Rules:   Block-only dialects keep the prose inside their own block markers.
+    """
+    closers = {"(*": "*)", "<!--": "-->", "/*": "*/"}
+    if marker in closers:
+        return f"{marker} {PROSE_BODY} {closers[marker]}\n"
+    return f"{marker} {PROSE_BODY}\n"
+
+
+class EverySuffixTestCase(CodednaCheckTestCase):
+    """Every supported suffix resolves to an explicit profile and scores clean when well formed."""
+
+    def test_every_source_suffix_has_a_matrix_row(self) -> None:
+        declared = set(self.checker.SOURCE_SUFFIXES)
+        self.assertEqual(declared, set(LANGUAGE_CASES), "update LANGUAGE_CASES with SOURCE_SUFFIXES")
+
+    def test_every_source_suffix_has_an_explicit_profile(self) -> None:
+        declared = set(self.checker.SOURCE_SUFFIXES)
+        self.assertEqual(declared, set(self.checker.EXPLICIT_SUFFIXES))
+
+    def test_clean_fixture_is_clean_for_every_suffix(self) -> None:
+        cases = dict(LANGUAGE_CASES)
+        for suffix, (marker, code) in cases.items():
+            with self.subTest(suffix=suffix):
+                text = PY_CLEAN if suffix == ".py" else language_fixture(suffix, marker, code)
+                path = self.write("src/sample" + suffix, text)
+                self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+
+    def test_headerless_file_is_reported_for_every_suffix(self) -> None:
+        cases = dict(LANGUAGE_CASES)
+        for suffix, (marker, code) in cases.items():
+            with self.subTest(suffix=suffix):
+                path = self.write("src/bare" + suffix, code + "\n")
+                self.assertEqual(["missing L1 header"], self.checker.check_file(path, self.root), suffix)
+
+    def test_prose_comment_is_reported_for_every_suffix(self) -> None:
+        cases = dict(LANGUAGE_CASES)
+        for suffix, (marker, code) in cases.items():
+            with self.subTest(suffix=suffix):
+                if suffix == ".py":
+                    text = PY_CLEAN.replace("    return 1", f"    return 1\n\n# {PROSE_BODY}")
+                else:
+                    text = language_fixture(suffix, marker, code, prose_body(marker))
+                path = self.write("src/prose" + suffix, text)
+                findings = self.checker.check_comment_content(path)
+                self.assertEqual(1, len(findings), (suffix, findings))
+                self.assertIn("outside the permitted content", findings[0], suffix)
+                expected_line = len(text.splitlines())
+                self.assertTrue(findings[0].startswith(f"{expected_line}:"), (suffix, findings))
+
+    def test_block_form_header_is_clean(self) -> None:
+        fields = (
+            "exports: none\nused_by: none\nrules:   none\n"
+            "agent:   test-agent | 9router | 2026-10-08 | s_test | added sample\n"
+        )
+        cases = {
+            ".c": "/* sample.c — Example module.\n *\n * "
+            + fields.replace("\n", "\n * ").rstrip()
+            + "\n */\nint main(void) { return 0; }\n",
+            ".java": "/**\n * sample.java — Example module.\n *\n * "
+            + fields.replace("\n", "\n * ").rstrip()
+            + "\n */\nclass Sample { }\n",
+            ".hs": "{- sample.hs — Example module.\n" + fields + "-}\nmain = pure ()\n",
+        }
+        for suffix, text in cases.items():
+            with self.subTest(suffix=suffix):
+                path = self.write("src/block" + suffix, text)
+                self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+
+    def test_doubled_comment_marker_header_is_clean(self) -> None:
+        fields = (
+            "exports: none\nused_by: none\nrules:   none\n"
+            "agent:   test-agent | 9router | 2026-10-08 | s_test | added sample"
+        )
+        cases = {
+            ".erl": "%% sample.erl — Example module.\n%%\n%% "
+            + fields.replace("\n", "\n%% ")
+            + "\n\n-module(sample).\n",
+            ".clj": ";; sample.clj — Example module.\n;;\n;; "
+            + fields.replace("\n", "\n;; ")
+            + "\n\n(defn sample [] 1)\n",
+        }
+        for suffix, text in cases.items():
+            with self.subTest(suffix=suffix):
+                path = self.write("src/doubled" + suffix, text)
+                self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+
+    def test_uppercase_suffix_resolves_to_the_same_profile(self) -> None:
+        text = language_fixture(".r", "#", "sample <- 1")
+        upper = self.write("src/UPPER.R", text)
+        lower = self.write("src/lower.r", text)
+        self.assertEqual([], self.checker.check_file(upper, self.root))
+        self.assertEqual([], self.checker.check_comment_content(upper))
+        found = {path.name for path in self.checker.collect_source_files([self.root])}
+        self.assertIn("UPPER.R", found)
+        self.assertEqual(self.checker.check_file(lower, self.root), self.checker.check_file(upper, self.root))
+
+
+FAMILY_DIRECTIVE_LINES = {
+    ".c": "/* SPDX-License-Identifier: MIT */\n// clang-format off\n// NOLINT\n// Rules: keep the guard.\n",
+    ".cpp": "#include <vector>\n// NOLINT\n// Rules: keep the guard.\n",
+    ".m": "// NOLINT\n/* Rules: keep the guard. */\n",
+    ".cs": "/// <summary>documented</summary>\n//#region helpers\n// Rules: keep the guard.\n",
+    ".java": "//noinspection unchecked\n// Rules: keep the guard.\n",
+    ".kt": "//noinspection unchecked\n// Rules: keep the guard.\n",
+    ".scala": "// NOLINT\n// Rules: keep the guard.\n",
+    ".groovy": "// NOLINT\n// Rules: keep the guard.\n",
+    ".swift": "/// documented\n// Rules: keep the guard.\n",
+    ".dart": "/// documented\n// Rules: keep the guard.\n",
+    ".go": "//go:build linux\n//nolint\n// Rules: keep the guard.\n",
+    ".rs": "/// documented\n//! module note\n#![allow(dead_code)]\n// Rules: keep the guard.\n",
+    ".js": "/* eslint-disable */\n/*! bundle banner */\n// Rules: keep the guard.\n",
+    ".ts": "// @ts-ignore\n/// <reference path=\"x.d.ts\" />\n// Rules: keep the guard.\n",
+    ".py": "# type: ignore\n# noqa\n# SPDX-License-Identifier: MIT\n# Rules: keep the guard.\n",
+    ".sh": "# shellcheck disable=SC2034\n# Rules: keep the guard.\n",
+    ".css": "/* SPDX-License-Identifier: MIT */\n/* Rules: keep the guard. */\n",
+    ".html": "<!-- SPDX-License-Identifier: MIT -->\n<!-- Rules: keep the guard. -->\n",
+    ".vue": "<!-- Rules: keep the guard. -->\n",
+    ".svelte": "<!-- Rules: keep the guard. -->\n",
+    ".astro": "<!-- Rules: keep the guard. -->\n",
+    ".rb": "# frozen_string_literal: true\n# rubocop:disable Style\n# Rules: keep the guard.\n",
+    ".pl": "# no critic\n# Rules: keep the guard.\n",
+    ".php": "# Rules: keep the guard.\n// Rules: keep the guard.\n",
+    ".lua": "--[[ Rules: keep the guard. ]]\n-- Rules: keep the guard.\n",
+    ".hs": "{-# LANGUAGE OverloadedStrings #-}\n{- Rules: keep the guard. -}\n-- Rules: keep the guard.\n",
+    ".elm": "{- Rules: keep the guard. -}\n-- Rules: keep the guard.\n",
+    ".ex": "# Rules: keep the guard.\n",
+    ".erl": "%% Rules: keep the guard.\n",
+    ".clj": "; Rules: keep the guard.\n",
+    ".sql": "/* Rules: keep the guard. */\n-- Rules: keep the guard.\n",
+    ".ps1": "<# Rules: keep the guard. #>\n# Rules: keep the guard.\n",
+    ".bat": "REM Rules: keep the guard.\n:: Rules: keep the guard.\n",
+    ".vb": "' Rules: keep the guard.\nREM Rules: keep the guard.\n",
+    ".fs": "(* Rules: keep the guard. *)\n// Rules: keep the guard.\n",
+    ".ml": "(* Rules: keep the guard. *)\n",
+    ".r": "# Rules: keep the guard.\n",
+    ".jl": "#= Rules: keep the guard. =#\n# Rules: keep the guard.\n",
+    ".zig": "/// documented\n// Rules: keep the guard.\n",
+    ".nim": "#[ Rules: keep the guard. ]#\n# Rules: keep the guard.\n",
+    ".cr": "# Rules: keep the guard.\n",
+    ".d": "/+ Rules: keep the guard. +/\n// Rules: keep the guard.\n",
+    ".sol": "/// documented\n// Rules: keep the guard.\n",
+    ".tf": "/* Rules: keep the guard. */\n// Rules: keep the guard.\n# Rules: keep the guard.\n",
+    ".f90": "! Rules: keep the guard.\n",
+}
+
+FALSE_POSITIVE_CORPUS = [
+    (".c", '#include <stdio.h>\n#define LIMIT 1\nconst char *url = "https://example.com/a//b";\n'),
+    (".c", '#define URL "http://x"\nint x = 1; /* Rules: inline block stays permitted */\n'),
+    (".cpp", 'std::string u = "http://example.com";\nint n = 4 / 2;\n'),
+    (".js", '#!/usr/bin/env node\nconst url = "https://example.com/a//b";\nconst re = /[//]/;\nconst t = `https://x/${url}//y`;\n'),
+    (".js", "const re = /https?:\\/\\//;\nconst n = a / b / c;\n// Rules: keep the ratio.\n"),
+    (".ts", 'const u: string = "http://x//y";\nconst re = /[//]/;\n'),
+    (".rb", '#!/usr/bin/env ruby\nputs "a # b"\nre = /^#/\nS = "x"\n'),
+    (".rb", "=begin\nRules: keep the boundary handling\n=end\nx = 1\n"),
+    (".pl", '#!/usr/bin/env perl\nmy $s = "a # b";\nmy $n = 1;\n'),
+    (".php", '#!/usr/bin/env php\n$u = "https://x//y";\n# Rules: keep it.\n$n = 1;\n'),
+    (".lua", "local s = [[ a -- b ]]\nlocal t = { a = 1 }\n--[[ Rules: long comment body stays permitted ]]\n"),
+    (".lua", "local n = #t\nlocal x = 1 -- Rules: trailing line comment stays permitted\n"),
+    (".hs", 'x = a --> b\ns = "-- not a comment"\n{- Rules: block body stays permitted -}\n'),
+    (".ps1", '$u = "http://x//y"\n<# Rules: block body stays permitted #>\nWrite-Output "# not a comment"\n'),
+    (".cs", '/// <summary>documented</summary>\nvar u = "http://x//y";\nvar v = @"a // b";\n'),
+    (".vb", 'Dim s = "it\'s fine"\n\' Rules: keep it.\nREM Rules: keep it too.\n'),
+    (".bat", '@echo off\nREM Rules: keep it.\n:: Rules: keep it too.\necho http://x//y\necho ::1\n'),
+    (".sql", "SELECT '-- not a comment';\nSELECT 1; -- Rules: keep it.\n"),
+    (".kt", "val x = 1\n/* Rules: outer /* inner */ stays permitted */\n"),
+    (".nim", "let x = 1\n#[ Rules: nested #[ inner ]# ok ]#\n"),
+    (".jl", "x = 1\n#= Rules: nested #= inner =# ok =#\n"),
+    (".fs", "let x = 1\n(* Rules: nested (* stays *) permitted *)\n"),
+    (".ml", "let x = 1\n(* Rules: nested (* inner *) ok *)\n"),
+    (".html", '<a href="https://x//y">link</a>\n<!-- Rules: markup comment stays permitted -->\n'),
+    (".vue", "<template><a :href=\"https://x//y\">x</a></template>\n<!-- Rules: markup comment stays permitted -->\n"),
+    (".cpp", 'const char *raw = R"(a // b /* c */ )";\n'),
+    (".cpp", 'auto t = R"tag(first // line\nsecond /* line */\ntag)";\n'),
+    (".ps1", '$t = @"\n// not a comment\n# nor this\n"@\nWrite-Output "ok"\n'),
+    (".groovy", "def t = '''\n// not a comment\n# nor this\n'''\n"),
+    (".pl", "my $last = $#array;\nmy $n = 1;\n"),
+    (".java", 'String u = "http://x//y";\nchar q = \'"\';\n'),
+    (".kt", 'val u = "https://x//y"\nval q = \'"\'\n'),
+    (".rb", 'puts "#{x} # y"\nname = "a # b"\n'),
+    (".r", 'x <- "# not a comment"\n'),
+    (".sql", 'SELECT "a -- b";\nSELECT 2; -- Rules: keep it.\n'),
+    (".erl", 'S = "a % b".\n'),
+    (".clj", '(def s "a ; b")\n'),
+    (".bat", 'echo ":: not a label"\necho "REM not a comment"\n'),
+    (".d", 'string s = "/* not a comment */";\n'),
+    (".nim", 'let s = "# not a comment"\n'),
+    (".jl", 's = "# not a comment"\n'),
+    (".ps1", '$x = 1 # Rules: keep it.\nWrite-Host "# not a comment"\n'),
+]
+
+
+class DialectContentTestCase(CodednaCheckTestCase):
+    """Directive, license, and Rules lines stay exempt in every family; lookalikes stay code."""
+
+    def test_directive_license_and_rules_lines_are_exempt_per_family(self) -> None:
+        for suffix, extra in FAMILY_DIRECTIVE_LINES.items():
+            with self.subTest(suffix=suffix):
+                marker, code = LANGUAGE_CASES[suffix]
+                text = (
+                    PY_CLEAN + extra
+                    if suffix == ".py"
+                    else language_fixture(suffix, marker, code, extra)
+                )
+                path = self.write("src/family" + suffix, text)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+
+    def test_lookalike_corpus_produces_no_findings(self) -> None:
+        for suffix, body in FALSE_POSITIVE_CORPUS:
+            with self.subTest(suffix=suffix, body=body.splitlines()[0]):
+                marker, code = LANGUAGE_CASES[suffix]
+                prefix = ""
+                if body.startswith("#!"):
+                    prefix, body = body.split("\n", 1)
+                    prefix += "\n"
+                    body += "\n"
+                text = prefix + language_fixture(suffix, marker, code, body)
+                path = self.write("src/lookalike" + suffix, text)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+                self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+
+    def test_prose_inside_a_nested_block_is_reported(self) -> None:
+        marker, code = LANGUAGE_CASES[".kt"]
+        body = "/* outer /* inner */ helper keeps the ledger warm. */\n"
+        path = self.write("src/nested.kt", language_fixture(".kt", marker, code, body))
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("outside the permitted content", findings[0])
+
+    def test_shebang_is_not_prose_in_every_executable_dialect(self) -> None:
+        hbodies = ("#!/usr/bin/env ruby\n", "#!/usr/bin/env perl\n", "#!/usr/bin/env node\n", "#!/usr/bin/env pwsh\n")
+        suffixes = (".rb", ".pl", ".js", ".ps1")
+        for suffix, shebang in zip(suffixes, hbodies):
+            with self.subTest(suffix=suffix):
+                marker, code = LANGUAGE_CASES[suffix]
+                text = shebang + language_fixture(suffix, marker, code)
+                path = self.write("src/exec" + suffix, text)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+                self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+
+
+class CliEntryPointTestCase(CodednaCheckTestCase):
+    """The shipped command line drives the enlarged suffix set on a real tree."""
+
+    def run_cli(self, *args: str) -> subprocess.CompletedProcess:
+        """Run the checker script as a subprocess, exactly as a user would.
+
+        Rules:   `cwd` is the temporary root so the repository's own AGENTS.md never enters the run.
+        """
+        return subprocess.run(
+            [sys.executable, str(CHECKER_PATH), *args],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def build_tree(self) -> None:
+        clean = {
+            "clean/module.py": PY_CLEAN,
+            "clean/module.go": GO_CLEAN,
+            "clean/module.rb": language_fixture(".rb", "#", "x = 1"),
+            "clean/module.hs": language_fixture(".hs", "--", "x = 1"),
+            "clean/module.ml": language_fixture(".ml", "(*", "let x = 1"),
+            "clean/module.bat": language_fixture(".bat", "REM", "echo ok"),
+            "clean/module.vue": language_fixture(".vue", "<!--", "<template><div></div></template>"),
+            "clean/module.sql": language_fixture(".sql", "--", "SELECT 1;"),
+            "clean/module.ps1": language_fixture(".ps1", "#", "Write-Output ok"),
+        }
+        for relative, text in clean.items():
+            self.write(relative, text)
+        self.write("broken/prose.rb", language_fixture(".rb", "#", "x = 1", f"# {PROSE_BODY}\n"))
+
+    def test_cli_is_deterministic_and_names_the_violating_line(self) -> None:
+        self.build_tree()
+        first = self.run_cli(str(self.root))
+        second = self.run_cli(str(self.root))
+        self.assertEqual(1, first.returncode, first.stdout + first.stderr)
+        self.assertEqual(first.stdout, second.stdout)
+        self.assertEqual(first.stderr, second.stderr)
+        self.assertIn("outside the permitted content", first.stdout)
+        expected_line = len(language_fixture(".rb", "#", "x = 1", f"# {PROSE_BODY}\n").splitlines())
+        self.assertIn(f"prose.rb: {expected_line}:", first.stdout)
+        offending = [line for line in first.stdout.splitlines() if "outside the permitted content" in line]
+        self.assertEqual(1, len(offending), first.stdout)
+        self.assertIn("codedna_check: 1 finding(s)", first.stdout)
+
+    def test_cli_is_clean_on_a_clean_tree(self) -> None:
+        self.build_tree()
+        (self.root / "broken" / "prose.rb").unlink()
+        result = self.run_cli(str(self.root))
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("codedna_check: 0 finding(s)", result.stdout)
+
+    def test_cli_reports_a_missing_path(self) -> None:
+        result = self.run_cli(str(self.root / "gone"))
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+        self.assertIn("path not found", result.stdout)
 
 
 if __name__ == "__main__":

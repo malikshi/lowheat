@@ -7,7 +7,8 @@ agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | spl
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | killed the Python header-zone exemption: docstring-adjacent `#` prose and TODO markers report now; probes confirmed non-Python string masking already correct.
 agent:   fx | unknown | 2026-10-31 | unknown | added span-derived comment bodies so trailing and multiline comments reach the classifier; tool directives and raw binary input stay exempt
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | exempted a first-line `#!` in every dialect after Python probe scripts reported their shebang as prose
-message: The scan is line- and span-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | comments now come from profile-derived spans only, so a marker at the start of a multi-line string line is code; doc markers and reconstructed directives are exempt
+message: The scan is line- and span-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: heredoc and here-string bodies outside shell (Ruby, Perl, PHP, PowerShell) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
 """
 from __future__ import annotations
 
@@ -16,13 +17,7 @@ import re
 from pathlib import Path
 from typing import NamedTuple
 
-from codedna_headers import (
-    _block_close,
-    _block_open,
-    _block_style,
-    _header_entries,
-    _strip_html_ctrl,
-)
+from codedna_headers import _header_entries
 from codedna_masking import _python_scan_inputs, _shell_heredoc_lines, mask_code
 from codedna_spec import (
     L1_FIELDS,
@@ -59,11 +54,9 @@ class _ScanState(NamedTuple):
     paren_group_depth: int
     paren_depth: int
     prev_label: str | None
-    in_block: bool
-    block_style: str
 
 
-_START_STATE = _ScanState(0, 0, 0, 0, None, False, "")
+_START_STATE = _ScanState(0, 0, 0, 0, None)
 _PY_PROFILE = profile_for(Path("sample.py"))
 
 
@@ -125,7 +118,7 @@ def check_comment_content(path: Path) -> list[str]:
         return []
     profile = profile_for(path)
     findings: list[str] = []
-    if path.suffix == ".py":
+    if path.suffix.lower() == ".py":
         module_doc = _PY_DOCSTRING.match(text)
         if module_doc:
             findings.extend(_docstring_findings(module_doc.group(2), L1_FIELDS, f"{path.name} module"))
@@ -163,16 +156,18 @@ def check_comment_content(path: Path) -> list[str]:
             masked.splitlines(),
             text.splitlines(),
             skip_lines,
-            comment_bodies=_comment_bodies(text, spans),
+            comment_bodies=_comment_bodies(profile, text, spans),
         )
     )
     return findings
 
 
-def _comment_bodies(text: str, spans: list[tuple[int, int]]) -> dict[int, tuple[str, ...]]:
+def _comment_bodies(
+    profile: LanguageProfile, text: str, spans: list[tuple[int, int]]
+) -> dict[int, tuple[str, ...]]:
     """Map comment spans to stripped bodies by line number.
 
-    Rules:   A span may cover a trailing comment or several block-comment lines; strip the opening marker, closing marker, and block-decoration star so the content classifier sees prose only. Empty bodies are dropped; empty `Rules:` continuations add nothing.
+    Rules:   A span may cover a trailing comment or several block-comment lines; strip the profile's opening and closing markers and one block-decoration star so the content classifier sees prose only. Empty bodies are dropped; empty `Rules:` continuations add nothing.
     """
     lines = text.split("\n")
     starts: list[int] = []
@@ -189,29 +184,36 @@ def _comment_bodies(text: str, spans: list[tuple[int, int]]) -> dict[int, tuple[
                 continue
             left = max(start - line_start, 0)
             right = min(end - line_start, len(line))
-            body = _comment_fragment_body(line[left:right])
+            body = _comment_fragment_body(profile, line[left:right])
             if body:
                 bodies.setdefault(line_number + 1, []).append(body)
     return {line: tuple(items) for line, items in bodies.items()}
 
 
-def _comment_fragment_body(fragment: str) -> str:
+def _comment_fragment_body(profile: LanguageProfile, fragment: str) -> str:
     """Strip comment delimiters and block decoration from one fragment.
 
-    Rules:   Opening markers are removed longest-first; a closing marker is removed after the opening one; one leading `*` remains block decoration only when the fragment did not open with a line-comment marker.
+    Rules:   Profile markers are removed longest-first and word markers case-insensitively; a Lua long bracket loses its `[[`/`]]` shell; one leading `*` remains block decoration only when the fragment did not open with a line-comment marker.
     """
     body = fragment.strip()
     opened = False
-    for marker in ("<!--", "/*", "//", "#"):
-        if body.startswith(marker):
+    for marker in profile.strip_prefixes:
+        if marker and body.startswith(marker):
             body = body[len(marker):]
-            opened = marker in ("<!--", "/*")
+            opened = marker in {item.open for item in profile.block_markers}
             break
-    if body.endswith("-->"):
-        body = body[:-3]
-    elif body.endswith("*/"):
-        body = body[:-2]
-    body = body.strip()
+    lowered = body.lower()
+    for word in profile.word_markers:
+        if lowered.startswith(word):
+            body = body[len(word):]
+            break
+    closes = [marker.close for marker in profile.block_markers]
+    stripped = body.rstrip()
+    for closer in sorted(closes, key=len, reverse=True):
+        if stripped.endswith(closer):
+            stripped = stripped[: -len(closer)]
+            break
+    body = re.sub(r"^\[=*\[|\]=*\]$", "", stripped).strip()
     if not opened and body.startswith("*") and not body.startswith("*/"):
         body = body[1:].lstrip()
     return body.strip()
@@ -268,36 +270,13 @@ def _scan_line(
             line_findings, state = _comment_body(context, state, index, body)
             findings.extend(line_findings)
         return findings, state
-    if state.in_block:
-        return [], _block_continuation(state, stripped, context.profile)
     if context.profile.is_directive(stripped) or stripped.startswith("#!"):
         return [], state._replace(prev_label=None)
-    if context.profile.name == "rust" and (stripped.startswith("///") or stripped.startswith("//!")):
+    if any(stripped.startswith(marker) for marker in context.profile.doc_markers):
         return [], state
-    if context.profile.name == "html" and "<!--" in stripped:
-        probe = _html_inline_probe(stripped, line_no)
-        if probe is not None:
-            return probe, state
-    if not _is_comment_line(context, stripped, line_no):
-        return [], _advance_code_state(context, state, index)
-    if line_no <= context.header_zone:
+    if context.comment_lines is not None and line_no in context.comment_lines:
         return [], state
-    return _comment_line(context, state, index, stripped)
-
-
-def _is_comment_line(context: _ScanContext, stripped: str, line_no: int) -> bool:
-    """Judge one line a comment line for its dialect.
-
-    Rules:   Python callers pass exact comment positions; css/html count an opener line; stripped markup never counts.
-    """
-    if context.comment_lines is not None:
-        return line_no in context.comment_lines
-    is_comment = context.profile.is_comment(stripped) or (
-        context.profile.name in ("css", "html") and _block_open(stripped)
-    )
-    if context.profile.name == "html" and not _strip_html_ctrl(stripped).strip():
-        return False
-    return is_comment
+    return [], _advance_code_state(context, state, index)
 
 
 def _advance_code_state(context: _ScanContext, state: _ScanState, index: int) -> _ScanState:
@@ -356,8 +335,6 @@ def _comment_body(
         return [], state
     if _is_directive_body(context.profile, inner):
         return [], state
-    if context.profile.name == "html" and _L2_LABEL_LINE.match(inner):
-        return [], state._replace(prev_label=inner)
     if _L2_LABEL_LINE.match(inner):
         return [], state._replace(prev_label=inner)
     if state.prev_label is not None:
@@ -368,89 +345,18 @@ def _comment_body(
 
 
 def _is_directive_body(profile: LanguageProfile, body: str) -> bool:
-    """Judge a delimiter-stripped comment body a tool directive.
+    """Judge a delimiter-stripped comment body a tool directive or doc marker.
 
-    Rules:   Reconstruct the marker in both spaced and unspaced forms because `//go:` and `// eslint` differ; an SPDX body is exempt anywhere.
+    Rules:   Reconstruct the marker in both spaced and unspaced forms because `//go:` and `// eslint` differ; a doc marker (`///`, `//!`) is exempt once reconstructed; an SPDX body is exempt anywhere.
     """
     if profile.is_directive(body) or (profile.shebang and body.startswith("!")):
         return True
-    return any(
-        profile.is_directive(prefix + body) or profile.is_directive(prefix + " " + body)
-        for prefix in profile.strip_prefixes
-    )
-
-
-def _comment_line(
-    context: _ScanContext, state: _ScanState, index: int, stripped: str
-) -> tuple[list[str], _ScanState]:
-    """Inspect one comment line that sits below the header zone.
-
-    Rules:   Label lines open a continuation window; css/html inline comments keep their block state; everything else classifies by content; the window closes when a finding lands.
-    """
-    inner = context.profile.strip(stripped)
-    inner = (inner if inner is not None else stripped).strip()
-    if context.profile.name in ("css", "html"):
-        consumed, state = _css_html_step(state, stripped, inner)
-        if consumed:
-            return [], state
-    if not inner:
-        return [], state
-    if context.profile.name == "html" and _L2_LABEL_LINE.match(stripped):
-        return [], state._replace(prev_label=stripped)
-    if _L2_LABEL_LINE.match(stripped):
-        return [], state._replace(prev_label=inner)
-    if state.prev_label is not None:
-        return [], state._replace(prev_label=inner)
-    if _FIELD_LINE.match(stripped):
-        return [], state
-    return _classify_content(context, state, index, inner), state._replace(prev_label=None)
-
-
-def _css_html_step(state: _ScanState, stripped: str, inner: str) -> tuple[bool, _ScanState]:
-    """Advance the css/html block state for one comment line.
-
-    Rules:   An unclosed opener starts a block; an empty body is consumed; unhandled lines return consumed=False.
-    """
-    if _block_open(stripped) and not stripped.endswith(_block_close(_block_style(stripped) or "/*")):
-        return True, state._replace(in_block=True, block_style=_block_style(stripped) or "")
-    if not inner:
-        return True, state
-    return False, state
-
-
-def _block_continuation(
-    state: _ScanState, stripped: str, profile: LanguageProfile
-) -> _ScanState:
-    """Decide whether one line inside a css/html block comment closes it.
-
-    Rules:   A line without html comment grammar closes as well.
-    """
-    if profile.name == "html" and not _strip_html_ctrl(stripped).strip():
-        return state._replace(in_block=False)
-    if stripped.endswith(_block_close(state.block_style)):
-        return state._replace(in_block=False)
-    return state
-
-
-def _html_inline_probe(stripped: str, line_no: int) -> list[str] | None:
-    """Report inline HTML comments on one marked-up line, or None when it carries none.
-
-    Rules:   A probed line already reported must not fall through to the general comment path — that double-reports.
-    """
-    findings: list[str] = []
-    probe_hits = 0
-    for probe_match in re.finditer(r"<!--(.*?)-->", stripped):
-        body_comment = probe_match.group(1).strip()
-        if body_comment and not _L2_LABEL_LINE.match(body_comment):
-            probe_hits += 1
-            findings.append(
-                f"{line_no}: comment is outside the permitted content: {body_comment[:60]}"
-            )
-    if probe_hits:
-        return findings
-    if "<!--" in _strip_html_ctrl(stripped) or stripped == "-->":
-        return findings
-    return None
+    candidates = [body]
+    for prefix in profile.strip_prefixes:
+        candidates.extend((prefix + body, prefix + " " + body))
+    if any(candidate.startswith(marker) for candidate in candidates for marker in profile.doc_markers):
+        return True
+    return any(profile.is_directive(candidate) for candidate in candidates)
 
 
 def _classify_content(

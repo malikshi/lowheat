@@ -2,10 +2,11 @@
 
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
-rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open; `/* */` is a comment only in C-style dialects, because HTML markup, Python, and shell treat it as text.
+rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open. Block and line markers come from the language profile, never from a suffix test: a marker inside a literal is consumed by the literal first, and a line marker needs a code position so `https://` and `a//b` stay code.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; mask_code's template-literal branch became two helpers and the masking pass is now a flat branch list.
 agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | restricted `/* */` to C-style profiles after an HTML page with `<b>provider/*</b>` masked the rest of the file as one block comment
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | made masking profile-driven: block markers, line and word markers, quoting styles, Lua long brackets, and nested blocks
 """
 from __future__ import annotations
 
@@ -13,12 +14,7 @@ import io
 import re
 import tokenize
 
-from codedna_spec import _HEREDOC_OPEN, _PY_MASKED_TOKENS, LanguageProfile
-
-# Rules: only dialects with C-style comments — HTML markup and shell/Python text can hold a literal `/*` that opens nothing.
-_C_BLOCK_COMMENT_LANGUAGES = frozenset(
-    {"go", "rust", "javascript", "jsx", "typescript", "tsx", "css"}
-)
+from codedna_spec import _HEREDOC_OPEN, _PY_MASKED_TOKENS, BlockMarker, LanguageProfile
 
 
 def mask_code(
@@ -29,9 +25,9 @@ def mask_code(
 ) -> str:
     """Blank code so the scanner sees only comment lines.
 
-    Rules:   String and template-literal interiors blank; template literals track `${...}` nesting for JS dialects; `/* */` blank only in C-style dialects; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
+    Rules:   Block markers are tried longest-first and before line markers; `nested` counts the opener again inside the body; an `at_line_start` marker opens only at column 0. String, template, and long-bracket interiors blank; JS templates track `${...}` nesting; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
     """
-    js_family = suffix in (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
+    js_family = profile.backtick == "js"
     out: list[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -40,63 +36,206 @@ def mask_code(
             out.append(c)
             i += 1
             continue
-        if c == "/" and i + 1 < n and text[i + 1] == "/" and suffix in (".go", ".rs"):
+        long_comment = _long_bracket_at(profile.long_bracket, text, i)
+        if long_comment is not None:
+            start = i
+            opener_end, closer = long_comment
+            i = _mask_through(text, start, opener_end, closer, out)
+            if spans is not None:
+                spans.append((start, i))
+            continue
+        block = _block_at(profile, text, i)
+        if block is not None:
+            start = i
+            i = _mask_block(text, i, block, out)
+            if spans is not None:
+                spans.append((start, i))
+            continue
+        long_string = _long_bracket_at(profile.long_string, text, i)
+        if long_string is not None:
+            opener_end, closer = long_string
+            i = _mask_through(text, i, opener_end, closer, out)
+            continue
+        marker = profile.line_marker_at(text, i)
+        if marker is not None:
             start = i
             i = _mask_to_eol(text, i, out)
             if spans is not None:
                 spans.append((start, i))
             continue
-        if (
-            c == "/"
-            and i + 1 < n
-            and text[i + 1] == "*"
-            and profile.name in _C_BLOCK_COMMENT_LANGUAGES
-        ):
-            start = i
-            i = _mask_block_comment(text, i, out)
-            if spans is not None:
-                spans.append((start, i))
-            continue
-        if suffix in (".html", ".htm") and text.startswith("<!--", i):
-            start = i
-            end = text.find("-->", i + 4)
+        if profile.triple_quotes and text.startswith('"""', i):
+            end = text.find('"""', i + 3)
             end = n if end < 0 else end + 3
-            out.append(re.sub(r"[^\n]", " ", text[start:end]))
-            if spans is not None:
-                spans.append((start, end))
+            out.append(re.sub(r"[^\n]", " ", text[i:end]))
             i = end
             continue
-        if (
-            suffix in (".sh", ".bash", ".zsh")
-            and c == "#"
-            and (i == 0 or text[i - 1].isspace() or text[i - 1] in ";|&(")
+        if profile.triple_single_quotes and text.startswith("'''", i):
+            end = text.find("'''", i + 3)
+            end = n if end < 0 else end + 3
+            out.append(re.sub(r"[^\n]", " ", text[i:end]))
+            i = end
+            continue
+        if profile.raw_strings and text.startswith('R"', i):
+            raw_end = _raw_string_end(text, i)
+            if raw_end is not None:
+                out.append(re.sub(r"[^\n]", " ", text[i:raw_end]))
+                i = raw_end
+                continue
+        if profile.here_strings and (
+            text.startswith('@"', i) or text.startswith("@'", i)
         ):
-            start = i
-            i = _mask_to_eol(text, i, out)
-            if spans is not None:
-                spans.append((start, i))
+            here_end = _here_string_end(text, i)
+            if here_end is not None:
+                out.append(re.sub(r"[^\n]", " ", text[i:here_end]))
+                i = here_end
+                continue
+        if c in profile.string_quotes:
+            i = _mask_quoted(text, i, out, profile.doubled_quotes)
             continue
-        if c in ('"', "'"):
-            i = _mask_quoted(text, i, out)
-            continue
-        if c == "`":
+        if c == "`" and profile.backtick:
             i = _mask_template(text, i, js_family, out)
             continue
-        if c == "/" and js_family and i + 1 < n and text[i + 1] == "/":
-            start = i
-            i = _mask_to_eol(text, i, out)
-            if spans is not None:
-                spans.append((start, i))
+        regex_end = _regex_literal_end(profile, text, i)
+        if regex_end is not None:
+            out.append(re.sub(r"[^\n]", " ", text[i:regex_end]))
+            i = regex_end
             continue
         out.append(c)
         i += 1
     return "".join(out)
 
 
+# Rules: these characters can precede a regex literal; a closing `)` is absent because `(a) / b` is division.
+_REGEX_PRECEDERS = set("=(:,[!&|?{;~")
+_REGEX_KEYWORDS = frozenset(
+    {"return", "typeof", "case", "delete", "void", "in", "of", "yield", "await", "else", "do", "when"}
+)
+
+
+def _regex_literal_end(profile: LanguageProfile, text: str, index: int) -> int | None:
+    """Return the index after one regex literal starting at a slash, or None.
+
+    Rules:   A regex starts only after an operator, a bracket, or a keyword — `a / b` is division; `//` and `/*` are comments; a newline aborts the scan; a character class may hold a raw `/`.
+    """
+    if not profile.regex_literals or text[index] != "/":
+        return None
+    if text[index + 1:index + 2] in ("/", "*"):
+        return None
+    if not _regex_can_start(text, index):
+        return None
+    cursor = index + 1
+    in_class = False
+    n = len(text)
+    while cursor < n:
+        char = text[cursor]
+        if char == "\\":
+            cursor += 2
+            continue
+        if char == "\n":
+            return None
+        if char == "[":
+            in_class = True
+        elif char == "]":
+            in_class = False
+        elif char == "/" and not in_class:
+            return cursor + 1
+        cursor += 1
+    return None
+
+
+def _regex_can_start(text: str, index: int) -> bool:
+    """Judge a slash position a regex opener by what precedes it.
+
+    Rules:   Line start and the operator set open a regex; a preceding keyword (`return`, `when`, ...) does too; an identifier or a closing bracket means division.
+    """
+    cursor = index - 1
+    while cursor >= 0 and text[cursor] in " \t":
+        cursor -= 1
+    if cursor < 0 or text[cursor] == "\n":
+        return True
+    if text[cursor] in _REGEX_PRECEDERS:
+        return True
+    end = cursor + 1
+    while cursor >= 0 and (text[cursor].isalnum() or text[cursor] == "_"):
+        cursor -= 1
+    return text[cursor + 1:end] in _REGEX_KEYWORDS
+
+
+def _block_at(profile: LanguageProfile, text: str, index: int) -> BlockMarker | None:
+    """Return the block-comment marker opening at one position, if any.
+
+    Rules:   Longest open marker wins; an `at_line_start` marker opens only at column 0.
+    """
+    for marker in profile.block_markers:
+        if not text.startswith(marker.open, index):
+            continue
+        if marker.at_line_start and index and text[index - 1] != "\n":
+            continue
+        return marker
+    return None
+
+
+def _long_bracket_at(prefix: str | None, text: str, index: int) -> tuple[int, str] | None:
+    """Match one Lua long bracket at a position and return its body start and closer.
+
+    Rules:   A long bracket is the prefix, then `[`, any number of `=`, then `[`; the closer mirrors the equals count. A single `[` that does not start a long bracket is ordinary code.
+    """
+    if prefix is None or not text.startswith(prefix, index):
+        return None
+    cursor = index + len(prefix)
+    if text[cursor:cursor + 1] != "[":
+        return None
+    cursor += 1
+    equals = 0
+    while text[cursor:cursor + 1] == "=":
+        equals += 1
+        cursor += 1
+    if text[cursor:cursor + 1] != "[":
+        return None
+    return cursor + 1, "]" + "=" * equals + "]"
+
+
+def _mask_block(text: str, start: int, block: BlockMarker, out: list[str]) -> int:
+    """Blank one block comment through its closing marker.
+
+    Rules:   A nested opener raises the depth; an unterminated block runs to the end of the text; newlines survive.
+    """
+    depth = 1
+    cursor = start + len(block.open)
+    n = len(text)
+    while cursor < n:
+        if block.nested and text.startswith(block.open, cursor):
+            depth += 1
+            cursor += len(block.open)
+            continue
+        if text.startswith(block.close, cursor):
+            depth -= 1
+            cursor += len(block.close)
+            if depth == 0:
+                break
+            continue
+        cursor += 1
+    out.append(re.sub(r"[^\n]", " ", text[start:cursor]))
+    return cursor
+
+
+def _mask_through(
+    text: str, start: int, body_start: int, closer: str, out: list[str]
+) -> int:
+    """Blank one long-bracket comment or string from its opener through its closer.
+
+    Rules:   An unterminated bracket runs to the end; newlines survive.
+    """
+    found = text.find(closer, body_start)
+    cursor = len(text) if found < 0 else found + len(closer)
+    out.append(re.sub(r"[^\n]", " ", text[start:cursor]))
+    return cursor
+
+
 def _mask_to_eol(text: str, start: int, out: list[str]) -> int:
     """Blank one line tail through the newline, which stays intact.
 
-    Rules:   `//` and shell `#` comments end at the newline.
+    Rules:   Line comments end at the newline; word markers and `::` labels work the same way.
     """
     end = text.find("\n", start)
     end = len(text) if end < 0 else end
@@ -104,21 +243,47 @@ def _mask_to_eol(text: str, start: int, out: list[str]) -> int:
     return end
 
 
-def _mask_block_comment(text: str, start: int, out: list[str]) -> int:
-    """Blank one block comment through its closing marker.
+def _raw_string_end(text: str, index: int) -> int | None:
+    """Return the index after one C++ raw string, or None when the form is incomplete.
 
-    Rules:   An unterminated block runs to the end of the text.
+    Rules:   The delimiter sits between `R"` and `(`; the closer is `)`, the same delimiter, then `"`; a newline before the opener bracket means this is not a raw string.
     """
-    end = text.find("*/", start + 2)
-    end = len(text) if end < 0 else end + 2
-    out.append(re.sub(r"[^\n]", " ", text[start:end]))
-    return end
+    cursor = index + 2
+    n = len(text)
+    while cursor < n and text[cursor] not in "(\n":
+        cursor += 1
+    if cursor >= n or text[cursor] != "(":
+        return None
+    closer = ")" + text[index + 2:cursor] + '"'
+    found = text.find(closer, cursor + 1)
+    return n if found < 0 else found + len(closer)
 
 
-def _mask_quoted(text: str, start: int, out: list[str]) -> int:
+def _here_string_end(text: str, index: int) -> int | None:
+    """Return the index after one PowerShell here-string, or None.
+
+    Rules:   The opener is `@"` or `@'` with only whitespace after it on its line; the closer is `"@` or `'@` as the first token of a later line; an unterminated here-string runs to the end.
+    """
+    quote = text[index + 1]
+    line_end = text.find("\n", index + 2)
+    if line_end < 0 or text[index + 2:line_end].strip():
+        return None
+    closer = quote + "@"
+    cursor = line_end + 1
+    n = len(text)
+    while cursor < n:
+        candidate_end = text.find("\n", cursor)
+        candidate_end = n if candidate_end < 0 else candidate_end
+        if text[cursor:candidate_end].strip() == closer:
+            return candidate_end
+        cursor = candidate_end + 1
+    return n
+
+
+def _mask_quoted(text: str, start: int, out: list[str], doubled: bool) -> int:
     """Blank one quoted run through its closing quote.
 
-    Rules:   Backslashes escape; an unterminated or newline-broken run ends at the boundary it reached.
+    Rules:   Backslashes escape; with `doubled`, a repeated quote is an escaped quote inside the literal (C#, VB, SQL); an unterminated or newline-broken run ends at the boundary it reached.
     """
     quote = text[start]
     end = start + 1
@@ -127,7 +292,12 @@ def _mask_quoted(text: str, start: int, out: list[str]) -> int:
         if text[end] == "\\":
             end += 2
             continue
-        if text[end] in ("\n", quote):
+        if text[end] == quote:
+            if doubled and text[end + 1:end + 2] == quote:
+                end += 2
+                continue
+            break
+        if text[end] == "\n":
             break
         end += 1
     if end < n and text[end] == quote:

@@ -2,11 +2,12 @@
 
 exports: check_file
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_file [cascade]
-used_by: .agents/skills/agents-contract/scripts/codedna_content.py → header line zones and css/html block grammar [cascade]
+used_by: .agents/skills/agents-contract/scripts/codedna_content.py → header line zones [cascade]
 related: codedna_spec.py hosts the field tuples and regexes every check here reads.
 rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; check_file became view collection plus finding assembly, both under the 50-line rule.
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | kept the closing line of a multi-line css/html header and skipped a leading `#!` in every dialect, so Python and Node shebangs never become the title line
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | header collection now reads the profile's block markers and prologue, so block-only dialects (OCaml, F#, Lua) and `<?php` files parse; suffix checks are case-insensitive
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from codedna_spec import (
     EM_DASH,
     L1_FIELDS,
     REQUIRED_L1,
+    BlockMarker,
     LanguageProfile,
     profile_for,
     _AGENT_SHAPE,
@@ -63,7 +65,7 @@ def _header_view(path: Path, text: str) -> _HeaderView | None:
     profile = profile_for(path)
     lines = text.splitlines()
     entries = _header_entries(profile, lines)
-    if path.suffix == ".py":
+    if path.suffix.lower() == ".py":
         doc_match = _PY_DOCSTRING.match(text)
         if doc_match is None:
             return None
@@ -76,12 +78,6 @@ def _header_view(path: Path, text: str) -> _HeaderView | None:
         return None
     first_no, raw_first = entries[0]
     first_text = profile.strip(raw_first.strip()) or raw_first.strip()
-    if profile.name in ("css", "html"):
-        inner = raw_first.strip()
-        for opener in ("/*", "<!--"):
-            if inner.startswith(opener):
-                first_text = inner[len(opener):].strip()
-                break
     fields, labels = _read_header_fields(profile, entries)
     header_last = entries[-1][0]
     return _HeaderView(first_no, first_text, fields, labels, "\n".join(lines[header_last:]))
@@ -128,7 +124,7 @@ def header_text(path: Path, text: str) -> str:
 
     Rules:   Python reads the module docstring; other languages read the leading comment block after an optional shebang; empty means no L1.
     """
-    if path.suffix == ".py":
+    if path.suffix.lower() == ".py":
         match = _PY_DOCSTRING.match(text)
         return match.group(2) if match else ""
     profile = profile_for(path)
@@ -139,104 +135,84 @@ def header_text(path: Path, text: str) -> str:
 def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[int, str]]:
     """Return (line_number, stripped-comment-text) for the leading header.
 
-    Rules:   Shell skips the shebang; css/html blocks span to their close; blank comment separators join the block; a leading `#!` is skipped in every dialect, because Python and the JS family can start an executable with one.
+    Rules:   A leading `#!` and a profile prologue (`<?php`) are skipped; block-comment headers run to their close marker; blank comment separators join the block; a block body line loses one leading `*` decoration.
     """
     start = 0
     for index, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith("#!"):
+        if stripped.startswith("#!") or any(
+            stripped.startswith(item) for item in profile.prologue
+        ):
             start = index + 1
+            continue
         break
     collected: list[tuple[int, str]] = []
-    inside_open = False
-    block_style = ""
+    close_marker = ""
     for index in range(start, len(lines)):
-        stripped = lines[index].strip()
+        raw = lines[index]
+        stripped = raw.strip()
         if not stripped:
             continue
-        if profile.name == "html":
-            body = _strip_html_ctrl(stripped)
-            if not body.strip():
-                continue
-            stripped = body
-        if inside_open:
-            if profile.name == "html" and not _strip_html_ctrl(stripped).strip():
-                inside_open = False
-                break
-            if stripped.endswith(_block_close(block_style)):
-                body = stripped[: -len(_block_close(block_style))].strip()
+        if close_marker:
+            if stripped.startswith(close_marker):
+                body = stripped[len(close_marker):].strip()
                 if body:
                     collected.append((index + 1, body))
-                inside_open = False
                 break
-            body = _strip_html_ctrl(stripped) if profile.name == "html" else stripped
-            collected.append((index + 1, body))
+            body = _block_body(stripped)
+            if body:
+                collected.append((index + 1, body))
             continue
-        if profile.is_directive(stripped):
+        opened = _line_block_open(profile, raw, stripped)
+        if opened is not None:
+            marker, body, closed = opened
+            if body:
+                collected.append((index + 1, body))
+            if closed:
+                break
+            close_marker = marker.close
+            continue
+        if profile.is_directive(stripped) and not profile.is_comment(stripped):
             continue
         if profile.is_comment(stripped):
-            if profile.shebang and stripped.startswith("#!"):
-                break
             collected.append((index + 1, stripped))
-            if profile.name in ("css", "html") and _single_line_block(stripped):
-                break
-            if profile.name in ("css", "html") and _block_open(stripped):
-                inside_open = True
-                block_style = _block_style(stripped) or ""
             continue
         break
     return collected
 
 
-def _block_open(stripped: str) -> bool:
-    """Judge one stripped CSS/HTML line a comment opener.
+def _line_block_open(
+    profile: LanguageProfile, raw: str, stripped: str
+) -> tuple[BlockMarker, str, bool] | None:
+    """Match one block-comment opener on a header line.
 
-    Rules:   Bare terminators (`*/`, `-->`) are closers, not openers.
+    Rules:   An `at_line_start` opener must sit at column 0 of the raw line; a line that also carries the closer is a single-line header.
     """
-    return stripped.startswith("/*") or stripped.startswith("<!--")
-
-
-def _block_style(stripped: str) -> str | None:
-    """Return the block-comment style a stripped line opened, if any.
-
-    Rules:   The returned style string feeds _block_close only.
-    """
-    if stripped.startswith("/*"):
-        return "/*"
-    if stripped.startswith("<!--"):
-        return "<!--"
+    for marker in profile.block_markers:
+        if not stripped.startswith(marker.open):
+            continue
+        if marker.at_line_start and not raw.startswith(marker.open):
+            continue
+        inner = stripped[len(marker.open):]
+        if inner.startswith("*"):
+            inner = inner[1:]
+        trimmed = inner.rstrip()
+        if trimmed.endswith(marker.close):
+            return marker, trimmed[: -len(marker.close)].strip(), True
+        return marker, inner.strip(), False
     return None
 
 
-def _block_close(style: str) -> str:
-    """Return the terminator of one block style.
+def _block_body(stripped: str) -> str:
+    """Strip one leading block-decoration star from a header body line.
 
-    Rules:   css uses `*/`; html uses `-->`.
+    Rules:   Only a `*` that decorates the line is removed; a lone `*/` never reaches here because the close branch handles it first.
     """
-    return "*/" if style == "/*" else "-->"
-
-
-def _single_line_block(stripped: str) -> bool:
-    """Judge one stripped css/html line an open-and-close comment.
-
-    Rules:   The line must carry both markers to break the header.
-    """
-    return (
-        (stripped.startswith("/*") and stripped.endswith("*/") and len(stripped) > 4)
-        or (stripped.startswith("<!--") and stripped.endswith("-->") and len(stripped) > 7)
-    )
-
-
-def _strip_html_ctrl(stripped: str) -> str:
-    """Reduce an HTML line to the comment grammar it carries.
-
-    Rules:   Markup without comment grammar must not read as header continuation.
-    """
-    if stripped.startswith("<!--") or stripped == "-->":
-        return stripped
-    return re.sub(r"</?script[^>]*>|</?style[^>]*>|<!DOCTYPE[^>]*>", "", stripped, flags=re.IGNORECASE)
+    if stripped.startswith("* ") or stripped == "*":
+        return stripped[1:].strip()
+    return stripped
 
 
 def _read_header_fields(
