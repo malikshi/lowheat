@@ -2,10 +2,11 @@
 
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
-rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source. Cleanup tests seed legacy handlers explicitly, so a pass proves the installer removed ours and kept foreign ones.
+rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. Cleanup tests seed legacy handlers explicitly, so a pass proves the installer removed ours and kept foreign ones.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | first cut: asserted the per-harness shapes after Grok was found not to expand @-imports, so it needs the companions as standalone rules files while the other two get one symlink
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | added the per-harness companion-import check: the existing project case applies every plan at once, so Claude's companions satisfied the imports for all three and the commandcode-only case went untested. Each subtest now gets its own root.
 agent:   fx | unknown | 2026-10-31 | unknown | dropped hook wiring, vendored-skill cases, and the cleanup pass after the one-shot removal tool was deleted
+agent:   fx | unknown | 2026-10-31 | unknown | covered the user-scope companion links, skill links, and both reference mirrors; added a real skill directory as a refusal case
 """
 
 from __future__ import annotations
@@ -36,11 +37,83 @@ class InstallerTestCase(unittest.TestCase):
         self.assertIn(self.home / ".claude" / "AGENTS.md", links)
         self.assertIn(self.home / ".claude" / "CLAUDE.md", links)
 
-    def test_commandcode_gets_agents_md_only(self) -> None:
+    def test_user_scope_links_every_companion_beside_the_contract(self) -> None:
+        plans = install.plan_harnesses(self.home)
+
+        for harness in ("claude", "commandcode"):
+            with self.subTest(harness=harness):
+                base = self.home / install.HOME_DIR[harness]
+                for name in install.COMPANIONS:
+                    self.assertEqual(
+                        install.CONTRACT_DIR / name, plans[harness].links[base / name]
+                    )
+
+    def test_user_scope_links_the_skill_into_each_harness(self) -> None:
+        plans = install.plan_harnesses(self.home)
+
+        for harness in install.HARNESSES:
+            with self.subTest(harness=harness):
+                base = self.home / install.HOME_DIR[harness]
+                self.assertEqual(
+                    install.SKILL_DIR,
+                    plans[harness].links[base / "skills" / install.SKILL_DIR.name],
+                )
+
+    def test_commandcode_gets_agents_md_without_claude_filename(self) -> None:
         plans = install.plan_harnesses(self.home)
         links = plans["commandcode"].links
 
-        self.assertEqual([self.home / ".commandcode" / "AGENTS.md"], list(links))
+        self.assertIn(self.home / ".commandcode" / "AGENTS.md", links)
+        self.assertNotIn(self.home / ".commandcode" / "CLAUDE.md", links)
+
+    def test_every_user_harness_resolves_the_companion_imports_it_ships(self) -> None:
+        plans = install.plan_harnesses(self.home)
+
+        for harness in ("claude", "commandcode"):
+            with self.subTest(harness=harness):
+                plan = plans[harness]
+                install.apply_plan(plan, install.CONTRACT_DIR, dry_run=False)
+                base = self.home / install.HOME_DIR[harness]
+                contract = (base / "AGENTS.md").read_text(encoding="utf-8")
+                imported = re.findall(r"^@(\S+)$", contract, re.MULTILINE)
+                self.assertTrue(imported, harness)
+                missing = [name for name in imported if not (base / name).is_file()]
+                self.assertEqual([], missing, harness)
+
+    def test_a_real_skill_directory_is_refused_not_replaced(self) -> None:
+        skill = self.home / ".claude" / "skills" / install.SKILL_DIR.name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("MY OWN SKILL\n", encoding="utf-8")
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("claude",), install.CONTRACT_DIR
+        )
+
+        self.assertEqual([skill], conflicts)
+
+    def test_a_directory_at_a_file_target_is_refused(self) -> None:
+        agents = self.home / ".claude" / "AGENTS.md"
+        agents.mkdir(parents=True)
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("claude",), install.CONTRACT_DIR
+        )
+
+        self.assertEqual([agents], conflicts)
+
+    def test_force_backs_up_a_real_skill_directory_before_replacing_it(self) -> None:
+        skill = self.home / ".claude" / "skills" / install.SKILL_DIR.name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("MY OWN SKILL\n", encoding="utf-8")
+
+        code = install.main(["--home", str(self.home), "--harness", "claude", "--force"])
+
+        self.assertEqual(0, code)
+        self.assertTrue(skill.is_symlink())
+        backup = skill.with_name(skill.name + ".bak")
+        self.assertEqual(
+            "MY OWN SKILL\n", (backup / "SKILL.md").read_text(encoding="utf-8")
+        )
 
     def test_apply_creates_links_that_resolve_to_the_contract(self) -> None:
         plan = install.plan_harnesses(self.home)["claude"]
@@ -85,11 +158,21 @@ class GrokRulesTestCase(unittest.TestCase):
 
 
 class MirrorTestCase(unittest.TestCase):
-    def test_mirror_is_byte_identical_to_the_contract(self) -> None:
-        target = install.sync_contract_mirror(install.CONTRACT_DIR, install.SKILL_DIR)
+    def test_both_mirrors_are_byte_identical_to_their_sources(self) -> None:
+        targets = install.sync_contract_mirror(install.CONTRACT_DIR, install.SKILL_DIR)
 
         self.assertEqual(
-            (install.CONTRACT_DIR / "AGENTS.md").read_bytes(), target.read_bytes()
+            [
+                install.SKILL_DIR / "references" / "contract.md",
+                install.SKILL_DIR / "references" / "commands.md",
+            ],
+            targets,
+        )
+        self.assertEqual(
+            (install.CONTRACT_DIR / "AGENTS.md").read_bytes(), targets[0].read_bytes()
+        )
+        self.assertEqual(
+            (install.CONTRACT_DIR / "RTK.md").read_bytes(), targets[1].read_bytes()
         )
 
 

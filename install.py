@@ -4,10 +4,11 @@ exports: HARNESSES | HarnessPlan | find_conflicts | main | plan_harnesses | plan
 used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, SKILL_DIR, HarnessPlan, apply_plan, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. The contract text ends in `@`-imports for its four companions, so any harness receiving AGENTS.md must receive them beside it, in every scope and every harness subset; attaching them to one plan leaves the others loading a contract with dangling pointers. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a differing regular file is refused unless --force writes a .bak first.
+rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract and symlinks to the four companions beside it, because an import resolves relative to the reading file. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. The contract text ends in `@`-imports for its four companions, so any harness receiving AGENTS.md must receive them beside it, in every scope and every harness subset; attaching them to one plan leaves the others loading a contract with dangling pointers. Every user-scope harness also gets the skill linked into its skills directory, so the agent reads the same skill the checkout carries instead of a stale vendored copy. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | closed the last overwrite gap: provenance was unknowable from a path comparison alone, so a vendored file edited in place was replaced silently; vendor_skill now writes .vendored.json and find_vendored_edits diffs against it, which also keeps a stale upstream copy replaceable
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | plan_project attached the companions to claude only, though all three plans share the root AGENTS.md whose tail imports them — a commandcode-only project install loaded the contract with four dangling @-pointers. Companions now attach to every plan; main's emitted-set dedup keeps a multi-harness run to one write each. Also dry_run now reports hook changes instead of silently skipping them.
 agent:   fx | unknown | 2026-10-31 | unknown | removed the hook runtime and installer wiring, then deleted the one-shot cleanup tool; install now writes the contract only
+agent:   fx | unknown | 2026-10-31 | unknown | user scope now links the companions beside AGENTS.md and links the skill into each harness skills directory; the skill mirror also syncs commands.md from RTK.md, closing the stale global-copy and catalogue drift
 """
 
 from __future__ import annotations
@@ -56,13 +57,11 @@ def render_grok_rules(contract_dir: Path) -> dict[str, str]:
     }
 
 
-def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> Path:
-    """Write the skill's copy of the contract from the single source.
+def _sync_copy(source: Path, target: Path) -> Path:
+    """Copy source over target through a staged sibling.
 
-    Rules:   The skill reads references/contract.md, and that copy must match contract/AGENTS.md byte for byte — a stale mirror is what made the skill and the contract disagree. Write through a temporary sibling and move it into place, so a concurrent read never sees a partial file.
+    Rules:   Write through a temporary sibling and move it into place, so a concurrent read never sees a partial file. Copy bytes, not text, so the mirror comparison stays exact.
     """
-    source = contract_dir / "AGENTS.md"
-    target = skill_dir / "references" / "contract.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(target.name + ".staged")
     shutil.copyfile(source, staged)
@@ -70,10 +69,22 @@ def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> Path:
     return target
 
 
+def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> list[Path]:
+    """Write the skill's copies of the contract and RTK catalogue from their sources.
+
+    Rules:   The skill reads references/contract.md and references/commands.md, and both copies must match contract/AGENTS.md and contract/RTK.md byte for byte — a stale mirror is what made the skill and the contract disagree, and a hand-condensed catalogue drifted the same way. Rewrite both on every install; return every path written so the caller reports each one.
+    """
+    references = skill_dir / "references"
+    return [
+        _sync_copy(contract_dir / "AGENTS.md", references / "contract.md"),
+        _sync_copy(contract_dir / "RTK.md", references / "commands.md"),
+    ]
+
+
 def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
     """Return the user-scope install shape for each harness under one home.
 
-    Rules:   Resolve every target under the caller's home so a test can point at a temporary directory and never touch real configs. Claude Code reads CLAUDE.md and AGENTS.md, so it gets both; Command Code reads AGENTS.md only. Both land beside the harness's own config directory, which is where each looks for global memory.
+    Rules:   Resolve every target under the caller's home so a test can point at a temporary directory and never touch real configs. Claude Code reads CLAUDE.md and AGENTS.md, so it gets both; Command Code reads AGENTS.md only. Both land beside the harness's own config directory, which is where each looks for global memory. Every harness gets the four companions beside its AGENTS.md because the contract imports them by bare filename, and the skill linked into its skills directory so the loader reads the checkout's skill rather than a stale copy.
     """
     plans: dict[str, HarnessPlan] = {}
     for harness in HARNESSES:
@@ -81,6 +92,10 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
         links: dict[Path, Path] = {base / "AGENTS.md": CONTRACT_DIR / "AGENTS.md"}
         if harness == "claude":
             links[base / "CLAUDE.md"] = CONTRACT_DIR / "AGENTS.md"
+        if harness != "grok":
+            for name in COMPANIONS:
+                links[base / name] = CONTRACT_DIR / name
+        links[base / "skills" / SKILL_DIR.name] = SKILL_DIR
         rules_dir = base / "rules" if harness == "grok" else None
         plans[harness] = HarnessPlan(harness, links, rules_dir)
     return plans
@@ -115,7 +130,7 @@ def plan_project(root: Path) -> dict[str, HarnessPlan]:
 def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     """Point target at source and report what happened.
 
-    Rules:   Replace a stale link or an existing file, because a leftover copy shadows the contract and drifts from it — that is the failure this script exists to end. Create the parent directory first; a harness directory may not exist yet. A dry run reports the same decision and changes nothing, so `--dry-run` distinguishes current wiring (`unchanged`) from real drift.
+    Rules:   Replace a stale link or an existing file, because a leftover copy shadows the contract and drifts from it — that is the failure this script exists to end. Remove a real directory only when the caller has already backed it up and chosen --force, since a skill directory is not a file to unlink. Create the parent directory first; a harness directory may not exist yet. A dry run reports the same decision and changes nothing, so `--dry-run` distinguishes current wiring (`unchanged`) from real drift.
     """
     current = target.is_symlink() and Path(os.path.realpath(target)) == source
     if current:
@@ -125,7 +140,10 @@ def _link(target: Path, source: Path, dry_run: bool = False) -> str:
         return action
     target.parent.mkdir(parents=True, exist_ok=True)
     if action == "replaced":
-        target.unlink()
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
     target.symlink_to(source)
     return action
 
@@ -135,21 +153,32 @@ def find_conflicts(
 ) -> list[Path]:
     """Return existing files an install would overwrite with different content.
 
-    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions, so it must be refused rather than replaced. Grok's rules files count too: they are written by apply_plan outside `links`, so guarding only `links` left a user's own .grok/rules/RTK.md silently clobbered.
+    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions, so it must be refused rather than replaced. A directory target is always refused because the only directory this script links is the skill, and a real directory there belongs to the user. Grok's rules files count too: they are written by apply_plan outside `links`, so guarding only `links` left a user's own .grok/rules/RTK.md silently clobbered.
     """
     conflicts: list[Path] = []
 
     def note(target: Path, expected: bytes) -> None:
-        if target in conflicts or target.is_symlink() or not target.is_file():
+        if target in conflicts or target.is_symlink():
             return
-        if target.read_bytes() != expected:
+        if target.is_file():
+            if target.read_bytes() != expected:
+                conflicts.append(target)
+        elif target.exists():
             conflicts.append(target)
+
+    def note_directory(target: Path) -> None:
+        if target in conflicts or target.is_symlink() or not target.exists():
+            return
+        conflicts.append(target)
 
     for harness, plan in plans.items():
         if harness not in chosen:
             continue
         for target, source in plan.links.items():
-            note(target, source.read_bytes())
+            if source.is_dir():
+                note_directory(target)
+            else:
+                note(target, source.read_bytes())
         if plan.rules_dir is not None:
             for name, text in render_grok_rules(contract_dir).items():
                 note(plan.rules_dir / name, text.encode())
@@ -159,7 +188,7 @@ def find_conflicts(
 def backup(target: Path) -> Path:
     """Copy target to a .bak before it is overwritten.
 
-    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Return the path written so the caller can report it.
+    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Copy a real directory recursively, since the only directory target is a skill and --force must preserve it whole. Return the path written so the caller can report it.
     """
     directory, stem = target.parent, target.name
     directory.mkdir(parents=True, exist_ok=True)
@@ -168,7 +197,10 @@ def backup(target: Path) -> Path:
     while candidate.exists():
         candidate = directory / f"{stem}.bak{counter}"
         counter += 1
-    shutil.copyfile(target, candidate)
+    if target.is_dir() and not target.is_symlink():
+        shutil.copytree(target, candidate)
+    else:
+        shutil.copyfile(target, candidate)
     return candidate
 
 
@@ -292,8 +324,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"install: backed up {path} to {backup(path)}")
 
     if not args.dry_run:
-        mirror = sync_contract_mirror(CONTRACT_DIR, SKILL_DIR)
-        print(f"contract: wrote {mirror}")
+        for mirror in sync_contract_mirror(CONTRACT_DIR, SKILL_DIR):
+            print(f"contract: wrote {mirror}")
 
     emitted: set[Path] = set()
     for harness, plan in plans.items():

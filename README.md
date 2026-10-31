@@ -7,7 +7,7 @@ workspace contract lives in `contract/AGENTS.md`.
 
 | Path | Purpose |
 |---|---|
-| `install.py` | Per-harness installer — symlinks the contract where each harness reads it, writes Grok's rules files, and syncs the skill mirror |
+| `install.py` | Per-harness installer — symlinks the contract, companions, and skill where each harness reads them, writes Grok's rules files, and syncs the skill references |
 | `contract/AGENTS.md` | Canonical contract — operating principles, Work Loop, engineering standards, CodeDNA, execution & delivery, environment |
 | `contract/RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
 | `contract/semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
@@ -15,9 +15,10 @@ workspace contract lives in `contract/AGENTS.md`.
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
 | `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
+| `.agents/skills/agents-contract/references/commands.md` | Byte-identical mirror of `contract/RTK.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 languages, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
-| `tests/test_install.py` | Tests for the per-harness install shapes, Grok rules rendering, and mirror |
+| `tests/test_install.py` | Tests for the per-harness install shapes, Grok rules rendering, skill links, and both mirrors |
 | `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
 | `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
 | `LICENSE` | MIT |
@@ -58,9 +59,9 @@ Each harness gets the shape it can actually read:
 
 | Harness | User scope | Project scope |
 |---|---|---|
-| Claude Code | `~/.claude/AGENTS.md`, `~/.claude/CLAUDE.md` → `contract/AGENTS.md` | `<root>/AGENTS.md` + companions, `CLAUDE.md` |
-| Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md` | `<root>/AGENTS.md` + companions |
-| Grok | `~/.grok/AGENTS.md` link, plus each companion as `~/.grok/rules/*.md` | same, under `<root>/.grok/rules/` |
+| Claude Code | `~/.claude/AGENTS.md`, `~/.claude/CLAUDE.md` → `contract/AGENTS.md`, companions beside them, skill at `~/.claude/skills/agents-contract` | `<root>/AGENTS.md` + companions, `CLAUDE.md` |
+| Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md`, companions beside it, skill at `~/.commandcode/skills/agents-contract` | `<root>/AGENTS.md` + companions |
+| Grok | `~/.grok/AGENTS.md` link, each companion as `~/.grok/rules/*.md`, skill at `~/.grok/skills/agents-contract` | same, under `<root>/.grok/rules/` |
 
 The Grok row is the one worth knowing: the same single `AGENTS.md` serves all
 three harnesses, but Grok would have silently received only that file and lost
@@ -73,29 +74,34 @@ those four files beside it — in either scope, and for any `--harness` subset.
 A Command Code-only project install would otherwise commit a contract whose
 four imports resolve to nothing.
 
-**User scope links; project scope copies.** A user install symlinks, so a
-`git pull` in the checkout re-syncs what every harness reads. A project install
-writes real files, because its output is committed: a symlink into the
-installing machine's checkout resolves to nothing on a teammate's clone.
+**User scope links; project scope copies.** A user install symlinks the
+contract, companions, and skill, so a `git pull` in the checkout re-syncs what
+every harness reads; Grok's rules directory is refreshed on each installer run.
+A project install writes real files, because its output is committed: a symlink
+into the installing machine's checkout resolves to nothing on a teammate's
+clone.
 
 A broken symlink contributes nothing and fails silently — every emitted path is
 checked before the run reports success, and a re-run reports `unchanged`.
 
 **Nothing is overwritten by accident.** The installer refuses to replace any
 existing file whose contents differ from the contract — a project's own
-`AGENTS.md` or a hand-written `.grok/rules/RTK.md` — and exits 1 without touching
-it. `--force` replaces it only after writing a `.bak`. Project scope also refuses
-to run against the lowheat checkout itself, where it would duplicate `contract/`
-back into the repo root.
+`AGENTS.md`, a hand-written `.grok/rules/RTK.md`, or a real skill directory —
+and exits 1 without touching it. `--force` replaces it only after writing a
+`.bak` (recursively, for a directory). Project scope also refuses to run against
+the lowheat checkout itself, where it would duplicate `contract/` back into the
+repo root.
 
-### Keeping the mirror in sync
+### Keeping the mirrors in sync
 
-`references/contract.md` is written by `install.py` from `contract/AGENTS.md`
-on every run; do not edit either copy by hand. Edit `contract/AGENTS.md`, then
-re-run the installer. To verify without writing:
+`references/contract.md` is written by `install.py` from `contract/AGENTS.md`,
+and `references/commands.md` from `contract/RTK.md`, on every run; do not edit
+either copy by hand. Edit the source under `contract/`, then re-run the
+installer. To verify without writing:
 
 ```bash
 cmp contract/AGENTS.md .agents/skills/agents-contract/references/contract.md
+cmp contract/RTK.md .agents/skills/agents-contract/references/commands.md
 ```
 
 Run the contract's own checks:
