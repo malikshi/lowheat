@@ -1512,20 +1512,58 @@ class DialectContentTestCase(CodednaCheckTestCase):
                 self.assertEqual([], self.checker.check_file(path, self.root), suffix)
 
     def test_directive_above_the_header_is_not_the_title(self) -> None:
-        cases = {
-            ".go": "//go:build linux\n\n",
-            ".c": "/* SPDX-License-Identifier: MIT */\n\n",
-            ".sh": "# shellcheck disable=SC2034\n",
-        }
-        for suffix, prefix in cases.items():
+        cases = (
+            (".go", "//go:build linux\n\n"),
+            (".c", "/* SPDX-License-Identifier: MIT */\n\n"),
+            (".c", "/*\n * SPDX-License-Identifier: MIT\n */\n\n"),
+            (".sh", "# shellcheck disable=SC2034\n"),
+        )
+        for index, (suffix, prefix) in enumerate(cases):
             marker, code = LANGUAGE_CASES[suffix]
-            with self.subTest(suffix=suffix):
+            with self.subTest(suffix=suffix, case=index):
                 text = prefix + language_fixture(suffix, marker, code)
-                path = self.write("src/directive" + suffix, text)
+                path = self.write(f"src/directive{index}" + suffix, text)
                 self.assertEqual([], self.checker.check_file(path, self.root), suffix)
                 self.assertEqual([], self.checker.check_comment_content(path), suffix)
         bare = self.write("src/bare.go", "//go:build linux\n\npackage sample\n")
         self.assertEqual(["missing L1 header"], self.checker.check_file(bare, self.root))
+
+    def test_rust_doc_marker_header_is_clean(self) -> None:
+        lines = (
+            "/// sample.rs — Example module.",
+            "///",
+            "/// exports: none",
+            "/// used_by: none",
+            "/// rules:   none",
+            "/// agent:   test-agent | 9router | 2026-10-08 | s_test | added sample",
+        )
+        for marker in ("///", "//!"):
+            with self.subTest(marker=marker):
+                text = "\n".join(line if marker == "///" else line.replace("///", "//!") for line in lines)
+                path = self.write("src/doc.rs", text + "\n\npub fn f() {}\n")
+                self.assertEqual([], self.checker.check_file(path, self.root))
+                self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_percent_assignment_does_not_swallow_later_comments(self) -> None:
+        body = "total %= 3\n# helper keeps the ledger warm\n"
+        path = self.write("src/percent.rb", language_fixture(".rb", "#", body.rstrip("\n")))
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("outside the permitted content", findings[0])
+
+    def test_unterminated_percent_literal_fails_open(self) -> None:
+        body = "x = %q[abc\n# helper keeps the ledger warm\n"
+        path = self.write("src/open.rb", language_fixture(".rb", "#", body.rstrip("\n")))
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+
+    def test_hash_bracket_comment_is_prose_outside_php(self) -> None:
+        body = "#[note] helper keeps the ledger warm\n"
+        path = self.write(
+            "src/hash.rb", language_fixture(".rb", "#", "x = 1", body.rstrip("\n"))
+        )
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
 
     def test_shell_length_expansion_is_not_a_comment(self) -> None:
         body = "echo ${#arr[@]}\nif [ ${#x} -gt 0 ]; then echo ok; fi\n"

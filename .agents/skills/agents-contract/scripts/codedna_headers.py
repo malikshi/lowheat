@@ -158,22 +158,30 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
         if close_marker:
             if stripped.startswith(close_marker):
                 body = stripped[len(close_marker):].strip()
-                if body:
+                if body and not _header_directive(profile, body):
                     collected.append((index + 1, body))
-                break
+                close_marker = ""
+                if collected:
+                    break
+                continue
             body = _block_body(stripped)
-            if body:
+            if body and not _header_directive(profile, body):
                 collected.append((index + 1, body))
             continue
-        if profile.is_directive(stripped):
+        if _header_directive(profile, stripped):
+            opened = _line_block_open(profile, raw, stripped)
+            if opened is not None and not opened[2]:
+                close_marker = opened[0].close
             continue
         opened = _line_block_open(profile, raw, stripped)
         if opened is not None:
             marker, body, closed = opened
-            if body:
+            if body and not _header_directive(profile, body):
                 collected.append((index + 1, body))
             if closed:
-                break
+                if collected:
+                    break
+                continue
             close_marker = marker.close
             continue
         if profile.is_comment(stripped):
@@ -181,6 +189,18 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
             continue
         break
     return collected
+
+
+def _header_directive(profile: LanguageProfile, stripped: str) -> bool:
+    """Judge one line a directive that cannot start the L1 header.
+
+    Rules:   A directive line that carries the header em dash or an L1 field label is real header content (`/// module — ...`, `/// exports: ...`); a bare directive, license, pragma, or doc separator is skipped without ending the header search.
+    """
+    return (
+        profile.is_directive(stripped)
+        and EM_DASH not in stripped
+        and _FIELD_LINE.match(stripped) is None
+    )
 
 
 def _line_block_open(

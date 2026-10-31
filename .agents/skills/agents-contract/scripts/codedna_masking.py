@@ -190,6 +190,8 @@ def _regex_can_start(text: str, index: int) -> bool:
 
 # Rules: Ruby percent literals start with `%` plus an optional type letter plus a delimiter; a space, a digit, or a closing bracket means the modulo operator.
 _PERCENT_TYPES = frozenset("qQwWiIrxs")
+# Rules: `%=`, `%+`, `%-`, `%*`, and `%/%` are Ruby assignment/arithmetic operators, never literal openers.
+_PERCENT_REJECTED = frozenset("=+-*/%")
 _PAIRED_DELIMITERS = {"(": ")", "[": "]", "{": "}", "<": ">"}
 
 
@@ -204,7 +206,9 @@ def _percent_literal_end(text: str, index: int) -> int | None:
     if text[cursor:cursor + 1] in _PERCENT_TYPES:
         cursor += 1
     delimiter = text[cursor:cursor + 1]
-    if not delimiter or delimiter.isalnum() or delimiter.isspace() or delimiter == "%":
+    if not delimiter or delimiter.isalnum() or delimiter.isspace():
+        return None
+    if delimiter in _PERCENT_REJECTED:
         return None
     return _delimited_literal_end(text, cursor)
 
@@ -226,10 +230,10 @@ def _sigil_end(text: str, index: int) -> int | None:
     return _delimited_literal_end(text, cursor)
 
 
-def _delimited_literal_end(text: str, delimiter_index: int) -> int:
-    """Return the index after the closing delimiter of one delimited literal.
+def _delimited_literal_end(text: str, delimiter_index: int) -> int | None:
+    """Return the index after the closing delimiter of one delimited literal, or None.
 
-    Rules:   Paired delimiters nest; a backslash escapes; an unterminated literal runs to the end.
+    Rules:   Paired delimiters nest; a backslash escapes; an unterminated literal fails open so it never silences the rest of the file.
     """
     delimiter = text[delimiter_index]
     closer = _PAIRED_DELIMITERS.get(delimiter, delimiter)
@@ -249,7 +253,7 @@ def _delimited_literal_end(text: str, delimiter_index: int) -> int:
             if depth == 0:
                 return cursor + 1
         cursor += 1
-    return n
+    return None
 
 
 def _php_opener(text: str, index: int) -> str:

@@ -168,7 +168,7 @@ DEFAULT_IGNORED_DIRS = (
 )
 
 _MARKER_PREFIX = (
-    r"(?://+|<!--|-->|/\*|\*/|\{-|-\}|\(\*|\*\)|<#|#>|"
+    r"(?://!|//+|<!--|-->|/\*|\*/|\{-|-\}|\(\*|\*\)|<#|#>|"
     r"=begin|=end|=pod|=cut|\*+|#+|;+|--+|%+|'+|!+|::+|@?(?i:REM)\b)"
 )
 _FIELD_LINE = re.compile(
@@ -386,7 +386,7 @@ class LanguageProfile:
                 continue
             if marker == "#" and previous in "${":
                 continue
-            if marker == "#" and text.startswith("#[", index):
+            if marker == "#" and self.php_mode and text.startswith("#[", index):
                 continue
             if marker == ";" and previous == "\\":
                 continue
