@@ -291,6 +291,8 @@ class LanguageProfile:
         raw_strings: bool = False,
         here_strings: bool = False,
         php_mode: bool = False,
+        percent_literals: bool = False,
+        sigils: bool = False,
         prefixes: tuple[str, ...] | None = None,
     ) -> None:
         self.name = name
@@ -314,6 +316,8 @@ class LanguageProfile:
         self.raw_strings = raw_strings
         self.here_strings = here_strings
         self.php_mode = php_mode
+        self.percent_literals = percent_literals
+        self.sigils = sigils
         strip = list(self.line_markers) + list(self.word_markers)
         for marker in self.block_markers:
             strip.extend((marker.open, marker.close))
@@ -373,10 +377,18 @@ class LanguageProfile:
         Rules:   The marker must sit at a code position — after whitespace or one of the inline prefix characters — so `https://` and `a//b` stay code; a `--` followed by `>` is the Haskell operator; batch `::` and `REM` must be the first token on their line.
         """
         previous = text[index - 1] if index else ""
-        if previous and (previous.isalnum() or previous in "_:/$"):
+        if previous and (previous.isalnum() or previous in "_:"):
             return None
         for marker in self.line_markers:
             if not text.startswith(marker, index):
+                continue
+            if previous in "/":
+                continue
+            if marker == "#" and previous in "${":
+                continue
+            if marker == "#" and text.startswith("#[", index):
+                continue
+            if marker == ";" and previous == "\\":
                 continue
             if marker == "--" and text.startswith("-->", index):
                 continue
@@ -687,6 +699,7 @@ _register(
             "# -*-",
         ),
         regex_literals=True,
+        percent_literals=True,
         prefixes=("#", "=begin", "=end"),
     ),
 )
@@ -717,12 +730,13 @@ _register(
         ("--",),
         (BlockMarker("{-", "-}", nested=True),),
         directives=("{-#", "{- |", "-- |"),
+        string_quotes=('"',),
         prefixes=("--", "{-", "-}"),
     ),
 )
 _register(
     (".ex", ".exs"),
-    _profile("elixir", ("#",), triple_quotes=True, prefixes=("#",)),
+    _profile("elixir", ("#",), triple_quotes=True, sigils=True, prefixes=("#",)),
 )
 _register(
     (".erl", ".hrl"),
@@ -730,7 +744,7 @@ _register(
 )
 _register(
     (".clj", ".cljs", ".cljc"),
-    _profile("clojure", (";",), prefixes=(";",)),
+    _profile("clojure", (";",), string_quotes=('"',), prefixes=(";",)),
 )
 _register(
     (".sql",),
@@ -775,6 +789,7 @@ _register(
         ("//",),
         (BlockMarker("(*", "*)", nested=True),),
         directives=("#if", "#else", "#endif", "#load", "#r ", "#light", "#nowarn"),
+        string_quotes=('"',),
         prefixes=("//", "(*", "*)"),
     ),
 )
@@ -784,6 +799,7 @@ _register(
         "ocaml",
         (),
         (BlockMarker("(*", "*)", nested=True),),
+        string_quotes=('"',),
         prefixes=("(*", "*)"),
     ),
 )

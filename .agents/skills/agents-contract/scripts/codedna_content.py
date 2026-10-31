@@ -148,7 +148,7 @@ def check_comment_content(path: Path) -> list[str]:
         )
         return findings
     spans: list[tuple[int, int]] = []
-    masked = mask_code(profile, text, path.suffix, spans)
+    masked = mask_code(profile, text, spans)
     skip_lines = _shell_heredoc_lines(text) if profile.name == "shell" else frozenset()
     findings.extend(
         _scan_content(

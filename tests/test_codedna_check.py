@@ -1109,7 +1109,7 @@ class MaskCodeEdgeTestCase(CodednaCheckTestCase):
         import codedna_spec
 
         profile = codedna_spec.profile_for(Path("sample" + suffix))
-        return codedna_masking.mask_code(profile, text, suffix)
+        return codedna_masking.mask_code(profile, text)
 
     def test_mask_code_blanks_an_escaped_quote_string_whole(self) -> None:
         self.assertEqual(
@@ -1478,6 +1478,7 @@ FALSE_POSITIVE_CORPUS = [
     (".php", "?>\n# markup heading is output text\n<p># also output</p>\n<?php\necho 1;\n"),
     (".ex", 'x = 1\n"""\n# not a comment\n"""\n'),
     (".jl", 'x = 1\n"""\n# not a comment\n"""\n'),
+    (".clj", "(def c \\;)\n(def d \\#)\n"),
 ]
 
 
@@ -1509,6 +1510,55 @@ class DialectContentTestCase(CodednaCheckTestCase):
                 path = self.write("src/lookalike" + suffix, text)
                 self.assertEqual([], self.checker.check_comment_content(path), suffix)
                 self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+
+    def test_directive_above_the_header_is_not_the_title(self) -> None:
+        cases = {
+            ".go": "//go:build linux\n\n",
+            ".c": "/* SPDX-License-Identifier: MIT */\n\n",
+            ".sh": "# shellcheck disable=SC2034\n",
+        }
+        for suffix, prefix in cases.items():
+            marker, code = LANGUAGE_CASES[suffix]
+            with self.subTest(suffix=suffix):
+                text = prefix + language_fixture(suffix, marker, code)
+                path = self.write("src/directive" + suffix, text)
+                self.assertEqual([], self.checker.check_file(path, self.root), suffix)
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+        bare = self.write("src/bare.go", "//go:build linux\n\npackage sample\n")
+        self.assertEqual(["missing L1 header"], self.checker.check_file(bare, self.root))
+
+    def test_shell_length_expansion_is_not_a_comment(self) -> None:
+        body = "echo ${#arr[@]}\nif [ ${#x} -gt 0 ]; then echo ok; fi\n"
+        path = self.write("src/length.sh", language_fixture(".sh", "#", body.rstrip("\n")))
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_php_attribute_is_not_a_comment(self) -> None:
+        body = "class D {\n    #[Pure]\n    public function f() { return 1; }\n}"
+        path = self.write("src/attr.php", language_fixture(".php", "//", body))
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_percent_and_sigil_literals_are_not_comments(self) -> None:
+        ruby = "x = %w[#a #b]\ny = %q(#note)\nz = a % b\n"
+        elixir = "x = ~w[#a #b]\n"
+        for suffix, body in ((".rb", ruby), (".ex", elixir)):
+            marker, code = LANGUAGE_CASES[suffix]
+            with self.subTest(suffix=suffix):
+                path = self.write("src/literal" + suffix, language_fixture(suffix, marker, body.rstrip("\n")))
+                self.assertEqual([], self.checker.check_comment_content(path), suffix)
+
+    def test_quote_characters_do_not_hide_trailing_comments(self) -> None:
+        cases = {
+            ".ml": ("(*", "let f (x: 'a) = x (* helper keeps the ledger warm *)\n"),
+            ".hs": ("--", "foo' x = x -- helper keeps the ledger warm\n"),
+            ".fs": ("//", "let f (x: 'a) = x // helper keeps the ledger warm\n"),
+            ".clj": (";", "(def x 'y) ; helper keeps the ledger warm\n"),
+        }
+        for suffix, (marker, body) in cases.items():
+            with self.subTest(suffix=suffix):
+                path = self.write("src/quoted" + suffix, language_fixture(suffix, marker, body.rstrip("\n")))
+                findings = self.checker.check_comment_content(path)
+                self.assertEqual(1, len(findings), (suffix, findings))
+                self.assertIn("outside the permitted content", findings[0])
 
     def test_prose_inside_a_nested_block_is_reported(self) -> None:
         marker, code = LANGUAGE_CASES[".kt"]

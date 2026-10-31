@@ -20,7 +20,6 @@ from codedna_spec import _HEREDOC_OPEN, _PY_MASKED_TOKENS, BlockMarker, Language
 def mask_code(
     profile: LanguageProfile,
     text: str,
-    suffix: str,
     spans: list[tuple[int, int]] | None = None,
 ) -> str:
     """Blank code so the scanner sees only comment lines.
@@ -28,7 +27,7 @@ def mask_code(
     Rules:   Block markers are tried longest-first and before line markers; `nested` counts the opener again inside the body; an `at_line_start` marker opens only at column 0. String, template, and long-bracket interiors blank; JS templates track `${...}` nesting; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
     """
     js_family = profile.backtick == "js"
-    in_php = not profile.php_mode
+    in_php = False
     out: list[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -52,6 +51,18 @@ def mask_code(
             i += 2
             in_php = False
             continue
+        if profile.percent_literals and c == "%":
+            percent_end = _percent_literal_end(text, i)
+            if percent_end is not None:
+                out.append(re.sub(r"[^\n]", " ", text[i:percent_end]))
+                i = percent_end
+                continue
+        if profile.sigils and c == "~":
+            sigil_end = _sigil_end(text, i)
+            if sigil_end is not None:
+                out.append(re.sub(r"[^\n]", " ", text[i:sigil_end]))
+                i = sigil_end
+                continue
         long_comment = _long_bracket_at(profile.long_bracket, text, i)
         if long_comment is not None:
             start = i
@@ -175,6 +186,70 @@ def _regex_can_start(text: str, index: int) -> bool:
     while cursor >= 0 and (text[cursor].isalnum() or text[cursor] == "_"):
         cursor -= 1
     return text[cursor + 1:end] in _REGEX_KEYWORDS
+
+
+# Rules: Ruby percent literals start with `%` plus an optional type letter plus a delimiter; a space, a digit, or a closing bracket means the modulo operator.
+_PERCENT_TYPES = frozenset("qQwWiIrxs")
+_PAIRED_DELIMITERS = {"(": ")", "[": "]", "{": "}", "<": ">"}
+
+
+def _percent_literal_end(text: str, index: int) -> int | None:
+    """Return the index after one Ruby percent literal, or None.
+
+    Rules:   A modulo operand (`a % b`, `a %w[x]` directly after a value) is not a literal; paired delimiters nest; an unterminated literal runs to the end.
+    """
+    if index and (text[index - 1].isalnum() or text[index - 1] in "_)]"):
+        return None
+    cursor = index + 1
+    if text[cursor:cursor + 1] in _PERCENT_TYPES:
+        cursor += 1
+    delimiter = text[cursor:cursor + 1]
+    if not delimiter or delimiter.isalnum() or delimiter.isspace() or delimiter == "%":
+        return None
+    return _delimited_literal_end(text, cursor)
+
+
+def _sigil_end(text: str, index: int) -> int | None:
+    """Return the index after one Elixir sigil literal, or None.
+
+    Rules:   A sigil is `~`, one or more name letters, then a non-alphanumeric delimiter; an unterminated sigil runs to the end.
+    """
+    cursor = index + 1
+    start = cursor
+    while text[cursor:cursor + 1].isalpha():
+        cursor += 1
+    if cursor == start:
+        return None
+    delimiter = text[cursor:cursor + 1]
+    if not delimiter or delimiter.isalnum() or delimiter.isspace() or delimiter == "~":
+        return None
+    return _delimited_literal_end(text, cursor)
+
+
+def _delimited_literal_end(text: str, delimiter_index: int) -> int:
+    """Return the index after the closing delimiter of one delimited literal.
+
+    Rules:   Paired delimiters nest; a backslash escapes; an unterminated literal runs to the end.
+    """
+    delimiter = text[delimiter_index]
+    closer = _PAIRED_DELIMITERS.get(delimiter, delimiter)
+    nested = delimiter in _PAIRED_DELIMITERS
+    depth = 1
+    cursor = delimiter_index + 1
+    n = len(text)
+    while cursor < n:
+        char = text[cursor]
+        if char == "\\":
+            cursor += 2
+            continue
+        if nested and char == delimiter:
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0:
+                return cursor + 1
+        cursor += 1
+    return n
 
 
 def _php_opener(text: str, index: int) -> str:

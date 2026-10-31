@@ -165,6 +165,8 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
             if body:
                 collected.append((index + 1, body))
             continue
+        if profile.is_directive(stripped):
+            continue
         opened = _line_block_open(profile, raw, stripped)
         if opened is not None:
             marker, body, closed = opened
@@ -173,8 +175,6 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
             if closed:
                 break
             close_marker = marker.close
-            continue
-        if profile.is_directive(stripped) and not profile.is_comment(stripped):
             continue
         if profile.is_comment(stripped):
             collected.append((index + 1, stripped))
