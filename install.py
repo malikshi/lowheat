@@ -1,18 +1,18 @@
 """install.py — Put the contract in front of every harness that reads it.
 
-exports: HARNESSES | HarnessPlan | find_conflicts | find_vendored_edits | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror | vendor_skill
+exports: HARNESSES | HarnessPlan | find_conflicts | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror
 used_by: README.md → the install section
-related: contract/AGENTS.md is the source; contract/*.md are its companions; .agents/skills/agents-contract/hooks/install_hooks.py wires the hook.
-rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. The contract text ends in `@`-imports for its four companions, so any harness receiving AGENTS.md must receive them beside it, in every scope and every harness subset; attaching them to one plan leaves the others loading a contract with dangling pointers. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a vendored copy records its installed hashes in .vendored.json, so an in-place edit is refused while a stale upstream copy stays replaceable.
+used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, SKILL_DIR, HarnessPlan, apply_plan, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
+related: contract/AGENTS.md is the source and contract/*.md are its companions.
+rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. The contract text ends in `@`-imports for its four companions, so any harness receiving AGENTS.md must receive them beside it, in every scope and every harness subset; attaching them to one plan leaves the others loading a contract with dangling pointers. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a differing regular file is refused unless --force writes a .bak first.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | closed the last overwrite gap: provenance was unknowable from a path comparison alone, so a vendored file edited in place was replaced silently; vendor_skill now writes .vendored.json and find_vendored_edits diffs against it, which also keeps a stale upstream copy replaceable
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | plan_project attached the companions to claude only, though all three plans share the root AGENTS.md whose tail imports them — a commandcode-only project install loaded the contract with four dangling @-pointers. Companions now attach to every plan; main's emitted-set dedup keeps a multi-harness run to one write each. Also dry_run now reports hook changes instead of silently skipping them.
+agent:   fx | unknown | 2026-10-31 | unknown | removed the hook runtime and installer wiring, then deleted the one-shot cleanup tool; install now writes the contract only
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import os
 import shutil
 import sys
@@ -24,7 +24,6 @@ CONTRACT_DIR = _HERE / "contract"
 SKILL_DIR = _HERE / ".agents" / "skills" / "agents-contract"
 COMPANIONS = ("RTK.md", "semble.md", "caveman.md", "ponytail.md")
 HARNESSES = ("claude", "commandcode", "grok")
-_VENDOR_IGNORE = ("__pycache__", "*.pyc")
 
 HOME_DIR = {
     "claude": ".claude",
@@ -90,7 +89,7 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
 def plan_project(root: Path) -> dict[str, HarnessPlan]:
     """Return the project-scope shape, rooted at one repository.
 
-    Rules:   A project install lands real files, not links: the settings and contract are committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone — it loads no contract and, because the hook fails open, silently stops enforcing. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, so the imports resolve in place. Those imports are in the contract text, so every harness that gets `<root>/AGENTS.md` needs the companions there too — including a Command Code-only install, which expands `@`-imports and would otherwise load the contract with four dangling pointers. Grok scans `<root>/.grok/rules`; it does not expand imports, so the root companions are unused there and the rules directory carries them whole.
+    Rules:   A project install lands real files, not links: the contract is committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone — it loads no contract. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, so the imports resolve in place. Those imports are in the contract text, so every harness that gets `<root>/AGENTS.md` needs the companions there too — including a Command Code-only install, which expands `@`-imports and would otherwise load the contract with four dangling pointers. Grok scans `<root>/.grok/rules`; it does not expand imports, so the root companions are unused there and the rules directory carries them whole.
     """
     agent = root / "AGENTS.md"
     plans = {
@@ -111,94 +110,6 @@ def plan_project(root: Path) -> dict[str, HarnessPlan]:
         for name in COMPANIONS:
             plan.links[root / name] = CONTRACT_DIR / name
     return plans
-
-
-def _skill_files(skill_dir: Path) -> dict[str, str]:
-    """Return every vendorable file's POSIX path and sha256 in the skill source.
-
-    Rules:   Key by POSIX relative path so a manifest written on Linux still matches on a clone, and hash content rather than size or mtime so a real edit is distinguishable from a touch. Skip bytecode the same way the copy does, or the manifest records files that are never installed.
-    """
-    return {
-        path.relative_to(skill_dir).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(skill_dir.rglob("*"))
-        if path.is_file() and not any(path.match(pat) for pat in _VENDOR_IGNORE)
-    }
-
-
-def _manifest_path(root: Path, name: str) -> Path:
-    """Return the manifest that records what a vendor run installed.
-
-    Rules:   Live inside the vendored directory, so it travels with the copy and a stale manifest cannot outlive the files it describes. Take the skill's directory name rather than hardcoding it: the manifest must sit beside the files it describes even when the source copy is named something else.
-    """
-    return root / ".agents" / "skills" / name / ".vendored.json"
-
-
-def _read_manifest(root: Path, name: str) -> dict[str, str] | None:
-    """Return the recorded hashes, or None when there is no usable manifest.
-
-    Rules:   A missing or unreadable manifest returns None rather than empty, because the two mean different things: empty is "we recorded nothing", None is "we cannot tell what we installed", and the caller must fall back to refusing on any difference.
-    """
-    try:
-        data = json.loads(_manifest_path(root, name).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    files = data.get("files") if isinstance(data, dict) else None
-    return files if isinstance(files, dict) else None
-
-
-def vendor_skill(root: Path, skill_dir: Path, dry_run: bool) -> list[str]:
-    """Copy the skill beside the project's contract so its hook can run there.
-
-    Rules:   The project hook command addresses the script through the workspace root, so the skill must exist inside the project — a path into the installer's checkout would be dead on any other clone. Replace rather than merge, because a partial copy from an earlier version leaves stale modules that import cleanly and behave wrongly. Skip the caches so a vendored copy stays reviewable in a diff. Record every installed file's hash in the manifest as the copy is written; without it a later run cannot tell a local edit from a stale upstream copy.
-    """
-    target = root / ".agents" / "skills" / skill_dir.name
-    if dry_run:
-        return [f"project: vendor {target} (dry run)"]
-    files = _skill_files(skill_dir)
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(skill_dir, target, ignore=shutil.ignore_patterns(*_VENDOR_IGNORE))
-    _write_manifest(root, skill_dir.name, files)
-    return [f"project: vendored {target}"]
-
-
-def _write_manifest(root: Path, name: str, files: dict[str, str]) -> Path:
-    """Write the vendored-file manifest.
-
-    Rules:   Write through a staged sibling and move it into place, so an interrupted run cannot leave a half-written manifest that makes every later run refuse for the wrong reason. Create the directory first — a caller may vendor into a root that does not exist yet.
-    """
-    path = _manifest_path(root, name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    staged = path.with_name(path.name + ".staged")
-    staged.write_text(
-        json.dumps({"files": files}, indent=1, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    os.replace(staged, path)
-    return path
-
-
-def find_vendored_edits(root: Path, skill_dir: Path) -> list[Path]:
-    """Return files inside a vendored skill copy that differ from what was installed.
-
-    Rules:   Compare against the manifest, not the current source: a file that differs from the recorded hash was edited locally and must be refused, while a file that matches the manifest is ours to replace even when upstream has moved on. A file the manifest does not mention is a local addition and counts as an edit. With no usable manifest, fall back to refusing anything that differs from the source, since a wrong refusal only costs a --force while a wrong replace loses the edit.
-    """
-    target = root / ".agents" / "skills" / skill_dir.name
-    if not target.is_dir():
-        return []
-    recorded = _read_manifest(root, skill_dir.name)
-    current = _skill_files(target)
-    if recorded is None:
-        source = _skill_files(skill_dir)
-        return sorted(
-            target / name
-            for name, digest in current.items()
-            if name != ".vendored.json" and source.get(name) != digest
-        )
-    return sorted(
-        target / name
-        for name, digest in current.items()
-        if name != ".vendored.json" and recorded.get(name) != digest
-    )
 
 
 def _link(target: Path, source: Path, dry_run: bool = False) -> str:
@@ -245,15 +156,12 @@ def find_conflicts(
     return conflicts
 
 
-def backup(target: Path, into: Path | None = None) -> Path:
+def backup(target: Path) -> Path:
     """Copy target to a .bak before it is overwritten.
 
-    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. `into` moves the backup to another directory, which a vendored-skill backup requires: vendor_skill replaces that whole directory, so a .bak written beside the file is deleted by the very operation it was meant to protect against. Return the path written so the caller can report it.
+    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Return the path written so the caller can report it.
     """
-    if into is None:
-        directory, stem = target.parent, target.name
-    else:
-        directory, stem = into, f"{target.parent.name}-{target.name}"
+    directory, stem = target.parent, target.name
     directory.mkdir(parents=True, exist_ok=True)
     candidate = directory / f"{stem}.bak"
     counter = 1
@@ -345,9 +253,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="overwrite an existing AGENTS.md, keeping a .bak of it",
     )
-    parser.add_argument(
-        "--no-hooks", action="store_true", help="skip the RTK/discovery hook wiring"
-    )
     args = parser.parse_args(argv)
 
     if not (CONTRACT_DIR / "AGENTS.md").is_file():
@@ -371,31 +276,20 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     conflicts = find_conflicts(plans, chosen, CONTRACT_DIR)
-    vendored: list[Path] = []
-    if project_root is not None and not args.no_hooks:
-        vendored = find_vendored_edits(project_root, SKILL_DIR)
-        conflicts.extend(vendored)
     if conflicts and not args.force:
         for path in conflicts:
             print(f"install: refusing to overwrite {path}", file=sys.stderr)
-        if vendored:
-            print(
-                "install: local edits inside the vendored skill are deleted by a reinstall",
-                file=sys.stderr,
-            )
         print(
             "install: that file is not ours; re-run with --force to keep a .bak and replace it",
             file=sys.stderr,
         )
         return 1
     if conflicts:
-        keep = project_root / ".agents" / "removed-skill-edits" if project_root else None
         for path in conflicts:
-            into = keep if path in vendored else None
             if args.dry_run:
                 print(f"install: would back up {path} to {path.name}.bak")
             else:
-                print(f"install: backed up {path} to {backup(path, into)}")
+                print(f"install: backed up {path} to {backup(path)}")
 
     if not args.dry_run:
         mirror = sync_contract_mirror(CONTRACT_DIR, SKILL_DIR)
@@ -415,21 +309,6 @@ def main(argv: list[str] | None = None) -> int:
         for action in apply_plan(unique, CONTRACT_DIR, args.dry_run):
             print(action)
 
-    if project_root is not None and not args.no_hooks:
-        for action in vendor_skill(project_root, SKILL_DIR, args.dry_run):
-            print(action)
-
-    if not args.no_hooks:
-        sys.path.insert(0, str(SKILL_DIR / "hooks"))
-        import install_hooks
-
-        for harness in chosen:
-            changes = install_hooks.install(
-                harness, home, root=project_root, dry_run=args.dry_run
-            )
-            for change in changes:
-                detail = f" ({change.detail})" if change.detail else ""
-                print(f"hooks: {change.action} {change.path}{detail}")
     return 0
 
 

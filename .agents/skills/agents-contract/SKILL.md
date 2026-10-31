@@ -137,6 +137,7 @@ Apply on every task, not just code changes:
 
 ## 3. Command style
 
+- These rules are instruction-only: no hook rewrites or refuses commands; invoke them yourself.
 - Locate code down the discovery ladder, trying the cheap rungs first: semble
   MCP → semble CLI → `rtk grep` → native Grep/Glob. Native is the fallback when
   the earlier rungs return nothing or you need every occurrence; reads stay

@@ -1,17 +1,17 @@
 """test_install.py — Tests for the per-harness contract installer.
 
-exports: class InstallerTestCase | class GrokRulesTestCase | class MirrorTestCase | class ProjectScopeTestCase | class DryRunTestCase | class ConflictGuardTestCase
+exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
-rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home so a test never rewrites real harness configs, and every emitted link must resolve to the contract source.
+rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source. Cleanup tests seed legacy handlers explicitly, so a pass proves the installer removed ours and kept foreign ones.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | first cut: asserted the per-harness shapes after Grok was found not to expand @-imports, so it needs the companions as standalone rules files while the other two get one symlink
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | added the per-harness companion-import check: the existing project case applies every plan at once, so Claude's companions satisfied the imports for all three and the commandcode-only case went untested. Each subtest now gets its own root.
+agent:   fx | unknown | 2026-10-31 | unknown | dropped hook wiring, vendored-skill cases, and the cleanup pass after the one-shot removal tool was deleted
 """
 
 from __future__ import annotations
 
 import importlib
 import re
-import shutil
 import sys
 import tempfile
 import unittest
@@ -149,7 +149,6 @@ class ProjectScopeTestCase(unittest.TestCase):
                         str(root),
                         "--harness",
                         harness,
-                        "--no-hooks",
                     ]
                 )
                 contract = (root / "AGENTS.md").read_text(encoding="utf-8")
@@ -171,7 +170,7 @@ class DryRunTestCase(unittest.TestCase):
         self.home = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(self.home, ignore_errors=True))
 
-    def test_dry_run_reports_the_hook_wiring_and_writes_nothing(self) -> None:
+    def test_dry_run_writes_no_harness_settings(self) -> None:
         install.main(
             ["--home", str(self.home), "--harness", "commandcode", "--dry-run"]
         )
@@ -199,9 +198,7 @@ class ConflictGuardTestCase(unittest.TestCase):
         agents = self.root / "AGENTS.md"
         agents.write_text("MY OWN RULES\n", encoding="utf-8")
 
-        code = install.main(
-            ["--scope", "project", "--root", str(self.root), "--no-hooks"]
-        )
+        code = install.main(["--scope", "project", "--root", str(self.root)])
 
         self.assertEqual(1, code)
         self.assertEqual("MY OWN RULES\n", agents.read_text(encoding="utf-8"))
@@ -211,7 +208,7 @@ class ConflictGuardTestCase(unittest.TestCase):
         agents.write_text("MY OWN RULES\n", encoding="utf-8")
 
         code = install.main(
-            ["--scope", "project", "--root", str(self.root), "--no-hooks", "--force"]
+            ["--scope", "project", "--root", str(self.root), "--force"]
         )
 
         self.assertEqual(0, code)
@@ -251,103 +248,21 @@ class ConflictGuardTestCase(unittest.TestCase):
         own = rules / "RTK.md"
         own.write_text("MY OWN\n", encoding="utf-8")
 
-        code = install.main(
-            ["--scope", "project", "--root", str(self.root), "--no-hooks"]
-        )
+        code = install.main(["--scope", "project", "--root", str(self.root)])
 
         self.assertEqual(1, code)
         self.assertEqual("MY OWN\n", own.read_text(encoding="utf-8"))
 
-    def test_local_edits_inside_the_vendored_skill_are_a_conflict(self) -> None:
-        vendored = self.root / ".agents" / "skills" / "agents-contract"
-        vendored.mkdir(parents=True)
-        (vendored / "custom.py").write_text("LOCAL\n", encoding="utf-8")
-
-        self.assertEqual(
-            [vendored / "custom.py"],
-            install.find_vendored_edits(self.root, install.SKILL_DIR),
-        )
-
-    def test_a_pristine_vendored_skill_is_not_a_conflict(self) -> None:
-        install.vendor_skill(self.root, install.SKILL_DIR, False)
-
-        self.assertEqual(
-            [], install.find_vendored_edits(self.root, install.SKILL_DIR)
-        )
-
-    def test_force_keeps_vendored_edits_outside_the_replaced_directory(self) -> None:
-        vendored = self.root / ".agents" / "skills" / "agents-contract"
-        vendored.mkdir(parents=True)
-        (vendored / "custom.py").write_text("LOCAL\n", encoding="utf-8")
-
-        code = install.main(["--scope", "project", "--root", str(self.root), "--force"])
-
-        self.assertEqual(0, code)
-        kept = self.root / ".agents" / "removed-skill-edits"
-        self.assertEqual(
-            "LOCAL\n", (kept / "agents-contract-custom.py.bak").read_text(encoding="utf-8")
-        )
-        self.assertFalse((vendored / "custom.py").exists())
-
     def test_project_scope_refuses_the_source_checkout_itself(self) -> None:
         before = sorted(p.name for p in install._HERE.iterdir())
 
-        code = install.main(["--scope", "project", "--root", str(install._HERE), "--no-hooks"])
+        code = install.main(["--scope", "project", "--root", str(install._HERE)])
 
         self.assertEqual(1, code)
         self.assertEqual(before, sorted(p.name for p in install._HERE.iterdir()))
 
-    def test_project_hook_command_does_not_pin_an_absolute_interpreter(self) -> None:
-        install.main(["--scope", "project", "--root", str(self.root)])
-
-        settings = (self.root / ".claude" / "settings.json").read_text(encoding="utf-8")
-
-        self.assertIn('"command": "python3 ', settings)
-        self.assertNotIn(sys.executable, settings)
-
-    def test_an_in_place_edit_to_a_vendored_file_is_a_conflict(self) -> None:
-        install.vendor_skill(self.root, install.SKILL_DIR, False)
-        edited = self.root / ".agents" / "skills" / "agents-contract" / "SKILL.md"
-        edited.write_text("MY LOCAL EDIT\n", encoding="utf-8")
-
-        self.assertEqual(
-            [edited], install.find_vendored_edits(self.root, install.SKILL_DIR)
-        )
-
-    def test_an_in_place_edit_is_refused_and_preserved(self) -> None:
-        install.vendor_skill(self.root, install.SKILL_DIR, False)
-        edited = self.root / ".agents" / "skills" / "agents-contract" / "SKILL.md"
-        edited.write_text("MY LOCAL EDIT\n", encoding="utf-8")
-
-        code = install.main(["--scope", "project", "--root", str(self.root)])
-
-        self.assertEqual(1, code)
-        self.assertEqual("MY LOCAL EDIT\n", edited.read_text(encoding="utf-8"))
-
-    def test_a_stale_vendored_copy_is_replaceable_even_when_upstream_moved_on(self) -> None:
-        source = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: shutil.rmtree(source, ignore_errors=True))
-        shutil.copytree(install.SKILL_DIR, source, dirs_exist_ok=True)
-        install.vendor_skill(self.root, source, False)
-        (source / "SKILL.md").write_text("UPSTREAM MOVED ON\n", encoding="utf-8")
-
-        self.assertEqual([], install.find_vendored_edits(self.root, source))
-
-    def test_a_vendored_copy_without_a_manifest_refuses_any_difference(self) -> None:
-        install.vendor_skill(self.root, install.SKILL_DIR, False)
-        manifest = (
-            self.root / ".agents" / "skills" / "agents-contract" / ".vendored.json"
-        )
-        manifest.unlink()
-        edited = self.root / ".agents" / "skills" / "agents-contract" / "SKILL.md"
-        edited.write_text("MY LOCAL EDIT\n", encoding="utf-8")
-
-        self.assertEqual(
-            [edited], install.find_vendored_edits(self.root, install.SKILL_DIR)
-        )
-
     def apply(self) -> None:
-        install.main(["--scope", "project", "--root", str(self.root), "--no-hooks"])
+        install.main(["--scope", "project", "--root", str(self.root)])
 
 
 if __name__ == "__main__":

@@ -517,6 +517,7 @@ commit. Code Review Standards defines the reviewer and the recording rule.
 
 ### Command Style
 
+- These RTK and discovery rules are instruction-only. No harness hook rewrites or refuses a command, so apply them yourself.
 - Wrap shell commands through **RTK**. RTK supports `git`, `go`, `pytest`,
   `ruff`, `npm`, `cargo`, `docker`, `kubectl`, `psql`, `curl`, `ls`, `tree`,
   `find`, `grep`, `read`, `wc`, `json`, `env`, `deps`, `log`, and many more.
