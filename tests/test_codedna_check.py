@@ -3,11 +3,11 @@
 exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | added per-language, line-number, content, and shape test classes
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | added masking edge tests after the split: template expressions, escapes, unterminated literals, tokenize failure, and heredoc quote handling; strengthened to pin mask_code output directly after an independent review
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | added prose-above-Python-docstring regression test after fixing the header-zone gap in codedna_content.py
 agent:   fx | unknown | 2026-10-31 | unknown | added regression tests for multiline block comments, trailing comments, incomplete agent entries, raw docstrings, unquoted CSS URLs, and example directives
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | added HTML regressions for `/*` in markup and a header closing line with an agent entry, plus shebang coverage across Python, the JS family, and shell
 """
 
 from __future__ import annotations
@@ -498,6 +498,33 @@ class LanguageHeaderTestCase(CodednaCheckTestCase):
         findings = self.check_clean("deploy/sample.sh", SH_CLEAN)
         self.assertFalse(any("description form" in finding for finding in findings), findings)
 
+    def test_shebang_is_skipped_for_every_executable_dialect(self) -> None:
+        cases = {
+            "src/sample.py": PY_CLEAN,
+            "web/sample.js": JS_CLEAN,
+            "web/sample.mjs": JS_CLEAN,
+            "web/sample.cjs": JS_CLEAN,
+            "web/sample.jsx": JS_CLEAN,
+            "web/sample.ts": TS_CLEAN,
+            "web/sample.tsx": TS_CLEAN,
+            "deploy/sample.sh": SH_CLEAN,
+            "deploy/sample.bash": SH_CLEAN,
+            "deploy/sample.zsh": SH_CLEAN,
+        }
+        for relative, fixture in cases.items():
+            name = Path(relative).name
+            body = fixture.replace("sample." + Path(relative).suffix[1:], name)
+            if not body.startswith("#!"):
+                body = "#!/usr/bin/env test-runner\n" + body
+            with self.subTest(relative=relative):
+                path = self.write(relative, body)
+                self.assertEqual([], self.checker.check_file(path, self.root))
+                self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_shebang_only_javascript_file_reports_the_missing_header(self) -> None:
+        path = self.write("web/tool.js", "#!/usr/bin/env node\n")
+        self.assertEqual(["missing L1 header"], self.checker.check_file(path, self.root))
+
     def test_html_header_first_line_must_carry_the_em_dash(self) -> None:
         broken = HTML_CLEAN.replace("sample.html — Example", "sample.html Example")
         findings = self.check_clean("web/sample.html", broken)
@@ -681,6 +708,24 @@ class CommentContentTestCase(CodednaCheckTestCase):
         self.assertEqual([], self.checker.check_comment_content(path))
         self.assertEqual([], self.checker.check_file(path, self.root))
 
+    def test_python_shebang_is_exempt(self) -> None:
+        body = "#!/usr/bin/env python3\n" + PY_CLEAN
+        path = self.write("scripts/sample.py", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_python_shebang_below_line_one_is_reported(self) -> None:
+        body = "#!/usr/bin/env python3\n" + PY_CLEAN.replace(
+            "    return 1", "    return 1\n    #!/usr/bin/env python3"
+        )
+        path = self.write("scripts/sample.py", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("outside the permitted content", findings[0])
+
+    def test_javascript_shebang_is_never_prose(self) -> None:
+        path = self.write("web/sample.js", "#!/usr/bin/env node\n" + JS_CLEAN)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
     def test_shell_prose_is_reported_and_shellcheck_exempt(self) -> None:
         body = SH_CLEAN.replace(
             "set -euo pipefail",
@@ -728,6 +773,53 @@ class CommentContentTestCase(CodednaCheckTestCase):
         findings = self.checker.check_comment_content(path)
         matching = [finding for finding in findings if "outside the permitted content" in finding]
         self.assertEqual(1, len(matching), findings)
+
+    def test_html_markup_slash_star_is_not_a_block_comment(self) -> None:
+        body = HTML_CLEAN.replace(
+            "<body></body>",
+            '<body><span>type a wildcard (<b>provider/*</b>)</span>\n<!-- drafts only; do not ship -->\n</body>',
+        )
+        path = self.write("web/sample.html", body)
+        findings = self.checker.check_comment_content(path)
+        matching = [finding for finding in findings if "outside the permitted content" in finding]
+        self.assertEqual(1, len(matching), findings)
+        self.assertTrue(matching[0].startswith("9:"), findings)
+
+    def test_html_header_closing_line_stays_in_the_header_zone(self) -> None:
+        body = HTML_CLEAN.replace(
+            "         agent:   test-agent | 9router | 2026-10-08 | s_test | added sample\n    -->\n",
+            "         agent:   test-agent | 9router | 2026-10-08 | s_test | added sample -->\n",
+        )
+        path = self.write("web/sample.html", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+        self.assertEqual([], self.checker.check_file(path, self.root))
+
+    def test_css_header_closing_line_stays_in_the_header_zone(self) -> None:
+        body = CSS_CLEAN.replace(
+            "       agent:   test-agent | 9router | 2026-10-08 | s_test | added sample\n*/\n",
+            "       agent:   test-agent | 9router | 2026-10-08 | s_test | added sample */\n",
+        )
+        path = self.write("web/sample.css", body)
+        self.assertEqual([], self.checker.check_file(path, self.root))
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_html_inline_rules_comment_is_permitted(self) -> None:
+        body = HTML_CLEAN.replace(
+            "<body></body>",
+            "<body> <!-- Rules: keep the shell fixed --> </body>",
+        )
+        path = self.write("web/sample.html", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_css_starred_block_prose_is_reported_once(self) -> None:
+        body = CSS_CLEAN.replace(
+            "body { margin: 0; }",
+            "/*\n * prose that must be reported\n */\nbody { margin: 0; }",
+        )
+        path = self.write("web/sample.css", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertEqual(1, len(findings), findings)
+        self.assertIn("outside the permitted content", findings[0])
 
     def test_skip_content_limits_run_to_header_checks(self) -> None:
         body = HTML_CLEAN.replace(
@@ -852,6 +944,10 @@ class CommentContentTestCase(CodednaCheckTestCase):
     def test_example_tool_directive_is_exempt(self) -> None:
         block = "# type: ignore[attr-defined]\nvalue = 1\n"
         self.assertEqual([], self.checker.check_examples(f"```python\n{block}```\n", "AGENTS.md"))
+
+    def test_example_block_that_does_not_parse_is_reported(self) -> None:
+        findings = self.checker.check_examples("```python\ndef broken(:\n```\n", "AGENTS.md")
+        self.assertTrue(any("does not parse" in finding for finding in findings), findings)
 
 
 class HeaderShapeTestCase(CodednaCheckTestCase):
@@ -1030,6 +1126,13 @@ class MaskCodeEdgeTestCase(CodednaCheckTestCase):
         self.assertEqual(
             "const t = " + " " * 6 + "b  \n", self.masked('const t = `a${\\`b`;\n', ".js")
         )
+
+    def test_mask_code_leaves_html_slash_star_as_markup(self) -> None:
+        self.assertEqual('a/*b\n', self.masked('a/*b\n', ".html"))
+
+    def test_mask_code_still_blanks_css_and_javascript_block_comments(self) -> None:
+        self.assertEqual("     \n", self.masked("/*x*/\n", ".css"))
+        self.assertEqual("     \n", self.masked("/*x*/\n", ".js"))
 
     def test_python_file_that_does_not_tokenize_checks_docstrings_only(self) -> None:
         body = PY_CLEAN.replace(

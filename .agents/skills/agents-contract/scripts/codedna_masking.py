@@ -2,9 +2,10 @@
 
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
-rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open.
+rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open; `/* */` is a comment only in C-style dialects, because HTML markup, Python, and shell treat it as text.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; mask_code's template-literal branch became two helpers and the masking pass is now a flat branch list.
 agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | restricted `/* */` to C-style profiles after an HTML page with `<b>provider/*</b>` masked the rest of the file as one block comment
 """
 from __future__ import annotations
 
@@ -13,6 +14,11 @@ import re
 import tokenize
 
 from codedna_spec import _HEREDOC_OPEN, _PY_MASKED_TOKENS, LanguageProfile
+
+# Rules: only dialects with C-style comments — HTML markup and shell/Python text can hold a literal `/*` that opens nothing.
+_C_BLOCK_COMMENT_LANGUAGES = frozenset(
+    {"go", "rust", "javascript", "jsx", "typescript", "tsx", "css"}
+)
 
 
 def mask_code(
@@ -23,7 +29,7 @@ def mask_code(
 ) -> str:
     """Blank code so the scanner sees only comment lines.
 
-    Rules:   String and template-literal interiors blank; template literals track `${...}` nesting for JS dialects; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
+    Rules:   String and template-literal interiors blank; template literals track `${...}` nesting for JS dialects; `/* */` blank only in C-style dialects; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
     """
     js_family = suffix in (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
     out: list[str] = []
@@ -40,7 +46,12 @@ def mask_code(
             if spans is not None:
                 spans.append((start, i))
             continue
-        if c == "/" and i + 1 < n and text[i + 1] == "*":
+        if (
+            c == "/"
+            and i + 1 < n
+            and text[i + 1] == "*"
+            and profile.name in _C_BLOCK_COMMENT_LANGUAGES
+        ):
             start = i
             i = _mask_block_comment(text, i, out)
             if spans is not None:

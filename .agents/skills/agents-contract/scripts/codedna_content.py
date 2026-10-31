@@ -2,10 +2,11 @@
 
 exports: check_comment_content | check_examples
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_comment_content and check_examples [cascade]
-rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line- and span-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments.
+rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line- and span-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments, and a first-line `#!` is a shebang in every dialect.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; the 138-line content scan is now one loop plus state and classification helpers.
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | killed the Python header-zone exemption: docstring-adjacent `#` prose and TODO markers report now; probes confirmed non-Python string masking already correct.
 agent:   fx | unknown | 2026-10-31 | unknown | added span-derived comment bodies so trailing and multiline comments reach the classifier; tool directives and raw binary input stay exempt
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | exempted a first-line `#!` in every dialect after Python probe scripts reported their shebang as prose
 message: The scan is line- and span-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
 """
 from __future__ import annotations
@@ -346,10 +347,12 @@ def _comment_body(
 ) -> tuple[list[str], _ScanState]:
     """Inspect one comment body already stripped of its delimiters.
 
-    Rules:   Tool directives are exempt before prose classification; label lines open a continuation window; continuations and L1 fields are permitted; everything else classifies by content; the window closes when a finding lands.
+    Rules:   Tool directives are exempt before prose classification; a `#!` on line 1 is the shebang of an executable Python file; label lines open a continuation window; continuations and L1 fields are permitted; everything else classifies by content; the window closes when a finding lands.
     """
     inner = body.strip()
     if not inner:
+        return [], state
+    if index == 0 and inner.startswith("!"):
         return [], state
     if _is_directive_body(context.profile, inner):
         return [], state

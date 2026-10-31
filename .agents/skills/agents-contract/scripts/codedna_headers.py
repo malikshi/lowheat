@@ -4,8 +4,9 @@ exports: check_file
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_file [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → header line zones and css/html block grammar [cascade]
 related: codedna_spec.py hosts the field tuples and regexes every check here reads.
-rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them.
+rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; check_file became view collection plus finding assembly, both under the 50-line rule.
+agent:   grok-4.6 | xai | 2026-10-31 | unknown | kept the closing line of a multi-line css/html header and skipped a leading `#!` in every dialect, so Python and Node shebangs never become the title line
 """
 from __future__ import annotations
 
@@ -138,17 +139,16 @@ def header_text(path: Path, text: str) -> str:
 def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[int, str]]:
     """Return (line_number, stripped-comment-text) for the leading header.
 
-    Rules:   Shell skips the shebang; css/html blocks span to their close; blank comment separators join the block.
+    Rules:   Shell skips the shebang; css/html blocks span to their close; blank comment separators join the block; a leading `#!` is skipped in every dialect, because Python and the JS family can start an executable with one.
     """
     start = 0
-    if profile.shebang:
-        for index, line in enumerate(lines):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith("#!"):
-                start = index + 1
-            break
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#!"):
+            start = index + 1
+        break
     collected: list[tuple[int, str]] = []
     inside_open = False
     block_style = ""
@@ -166,6 +166,9 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
                 inside_open = False
                 break
             if stripped.endswith(_block_close(block_style)):
+                body = stripped[: -len(_block_close(block_style))].strip()
+                if body:
+                    collected.append((index + 1, body))
                 inside_open = False
                 break
             body = _strip_html_ctrl(stripped) if profile.name == "html" else stripped
