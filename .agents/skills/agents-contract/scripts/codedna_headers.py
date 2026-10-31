@@ -190,6 +190,12 @@ def _line_block_open(
 
     Rules:   An `at_line_start` opener must sit at column 0 of the raw line; a line that also carries the closer is a single-line header.
     """
+    long_marker = _long_header_marker(profile, stripped)
+    if long_marker is not None:
+        marker, inner = long_marker
+        if inner.rstrip().endswith(marker.close):
+            return marker, inner.rstrip()[: -len(marker.close)].strip(), True
+        return marker, inner.strip(), False
     for marker in profile.block_markers:
         if not stripped.startswith(marker.open):
             continue
@@ -203,6 +209,28 @@ def _line_block_open(
             return marker, trimmed[: -len(marker.close)].strip(), True
         return marker, inner.strip(), False
     return None
+
+
+def _long_header_marker(
+    profile: LanguageProfile, stripped: str
+) -> tuple[BlockMarker, str] | None:
+    """Match one Lua long-comment header opener and return its marker and remainder.
+
+    Rules:   The closer mirrors the `=` count between the brackets; a lone `[[` string is not a comment and never opens a header.
+    """
+    prefix = profile.long_bracket
+    if not prefix or not stripped.startswith(prefix + "["):
+        return None
+    cursor = len(prefix) + 1
+    equals = 0
+    while stripped[cursor:cursor + 1] == "=":
+        equals += 1
+        cursor += 1
+    if stripped[cursor:cursor + 1] != "[":
+        return None
+    opener = stripped[: cursor + 1]
+    closer = "]" + "=" * equals + "]"
+    return BlockMarker(opener, closer), stripped[cursor + 1:]
 
 
 def _block_body(stripped: str) -> str:

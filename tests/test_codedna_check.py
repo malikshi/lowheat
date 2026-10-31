@@ -1340,6 +1340,7 @@ class EverySuffixTestCase(CodednaCheckTestCase):
             + fields.replace("\n", "\n * ").rstrip()
             + "\n */\nclass Sample { }\n",
             ".hs": "{- sample.hs — Example module.\n" + fields + "-}\nmain = pure ()\n",
+            ".lua": "--[[ sample.lua — Example module.\n" + fields + "]]\nlocal x = 1\n",
         }
         for suffix, text in cases.items():
             with self.subTest(suffix=suffix):
