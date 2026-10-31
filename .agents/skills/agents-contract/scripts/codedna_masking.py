@@ -2,8 +2,9 @@
 
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
-rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open.
+rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; mask_code's template-literal branch became two helpers and the masking pass is now a flat branch list.
+agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
 """
 from __future__ import annotations
 
@@ -14,10 +15,15 @@ import tokenize
 from codedna_spec import _HEREDOC_OPEN, _PY_MASKED_TOKENS, LanguageProfile
 
 
-def mask_code(profile: LanguageProfile, text: str, suffix: str) -> str:
+def mask_code(
+    profile: LanguageProfile,
+    text: str,
+    suffix: str,
+    spans: list[tuple[int, int]] | None = None,
+) -> str:
     """Blank code so the scanner sees only comment lines.
 
-    Rules:   String and template-literal interiors blank; template literals track `${...}` nesting for JS dialects; newlines preserved.
+    Rules:   String and template-literal interiors blank; template literals track `${...}` nesting for JS dialects; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
     """
     js_family = suffix in (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
     out: list[str] = []
@@ -28,14 +34,36 @@ def mask_code(profile: LanguageProfile, text: str, suffix: str) -> str:
             out.append(c)
             i += 1
             continue
-        if c == "/" and i + 1 < n and text[i + 1] == "/" and (suffix == ".go" or not js_family):
+        if c == "/" and i + 1 < n and text[i + 1] == "/" and suffix in (".go", ".rs"):
+            start = i
             i = _mask_to_eol(text, i, out)
+            if spans is not None:
+                spans.append((start, i))
             continue
         if c == "/" and i + 1 < n and text[i + 1] == "*":
+            start = i
             i = _mask_block_comment(text, i, out)
+            if spans is not None:
+                spans.append((start, i))
             continue
-        if suffix in (".sh", ".bash", ".zsh") and c == "#":
+        if suffix in (".html", ".htm") and text.startswith("<!--", i):
+            start = i
+            end = text.find("-->", i + 4)
+            end = n if end < 0 else end + 3
+            out.append(re.sub(r"[^\n]", " ", text[start:end]))
+            if spans is not None:
+                spans.append((start, end))
+            i = end
+            continue
+        if (
+            suffix in (".sh", ".bash", ".zsh")
+            and c == "#"
+            and (i == 0 or text[i - 1].isspace() or text[i - 1] in ";|&(")
+        ):
+            start = i
             i = _mask_to_eol(text, i, out)
+            if spans is not None:
+                spans.append((start, i))
             continue
         if c in ('"', "'"):
             i = _mask_quoted(text, i, out)
@@ -44,7 +72,10 @@ def mask_code(profile: LanguageProfile, text: str, suffix: str) -> str:
             i = _mask_template(text, i, js_family, out)
             continue
         if c == "/" and js_family and i + 1 < n and text[i + 1] == "/":
+            start = i
             i = _mask_to_eol(text, i, out)
+            if spans is not None:
+                spans.append((start, i))
             continue
         out.append(c)
         i += 1
@@ -147,10 +178,12 @@ def _skip_braced_expression(text: str, brace_start: int) -> int:
     return n
 
 
-def _python_scan_inputs(text: str) -> tuple[str, frozenset[int]] | None:
-    """Blank Python strings and comments, and report the lines that open a comment.
+def _python_scan_inputs(
+    text: str,
+) -> tuple[str, frozenset[int], dict[int, tuple[str, ...]]] | None:
+    """Blank Python strings and comments, and report comment bodies by line.
 
-    Rules:   tokenize decides what is a string, so a `#` inside a docstring, template, or f-string never reads as a comment; a comment that trails code is not a comment line, matching the line-based dialects; only characters are replaced, so line structure is preserved; returns None when the file does not tokenize.
+    Rules:   tokenize decides what is a string, so a `#` inside a docstring, template, or f-string never reads as a comment; a comment that trails code is not a comment line, matching the line-based dialects, but its body is still returned for the content scan; only characters are replaced, so line structure is preserved; returns None when the file does not tokenize.
     """
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
@@ -159,10 +192,15 @@ def _python_scan_inputs(text: str) -> tuple[str, frozenset[int]] | None:
     source_lines = text.split("\n")
     rows = [list(row) for row in source_lines]
     comment_lines: set[int] = set()
+    comment_bodies: dict[int, list[str]] = {}
     for token in tokens:
         if token.type == tokenize.COMMENT:
-            if not source_lines[token.start[0] - 1][: token.start[1]].strip():
-                comment_lines.add(token.start[0])
+            row_number = token.start[0]
+            if not source_lines[row_number - 1][: token.start[1]].strip():
+                comment_lines.add(row_number)
+            body = source_lines[row_number - 1][token.start[1] + 1:].strip()
+            if body:
+                comment_bodies.setdefault(row_number, []).append(body)
         if token.type not in _PY_MASKED_TOKENS:
             continue
         start_row, start_col = token.start
@@ -173,7 +211,11 @@ def _python_scan_inputs(text: str) -> tuple[str, frozenset[int]] | None:
             last = end_col if row_number == end_row else len(row)
             for column in range(min(first, len(row)), min(last, len(row))):
                 row[column] = " "
-    return "\n".join("".join(row) for row in rows), frozenset(comment_lines)
+    return (
+        "\n".join("".join(row) for row in rows),
+        frozenset(comment_lines),
+        {line: tuple(bodies) for line, bodies in comment_bodies.items()},
+    )
 
 
 def _open_quote(line: str, column: int) -> str | None:

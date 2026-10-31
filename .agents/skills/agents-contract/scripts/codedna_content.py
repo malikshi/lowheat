@@ -2,10 +2,11 @@
 
 exports: check_comment_content | check_examples
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_comment_content and check_examples [cascade]
-rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments.
+rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line- and span-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; the 138-line content scan is now one loop plus state and classification helpers.
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | killed the Python header-zone exemption: docstring-adjacent `#` prose and TODO markers report now; probes confirmed non-Python string masking already correct.
-message: The scan is line-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
+agent:   fx | unknown | 2026-10-31 | unknown | added span-derived comment bodies so trailing and multiline comments reach the classifier; tool directives and raw binary input stay exempt
+message: The scan is line- and span-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: a multi-line string in a non-Python dialect (Go raw string, JS template) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
 """
 from __future__ import annotations
 
@@ -48,6 +49,7 @@ class _ScanContext(NamedTuple):
     skip_lines: frozenset[int]
     comment_lines: frozenset[int] | None
     header_zone: int
+    comment_bodies: dict[int, tuple[str, ...]]
 
 
 class _ScanState(NamedTuple):
@@ -61,6 +63,7 @@ class _ScanState(NamedTuple):
 
 
 _START_STATE = _ScanState(0, 0, 0, 0, None, False, "")
+_PY_PROFILE = profile_for(Path("sample.py"))
 
 
 def _word_count(line: str) -> int:
@@ -117,6 +120,8 @@ def check_comment_content(path: Path) -> list[str]:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as error:
         return [f"unreadable: {error}"]
+    if "\x00" in text:
+        return []
     profile = profile_for(path)
     findings: list[str] = []
     if path.suffix == ".py":
@@ -137,17 +142,78 @@ def check_comment_content(path: Path) -> list[str]:
         scan_inputs = _python_scan_inputs(text)
         if scan_inputs is None:
             return findings
-        masked_text, comment_lines = scan_inputs
+        masked_text, comment_lines, comment_bodies = scan_inputs
         findings.extend(
             _scan_content(
-                profile, masked_text.split("\n"), text.split("\n"), comment_lines=comment_lines
+                profile,
+                masked_text.split("\n"),
+                text.split("\n"),
+                comment_lines=comment_lines,
+                comment_bodies=comment_bodies,
             )
         )
         return findings
-    masked = mask_code(profile, text, path.suffix)
+    spans: list[tuple[int, int]] = []
+    masked = mask_code(profile, text, path.suffix, spans)
     skip_lines = _shell_heredoc_lines(text) if profile.name == "shell" else frozenset()
-    findings.extend(_scan_content(profile, masked.splitlines(), text.splitlines(), skip_lines))
+    findings.extend(
+        _scan_content(
+            profile,
+            masked.splitlines(),
+            text.splitlines(),
+            skip_lines,
+            comment_bodies=_comment_bodies(text, spans),
+        )
+    )
     return findings
+
+
+def _comment_bodies(text: str, spans: list[tuple[int, int]]) -> dict[int, tuple[str, ...]]:
+    """Map comment spans to stripped bodies by line number.
+
+    Rules:   A span may cover a trailing comment or several block-comment lines; strip the opening marker, closing marker, and block-decoration star so the content classifier sees prose only. Empty bodies are dropped; empty `Rules:` continuations add nothing.
+    """
+    lines = text.split("\n")
+    starts: list[int] = []
+    position = 0
+    for line in lines:
+        starts.append(position)
+        position += len(line) + 1
+    bodies: dict[int, list[str]] = {}
+    for start, end in spans:
+        for line_number, line_start in enumerate(starts):
+            line = lines[line_number]
+            line_end = line_start + len(line)
+            if line_end < start or line_start >= end:
+                continue
+            left = max(start - line_start, 0)
+            right = min(end - line_start, len(line))
+            body = _comment_fragment_body(line[left:right])
+            if body:
+                bodies.setdefault(line_number + 1, []).append(body)
+    return {line: tuple(items) for line, items in bodies.items()}
+
+
+def _comment_fragment_body(fragment: str) -> str:
+    """Strip comment delimiters and block decoration from one fragment.
+
+    Rules:   Opening markers are removed longest-first; a closing marker is removed after the opening one; one leading `*` remains block decoration only when the fragment did not open with a line-comment marker.
+    """
+    body = fragment.strip()
+    opened = False
+    for marker in ("<!--", "/*", "//", "#"):
+        if body.startswith(marker):
+            body = body[len(marker):]
+            opened = marker in ("<!--", "/*")
+            break
+    if body.endswith("-->"):
+        body = body[:-3]
+    elif body.endswith("*/"):
+        body = body[:-2]
+    body = body.strip()
+    if not opened and body.startswith("*") and not body.startswith("*/"):
+        body = body[1:].lstrip()
+    return body.strip()
 
 
 def _scan_content(
@@ -156,13 +222,20 @@ def _scan_content(
     originals: list[str],
     skip_lines: frozenset[int] = frozenset(),
     comment_lines: frozenset[int] | None = None,
+    comment_bodies: dict[int, tuple[str, ...]] | None = None,
 ) -> list[str]:
     """Report comment lines outside the permitted CodeDNA content set.
 
-    Rules:   Permitted: L1 field lines with continuations, one summary line per declaration (top-level, grouped, or struct member), Rules:/message: lines with continuations, tool directives, rust doc, the shell shebang. Context comes from masked code: brace depth for type bodies, paren depth for groups, declarations for summaries. `skip_lines` holds data lines (shell heredoc bodies) that are never comments; `comment_lines` replaces the prefix test with exact positions when the caller knows them (Python).
+    Rules:   Permitted: L1 field lines with continuations, one summary line per declaration (top-level, grouped, or struct member), Rules:/message: lines with continuations, tool directives, rust doc, the shell shebang. Context comes from masked code: brace depth for type bodies, paren depth for groups, declarations for summaries. `skip_lines` holds data lines (shell heredoc bodies) that are never comments; `comment_lines` replaces the prefix test with exact positions when the caller knows them (Python); `comment_bodies` carries trailing and multiline bodies that a line-prefix test cannot see.
     """
     context = _ScanContext(
-        profile, masked, originals, skip_lines, comment_lines, _header_line_count(profile, originals)
+        profile,
+        masked,
+        originals,
+        skip_lines,
+        comment_lines,
+        _header_line_count(profile, originals),
+        comment_bodies or {},
     )
     state = _START_STATE
     findings: list[str] = []
@@ -183,6 +256,17 @@ def _scan_line(
     stripped = raw.strip()
     if line_no in context.skip_lines or not stripped:
         return [], state._replace(prev_label=None)
+    bodies = context.comment_bodies.get(line_no)
+    if bodies:
+        if line_no <= context.header_zone:
+            return [], state
+        if context.masked[index].strip():
+            state = _advance_code_state(context, state, index)
+        findings: list[str] = []
+        for body in bodies:
+            line_findings, state = _comment_body(context, state, index, body)
+            findings.extend(line_findings)
+        return findings, state
     if state.in_block:
         return [], _block_continuation(state, stripped, context.profile)
     if context.profile.is_directive(stripped) or stripped.startswith("#!"):
@@ -255,6 +339,42 @@ def _code_depths(state: _ScanState, masked_code: str) -> tuple[int, int, int, in
         paren_group_depth = 0
         paren_depth = 0
     return depth, type_body_depth, paren_group_depth, paren_depth
+
+
+def _comment_body(
+    context: _ScanContext, state: _ScanState, index: int, body: str
+) -> tuple[list[str], _ScanState]:
+    """Inspect one comment body already stripped of its delimiters.
+
+    Rules:   Tool directives are exempt before prose classification; label lines open a continuation window; continuations and L1 fields are permitted; everything else classifies by content; the window closes when a finding lands.
+    """
+    inner = body.strip()
+    if not inner:
+        return [], state
+    if _is_directive_body(context.profile, inner):
+        return [], state
+    if context.profile.name == "html" and _L2_LABEL_LINE.match(inner):
+        return [], state._replace(prev_label=inner)
+    if _L2_LABEL_LINE.match(inner):
+        return [], state._replace(prev_label=inner)
+    if state.prev_label is not None:
+        return [], state._replace(prev_label=inner)
+    if _FIELD_LINE.match(inner):
+        return [], state
+    return _classify_content(context, state, index, inner), state._replace(prev_label=None)
+
+
+def _is_directive_body(profile: LanguageProfile, body: str) -> bool:
+    """Judge a delimiter-stripped comment body a tool directive.
+
+    Rules:   Reconstruct the marker in both spaced and unspaced forms because `//go:` and `// eslint` differ; an SPDX body is exempt anywhere.
+    """
+    if profile.is_directive(body) or (profile.shebang and body.startswith("!")):
+        return True
+    return any(
+        profile.is_directive(prefix + body) or profile.is_directive(prefix + " " + body)
+        for prefix in profile.strip_prefixes
+    )
 
 
 def _comment_line(
@@ -418,7 +538,10 @@ def _example_block_findings(block: str, where: str) -> list[str]:
     findings = [
         f"{where}: comment is outside the permitted content: {line.strip()[:60]}"
         for line in block.splitlines()
-        if line.strip().startswith("#") and not _COMMENT_LABEL.match(line.strip())
+        if line.strip().startswith("#")
+        and not _COMMENT_LABEL.match(line.strip())
+        and not _PY_PROFILE.is_directive(line.strip())
+        and not line.strip().startswith("#!")
     ]
     try:
         tree = ast.parse(block)

@@ -7,6 +7,7 @@ agent:   grok-4.6 | xai | 2026-10-09 | 01a1165a-8f16-7702-b7e8-488efac69c7e | ad
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | added HTML dedupe, skip-content main(), and CSS url-string masking tests
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | added masking edge tests after the split: template expressions, escapes, unterminated literals, tokenize failure, and heredoc quote handling; strengthened to pin mask_code output directly after an independent review
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | added prose-above-Python-docstring regression test after fixing the header-zone gap in codedna_content.py
+agent:   fx | unknown | 2026-10-31 | unknown | added regression tests for multiline block comments, trailing comments, incomplete agent entries, raw docstrings, unquoted CSS URLs, and example directives
 """
 
 from __future__ import annotations
@@ -782,6 +783,76 @@ class CommentContentTestCase(CodednaCheckTestCase):
         self.assertTrue(any("mid-stream field" not in finding for finding in findings), findings)
         self.assertTrue(any("TODO" in finding for finding in findings), findings)
 
+    def test_multiline_block_comment_prose_is_reported(self) -> None:
+        cases = {
+            "src/sample.go": GO_CLEAN.replace(
+                "func helper() int { return 1 }",
+                "func helper() int {\n\t/*\n\t prose that must be reported\n\t*/\n\treturn 1\n}",
+            ),
+            "web/sample.js": JS_CLEAN.replace(
+                "function helper() { return 1; }",
+                "function helper() {\n  /*\n   prose that must be reported\n  */\n  return 1;\n}",
+            ),
+            "web/sample.css": CSS_CLEAN.replace(
+                "body { margin: 0; }",
+                "/*\n prose that must be reported\n*/\nbody { margin: 0; }",
+            ),
+            "web/sample.html": HTML_CLEAN.replace(
+                "<body></body>",
+                "<body>\n<!--\n prose that must be reported\n-->\n</body>",
+            ),
+        }
+        for relative, body in cases.items():
+            path = self.write(relative, body)
+            findings = self.checker.check_comment_content(path)
+            self.assertTrue(
+                any("outside the permitted content" in finding for finding in findings),
+                (relative, findings),
+            )
+
+    def test_trailing_comment_prose_is_reported(self) -> None:
+        cases = {
+            "src/sample.py": PY_CLEAN.replace(
+                "    return 1", "    return 1  # prose that must be reported"
+            ),
+            "src/sample.go": GO_CLEAN.replace(
+                "func helper() int { return 1 }",
+                "func helper() int { return 1 } // prose that must be reported",
+            ),
+            "web/sample.js": JS_CLEAN.replace(
+                "function helper() { return 1; }",
+                "function helper() { return 1; } // prose that must be reported",
+            ),
+        }
+        for relative, body in cases.items():
+            path = self.write(relative, body)
+            findings = self.checker.check_comment_content(path)
+            self.assertTrue(
+                any("outside the permitted content" in finding for finding in findings),
+                (relative, findings),
+            )
+
+    def test_css_unquoted_url_does_not_hide_a_trailing_comment(self) -> None:
+        body = CSS_CLEAN.replace(
+            "body { margin: 0; }",
+            "body { background: url(https://cdn.example/a.png); } /* prose that must be reported */",
+        )
+        path = self.write("web/sample.css", body)
+        findings = self.checker.check_comment_content(path)
+        self.assertTrue(any("outside the permitted content" in finding for finding in findings), findings)
+
+    def test_shell_parameter_expansion_is_not_a_comment(self) -> None:
+        body = SH_CLEAN.replace(
+            "helper() { echo ok; }",
+            "value=${name#prefix}\nhelper() { echo ok; }",
+        )
+        path = self.write("deploy/sample.sh", body)
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_example_tool_directive_is_exempt(self) -> None:
+        block = "# type: ignore[attr-defined]\nvalue = 1\n"
+        self.assertEqual([], self.checker.check_examples(f"```python\n{block}```\n", "AGENTS.md"))
+
 
 class HeaderShapeTestCase(CodednaCheckTestCase):
     """Structural header drift: field order, agent-entry shape, window size."""
@@ -814,6 +885,28 @@ class HeaderShapeTestCase(CodednaCheckTestCase):
         findings = self.checker.check_file(path, self.root)
         matching = [finding for finding in findings if "agent history entry" in finding]
         self.assertEqual(1, len(matching), findings)
+
+    def test_agent_entry_missing_session_or_note_is_reported(self) -> None:
+        for entry in (
+            "// agent:   test-agent | 9router | 2026-10-08",
+            "// agent:   test-agent | 9router | 2026-10-08 | s_test",
+        ):
+            body = GO_CLEAN.replace(
+                "// agent:   test-agent | 9router | 2026-10-08 | s_test | added sample",
+                entry,
+            )
+            path = self.write("src/sample.go", body)
+            findings = self.checker.check_file(path, self.root)
+            self.assertTrue(
+                any("agent history entry" in finding for finding in findings),
+                (entry, findings),
+            )
+
+    def test_raw_and_unicode_module_docstrings_are_clean(self) -> None:
+        for prefix in ("r", "u"):
+            body = PY_CLEAN.replace('"""sample.py', f'{prefix}"""sample.py', 1)
+            path = self.write(f"src/{prefix}_sample.py", body)
+            self.assertEqual([], self.checker.check_file(path, self.root), prefix)
 
     def test_spdx_license_line_is_exempt(self) -> None:
         body = GO_CLEAN.replace(

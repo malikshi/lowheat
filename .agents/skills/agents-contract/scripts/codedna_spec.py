@@ -5,8 +5,9 @@ used_by: .agents/skills/agents-contract/scripts/codedna_masking.py → LanguageP
 used_by: .agents/skills/agents-contract/scripts/codedna_headers.py → profiles and L1 constants [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → limits and label regexes [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → re-exports for tests and main [cascade]
-rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans.
+rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py verbatim: constants, regexes, and the 15 suffix profiles unchanged, and the _proflies typo is gone.
+agent:   fx | unknown | 2026-10-31 | unknown | tightened the agent-history regex to require session and note, and allowed raw/unicode Python docstring prefixes
 """
 from __future__ import annotations
 
@@ -100,7 +101,9 @@ _L2_LABEL_LINE = re.compile(
 )
 _DOC_LABEL = re.compile(r"^\s*(exports|used_by|related|rules|Rules|agent|message):\s*(.*)$")
 _COMMENT_LABEL = re.compile(r"^#\s*(Rules|message):")
-_AGENT_SHAPE = re.compile(r"(?<!/)\|[^|\n]*(?<!/)\|[^|\n]*\d{4}-\d{2}-\d{2}")
+_AGENT_SHAPE = re.compile(
+    r"(?<!/)\|[^|\n]+(?<!/)\|[^|\n]*\d{4}-\d{2}-\d{2}\s*\|\s*[^|\n]+\s*\|\s*[^|\n]+"
+)
 _LOOSE_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TYPE_WORDS = frozenset(
     {
@@ -122,7 +125,7 @@ _TYPE_WORDS = frozenset(
     }
 )
 _PATH_LOOKING = re.compile(r"[/\\]|\.[A-Za-z0-9]{1,5}$")
-_PY_DOCSTRING = re.compile(r'^\s*(?:#[^\n]*\n)*\s*("""|\'\'\')(.*?)\1', re.DOTALL)
+_PY_DOCSTRING = re.compile(r'^\s*(?:#[^\n]*\n)*\s*[rRuU]?("""|\'\'\')(.*?)\1', re.DOTALL)
 _PY_FENCE = re.compile(r"```python[ \t]*\n(.*?)```", re.DOTALL)
 _EXPORT_SPLIT = re.compile(r"[|,]")
 _GROUP_DECL = re.compile(r"^\s*(func|type|var|const|class|def|fn|let|export|pub)\b")
