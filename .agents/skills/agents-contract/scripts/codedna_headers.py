@@ -8,6 +8,7 @@ rules:   Report-only — findings carry the line an agent edits; Python reads th
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; check_file became view collection plus finding assembly, both under the 50-line rule.
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | kept the closing line of a multi-line css/html header and skipped a leading `#!` in every dialect, so Python and Node shebangs never become the title line
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | header collection now reads the profile's block markers and prologue, so block-only dialects (OCaml, F#, Lua) and `<?php` files parse; suffix checks are case-insensitive
+agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: directive banners below the title are skipped, doc-marker headers keep their fields, directive-only leading blocks no longer end the search
 """
 from __future__ import annotations
 
@@ -135,7 +136,7 @@ def header_text(path: Path, text: str) -> str:
 def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[int, str]]:
     """Return (line_number, stripped-comment-text) for the leading header.
 
-    Rules:   A leading `#!` and a profile prologue (`<?php`) are skipped; block-comment headers run to their close marker; blank comment separators join the block; a block body line loses one leading `*` decoration.
+    Rules:   A leading `#!` and a profile prologue (`<?php`) are skipped; bare directives and directive-only blocks before the header are skipped without ending the search; block-comment headers run to their close marker; blank comment separators join the block; a block body line loses one leading `*` decoration.
     """
     start = 0
     for index, line in enumerate(lines):
@@ -158,17 +159,17 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
         if close_marker:
             if stripped.startswith(close_marker):
                 body = stripped[len(close_marker):].strip()
-                if body and not _header_directive(profile, body):
+                if body and not _header_directive(profile, body, not collected):
                     collected.append((index + 1, body))
                 close_marker = ""
                 if collected:
                     break
                 continue
             body = _block_body(stripped)
-            if body and not _header_directive(profile, body):
+            if body and not _header_directive(profile, body, not collected):
                 collected.append((index + 1, body))
             continue
-        if _header_directive(profile, stripped):
+        if _header_directive(profile, stripped, not collected):
             opened = _line_block_open(profile, raw, stripped)
             if opened is not None and not opened[2]:
                 close_marker = opened[0].close
@@ -176,7 +177,7 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
         opened = _line_block_open(profile, raw, stripped)
         if opened is not None:
             marker, body, closed = opened
-            if body and not _header_directive(profile, body):
+            if body and not _header_directive(profile, body, not collected):
                 collected.append((index + 1, body))
             if closed:
                 if collected:
@@ -191,16 +192,18 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
     return collected
 
 
-def _header_directive(profile: LanguageProfile, stripped: str) -> bool:
-    """Judge one line a directive that cannot start the L1 header.
+def _header_directive(
+    profile: LanguageProfile, stripped: str, at_title: bool
+) -> bool:
+    """Judge one line a directive that cannot be header content.
 
-    Rules:   A directive line that carries the header em dash or an L1 field label is real header content (`/// module — ...`, `/// exports: ...`); a bare directive, license, pragma, or doc separator is skipped without ending the header search.
+    Rules:   An L1 field line is always content; only the first line may be a directive title (`// Code generated — ...`); below the title every directive is skipped so an em-dash banner never folds into the field above it.
     """
-    return (
-        profile.is_directive(stripped)
-        and EM_DASH not in stripped
-        and _FIELD_LINE.match(stripped) is None
-    )
+    if not profile.is_directive(stripped):
+        return False
+    if _FIELD_LINE.match(stripped) is not None:
+        return False
+    return not (at_title and EM_DASH in stripped)
 
 
 def _line_block_open(

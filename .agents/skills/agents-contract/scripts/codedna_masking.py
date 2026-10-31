@@ -2,11 +2,12 @@
 
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
-rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc opener never silences the rest of the file — a false opener must fail open. Block and line markers come from the language profile, never from a suffix test: a marker inside a literal is consumed by the literal first, and a line marker needs a code position so `https://` and `a//b` stay code.
+rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc, percent, or sigil literal never silences the rest of the file — a false opener must fail open. Block and line markers come from the language profile, never from a suffix test: a marker inside a literal is consumed by the literal first, and a line marker needs a code position so `https://` and `a//b` stay code.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; mask_code's template-literal branch became two helpers and the masking pass is now a flat branch list.
 agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | restricted `/* */` to C-style profiles after an HTML page with `<b>provider/*</b>` masked the rest of the file as one block comment
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | made masking profile-driven: block markers, line and word markers, quoting styles, Lua long brackets, and nested blocks
+agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: Ruby `%`/Elixir `~` literals mask, operator delimiters rejected, unterminated literals fail open, unused suffix parameter dropped
 """
 from __future__ import annotations
 
@@ -198,7 +199,7 @@ _PAIRED_DELIMITERS = {"(": ")", "[": "]", "{": "}", "<": ">"}
 def _percent_literal_end(text: str, index: int) -> int | None:
     """Return the index after one Ruby percent literal, or None.
 
-    Rules:   A modulo operand (`a % b`, `a %w[x]` directly after a value) is not a literal; paired delimiters nest; an unterminated literal runs to the end.
+    Rules:   A modulo operand (`a % b`, `a %w[x]` directly after a value) is not a literal; paired delimiters nest; an unterminated literal fails open and stays code.
     """
     if index and (text[index - 1].isalnum() or text[index - 1] in "_)]"):
         return None
@@ -216,7 +217,7 @@ def _percent_literal_end(text: str, index: int) -> int | None:
 def _sigil_end(text: str, index: int) -> int | None:
     """Return the index after one Elixir sigil literal, or None.
 
-    Rules:   A sigil is `~`, one or more name letters, then a non-alphanumeric delimiter; an unterminated sigil runs to the end.
+    Rules:   A sigil is `~`, one or more name letters, then a non-alphanumeric delimiter; an unterminated sigil fails open and stays code.
     """
     cursor = index + 1
     start = cursor

@@ -9,6 +9,7 @@ rules:   Constants are single sources of truth — a consumer module never repea
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py verbatim: constants, regexes, and the 15 suffix profiles unchanged, and the _proflies typo is gone.
 agent:   fx | unknown | 2026-10-31 | unknown | tightened the agent-history regex to require session and note, and allowed raw/unicode Python docstring prefixes
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | replaced the suffix switch tables with explicit per-language profiles (line, word, and block markers) covering the declared language set
+agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: `#` after `{`/`$` and PHP `#[` stay code, Clojure character literals stay code, functional profiles drop the single-quote string form
 """
 from __future__ import annotations
 
