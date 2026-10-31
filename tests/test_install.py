@@ -2,12 +2,12 @@
 
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
-rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required.
-agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | first cut: asserted the per-harness shapes after Grok was found not to expand @-imports, so it needs the companions as standalone rules files while the other two get one symlink
+rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required. Directory comparisons ignore Python bytecode caches.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | added the per-harness companion-import check: the existing project case applies every plan at once, so Claude's companions satisfied the imports for all three and the commandcode-only case went untested. Each subtest now gets its own root.
 agent:   fx | unknown | 2026-10-31 | unknown | dropped hook wiring, vendored-skill cases, and the cleanup pass after the one-shot removal tool was deleted
 agent:   fx | unknown | 2026-10-31 | unknown | covered the user-scope companion links, skill links, and both reference mirrors; added a real skill directory as a refusal case
 agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: project cases now assert every named companion ships and AGENTS.md carries no @ imports
+agent:   fx | unknown | 2026-10-31 | unknown | added the bytecode-cache regression for the installer's copied-skill comparison
 """
 
 from __future__ import annotations
@@ -29,6 +29,16 @@ class InstallerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.home = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(self.home, ignore_errors=True))
+
+    def test_same_tree_ignores_python_bytecode(self) -> None:
+        left = self.home / "left"
+        right = self.home / "right"
+        for root in (left, right):
+            root.mkdir()
+            (root / "sample.py").write_text("value = 1\n", encoding="utf-8")
+        (left / "__pycache__").mkdir()
+        (left / "__pycache__" / "sample.cpython-311.pyc").write_bytes(b"cache")
+        self.assertTrue(install._same_tree(left, right))
 
     def test_claude_gets_a_link_for_each_memory_filename_it_reads(self) -> None:
         plans = install.plan_harnesses(self.home)

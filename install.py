@@ -4,12 +4,12 @@ exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | detect | find_conflicts
 used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first.
-agent:   fx | unknown | 2026-10-31 | unknown | user scope now links the companions beside AGENTS.md and links the skill into each harness skills directory; the skill mirror also syncs commands.md from RTK.md, closing the stale global-copy and catalogue drift
+rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
 agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: AGENTS.md drops @-imports, CodeDNA moves to its own companion, and the skill mirrors contract plus CodeDNA plus RTK on demand
 agent:   fx | unknown | 2026-10-31 | unknown | replaced the three hardcoded harnesses with a HarnessSpec registry and added detection, Codex, OpenCode, Factory, Kilo, Pi, Cline, Gemini, Cursor, Aider, and Qwen adapters
 agent:   fx | unknown | 2026-10-31 | unknown | added Aider's config file, dropped Gemini's duplicate skill link because Gemini discovers the central .agents/skills, and verified Command Code, Grok, and OpenCode load Contract-Version 2026-10-31
 agent:   fx | unknown | 2026-10-31 | unknown | added fx, hermes, claw, jcode, omp, forge, smelt, codewhale, and copilot adapters; fx now gets regular instruction files and a real skill copy because it refuses symlinks
+agent:   fx | unknown | 2026-10-31 | unknown | ignored Python bytecode caches when comparing and copying the fx skill, so test runs no longer look like source drift
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ _HERE = Path(__file__).resolve().parent
 CONTRACT_DIR = _HERE / "contract"
 SKILL_DIR = _HERE / ".agents" / "skills" / "agents-contract"
 COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md")
+_COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
 
 
 @dataclass(frozen=True)
@@ -227,12 +228,20 @@ def _link(target: Path, source: Path, dry_run: bool = False) -> str:
 def _same_tree(left: Path, right: Path) -> bool:
     """Return whether two directories contain the same relative files and bytes.
 
-    Rules:   A copied skill is idempotent only when its file set and contents match; otherwise the next install must refresh it. Ignore directory mtimes, which every copy changes.
+    Rules:   A copied skill is idempotent only when its file set and contents match; otherwise the next install must refresh it. Ignore directory mtimes and Python bytecode caches, which every test run changes.
     """
     if not left.is_dir() or left.is_symlink() or not right.is_dir():
         return False
-    left_files = {path.relative_to(left) for path in left.rglob("*") if path.is_file()}
-    right_files = {path.relative_to(right) for path in right.rglob("*") if path.is_file()}
+    def source_files(root: Path) -> set[Path]:
+        return {
+            path.relative_to(root)
+            for path in root.rglob("*")
+            if path.is_file()
+            and "__pycache__" not in path.relative_to(root).parts
+            and path.suffix not in (".pyc", ".pyo")
+        }
+    left_files = source_files(left)
+    right_files = source_files(right)
     return left_files == right_files and all(
         (left / name).read_bytes() == (right / name).read_bytes()
         for name in left_files
@@ -294,7 +303,7 @@ def backup(target: Path) -> Path:
         candidate = directory / f"{stem}.bak{counter}"
         counter += 1
     if target.is_dir() and not target.is_symlink():
-        shutil.copytree(target, candidate)
+        shutil.copytree(target, candidate, ignore=_COPY_IGNORE)
     else:
         shutil.copyfile(target, candidate)
     return candidate
@@ -346,7 +355,7 @@ def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str
         staged = target.with_name(target.name + ".staged")
         if staged.exists():
             shutil.rmtree(staged)
-        shutil.copytree(source, staged)
+        shutil.copytree(source, staged, ignore=_COPY_IGNORE)
         if target.is_symlink() or target.is_file():
             target.unlink()
         elif target.exists():
