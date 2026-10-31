@@ -4,7 +4,7 @@ Token-optimized CLI proxy. Prefix shell commands with `rtk` to cut the bash
 output your agent reads by 60-90% on dev operations. Full reference:
 `rtk --help`. This catalogue is verified against **rtk 1.0.1** — run
 `rtk --version` for your build, and treat anything missing from `rtk --help` as
-unsupported.
+unsupported. lowheat installs no RTK hook: these rules are instruction-only.
 
 ## The one rule: decide by intent, never by size
 
@@ -126,8 +126,9 @@ Three questions, asked before the command runs:
    parsing, redirecting, editing from it — means **raw**. Reading it for signal
    means wrap.
 2. **Is it secret, exact, or alive?** Credentials, exact config, and streaming
-   output (`tail -f`, a growing log) are always **raw**: RTK masks, truncates,
-   and buffers.
+   output (`tail -f`, a growing log) are always **raw**: RTK does not mask, it
+   truncates, and it buffers. It may also record commands and elided output
+   under `~/.local/share/rtk/`; keep secrets out of it.
 3. **Then wrap it.** `rtk <cmd>` for a shell command, or the matching form
    under Commands (`rtk read`, `rtk git status`, `rtk pytest`, …).
 

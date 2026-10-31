@@ -35,7 +35,7 @@ cites research that compressing the prompt backfires.
 |---|---|
 | Answer first | `[thing] [action] [reason]. [next step].` — no greeting, no "let me", no recap, no "hope this helps" |
 | One idea per sentence | ASD-STE100 is the floor: 20 words max, active voice, one term per thing; where compression and clarity conflict, clarity wins |
-| Short, real words | "fix", not "implement a solution for"; standard acronyms fine (DB, API); invented abbreviations are not (cfg, impl, fn); no arrows |
+| Short, real words | "fix", not "implement a solution for"; standard acronyms fine (DB, API); invented abbreviations are not (cfg, impl, fn); no decorative arrows in prose — contract symbols stay |
 | Articles optional, meaning never | Drop a/an/the when the sentence still reads in one pass; fragments fine; never drop *not*/*never*/*no*/*only*/*except*; numbers and units exact |
 | Payload verbatim | Code, commands, paths, API names, and error strings untouched; errors quoted as the shortest decisive line; a change shows the changed lines plus 1–2 lines of context — the whole file only when asked, new, or mostly changed |
 | Comments are payload | Existing comments in files you edit are never reworded or shortened — except that this repo's CodeDNA rule deletes out-of-contract comments in code you touch; that exception wins |

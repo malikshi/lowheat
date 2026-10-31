@@ -33,8 +33,8 @@ Locating code is not reading it. Take the first rung that answers the question:
    the same catalog key, and a server whose handshake is still running is absent
    from the first prompt, so send a second one before concluding the tool does
    not exist.
-2. **Semble CLI** — `semble search "<query>" .` when the MCP is not wired in
-   but the binary is on PATH.
+2. **Semble CLI** — `semble search "<query>" . --max-snippet-lines 10` when
+   the MCP is not wired in but the binary is on PATH.
 3. **`rtk grep`** — a lossy survey: 0–90%+ smaller than native grep output
    (near-zero when a query has few matches). Answers "roughly where", not
    "give me every match".

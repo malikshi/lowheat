@@ -1,9 +1,10 @@
 # Agent Instructions
 
-Contract-Version: 2026-10-14
+Contract-Version: 2026-10-31
 
-This repository operates as a multi-agent workspace. This file is the single,
-self-contained instruction surface and the **cross-agent source of truth**.
+This repository operates as a multi-agent workspace. This file is the thin,
+cross-agent core: universal behavior, routing, and the rules every task follows.
+Detailed references load only when a task needs them.
 
 ## How to use this file
 
@@ -18,25 +19,36 @@ Then use the table to find the section you need, and follow it literally.
 | Deciding how much to build | Operating Principles → Do the smallest thing that works |
 | Running a command | Execution & Delivery → Command Style |
 | Sending a reply or report | Execution & Delivery → Communication Style |
-| Writing or editing code | Engineering Standards → Coding Style + CodeDNA |
+| Writing or editing code | Engineering Standards → Coding Style + CodeDNA, then `codedna.md` |
 | Writing a test | Engineering Standards → Testing Requirements |
 | Touching auth, secrets, user input, or data | Engineering Standards → Security Guidelines |
-| About to commit | Execution & Delivery → Git Workflow (Session trailers are mandatory) |
+| About to commit | Execution & Delivery → Git Workflow |
 | Reviewing or merging code | Execution & Delivery → Code Review Standards |
 | Changing docs or config | Engineering Standards → Verification |
 | Done with a change | Engineering Standards → Definition of Done → Verification |
 | Unclear, blocked, or ambiguous | Operating Principles → Confusion protocol |
 
-Do not read the whole file into context for a small task. Load the sections that
-apply, follow them, and move on.
+Do not load every companion for a small task. Load the one that owns the detail
+you need, follow it, and move on.
+
+### Companion references
+
+| File | Load when | Covers |
+|---|---|---|
+| `codedna.md` | writing or editing source | full annotation convention, headers, function rules, checker |
+| `RTK.md` | wrapping shell commands | decision rule, fidelity zones, full command catalogue |
+| `semble.md` | locating code | discovery ladder, CLI verbs, MCP fallback, caveats |
+| `caveman.md` | changing reply mode, commits, or reviews | voice rules, modes, commit and review formats, optional layer |
+| `ponytail.md` | choosing scope or explaining a shortcut | ladder, never-cut list, levels, disclosure line |
 
 ### Precedence
 
-When two instruction sources disagree, the higher entry wins:
+When instruction sources disagree, the higher entry wins:
 
-1. The harness system prompt and the user's current request.
-2. This file, read from disk in the project.
-3. Skill summaries, pinned copies, and mirrors of this file.
+1. The harness system prompt and its safety rules.
+2. The user's current request.
+3. This file, read from disk in the project.
+4. Skill summaries, pinned copies, and mirrors of this file.
 
 A copy that lacks this file's `Contract-Version` line, or shows a different one,
 is stale. Refresh the copy from the canonical checkout, then act on this file.
@@ -151,12 +163,12 @@ and what would break if the assumption is wrong.
 
 ### Curate context deliberately
 
-Load the relevant contract, module header, source files, tests, and examples.
-Do not dump unrelated files into context. Use skills when the task matches an
-installed skill. When explaining something to the user, visualize it — prefer
-diagrams, tables, or code blocks over prose where that aids understanding.
-If a repo-local skill is unavailable through the current tool surface, read its
-tracked `SKILL.md` for project guidance.
+Load the relevant contract section, module header, source files, tests, and
+examples. Do not dump unrelated files into context. Use skills when the task
+matches an installed skill. When explaining something to the user, visualize it
+— prefer diagrams, tables, or code blocks over prose where that aids
+understanding. If a repo-local skill is unavailable through the current tool
+surface, read its tracked `SKILL.md` for project guidance.
 
 ### Codify repeated work
 
@@ -180,7 +192,7 @@ present two or three real options with trade-offs, and ask before proceeding.
   run. Never run `sudo` restarts yourself unless explicitly authorized.
 - **Preserve safety boundaries.** Preserve unrelated work. Never commit
   secrets, destructive commands, production mutations, force pushes, hook
-  bypasses, binaries, or model weights without explicit approval and a rollback
+  bypasses, binaries, or model weights without explicit approval and a rollout
   plan.
 - **Fan out independent work only when boundaries are clear.** Use isolated
   sessions, worktrees, or subagents only for genuinely independent units;
@@ -197,8 +209,7 @@ present two or three real options with trade-offs, and ask before proceeding.
 
 ## The Work Loop
 
-This is the canonical way every task is delivered. It is the difference between
-a junior firing code and a senior shipping a change: each step ends with a
+This is the canonical way every task is delivered. Each step ends with a
 verification point before the next begins.
 
 1. **Understand.** Read the request twice. State the problem, the *why* behind
@@ -242,7 +253,7 @@ must hold:
   boundary
 - [ ] No leftover debug statements; no dead code introduced
 - [ ] No comments outside CodeDNA annotations
-- [ ] Tests exist for new functionality; coverage meets the 80% minimum
+- [ ] Tests exist for new behavior; coverage meets the project's threshold
 - [ ] The change is the smallest that satisfies the request
 - [ ] Evidence for the change exists per the Verification section
 
@@ -251,7 +262,8 @@ must hold:
 Run the smallest check that proves the change before claiming completion:
 
 - For config or docs edits: syntax checks or targeted grep checks.
-- For Python source edits: the relevant `rtk pytest` targets.
+- For Python source edits: the relevant `rtk pytest` targets, or
+  `python3 -m pytest` when RTK is unavailable.
 - For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
 - For browser-facing or user-facing work: test observable behavior and verify
   with the real interface when possible.
@@ -269,10 +281,10 @@ universal law; relax what your task or agent surface does not need.
   is real.
 - **YAGNI** — no speculative features; start simple, refactor when pressure is
   real.
-- **Immutability (CRITICAL)** — create new objects; never mutate in place.
-  `update(orig, field, val)` returns a new copy; do not write an in-place
-  `modify(...)`. Immutable data prevents hidden side effects, simplifies
-  debugging, and enables safe concurrency.
+- **Immutability** — prefer new objects over in-place mutation for shared state,
+  domain models, and concurrent code. Do not mutate inputs, caches, or
+  configuration owned by another scope. Local accumulators are fine when the
+  language and the surrounding code make them clear.
 - **File organization** — many small files over few large files: 200–400 lines
   typical, 800-line soft ceiling, high cohesion, low coupling, organized by
   feature/domain, not by type. Test, generated, and vendored files may exceed
@@ -291,204 +303,56 @@ universal law; relax what your task or agent surface does not need.
 
 ### CodeDNA
 
-CodeDNA is a source-annotation convention adapted from
-`https://github.com/Larens94/codedna`. This repository uses the convention only.
-It does not use the `codedna` binary, a validator, git hooks, or a `.codedna`
-ledger file. Git is the authoritative audit log. Agents apply and maintain
-these annotations by hand while reading and editing code.
+CodeDNA is a hand-applied source-annotation convention adapted from
+`https://github.com/Larens94/codedna`. There is no binary, validator, git hook,
+or ledger — git is the audit log. Full convention: `codedna.md`.
 
-**CodeDNA is the only comment content.** No comment content outside CodeDNA may
-exist in source files — no explanatory prose, no commented-out code, no
-`TODO`/`FIXME` markers, no section dividers. The complete permitted set is a
-single-line summary of what the file or function does, the L1 fields, L2
-`Rules:` blocks, and inline `Rules:`/`message:`; in Python the summary line and
-the `Rules:` block live in the docstring. Constraints go in `rules:`/`Rules:`;
-open items go in `message:`. Delete every non-CodeDNA comment in the code you
-touch — this is the one exception to the Surgical-changes rule and the
-trace-back requirement.
-Tool directives and license headers (`//go:build`, linter pragmas, type-ignore
-comments, SPDX lines) are exempt — they are code, not comments. User-visible
-documentation strings are exempt on the same footing: CLI help text, API and
-OpenAPI descriptions, and public-library docstrings are product surface. Keep
-them short and factual; constraints still belong in `rules:`/`Rules:`.
-
-#### Scope
-
-Apply CodeDNA annotations to every source file in the project whose language
-supports comments: Python, Go, JavaScript, TypeScript, Rust, shell, and any
-other commented source language. Do not annotate documentation, plain text, or
-commentless data formats: `.md`, `.tex`, `.rst`, `.txt`, `.json`, and similar.
-
-#### Module header (L1)
-
-Every source file begins with a module header written in the file's native
-comment syntax. Python uses the module docstring; Go, JavaScript, TypeScript,
-and Rust use leading `//` lines; shell uses leading `#` lines. Fields appear in
-this order:
-
-- First line: `filename — <what it does, 15 words or fewer>`.
-- `exports:` public symbols this file provides, separated by ` | `. Use `->`
-  for a return type.
-- `used_by:` consumer files that depend on this file, one per line as
-  `consumer_file → symbol(s)`. Tag a consumer `[cascade]` when an edit here must
-  be verified against it.
-- `related:` (optional) files that share the same pattern or logic without an
-  import link.
-- `rules:` the hard constraint agents must never violate, or `none`.
-- `agent:` a rolling history of the last 5 sessions, oldest first, newest
-  appended last: `model-id | provider | YYYY-MM-DD | session_id | what you did
-  and what you noticed`.
-- `message:` (optional) an open hypothesis or observation for the next agent,
-  indented beneath `agent:`.
-
-Python module docstring:
-
-```python
-"""src/config.py — Bot configuration with lazy environment loading.
-
-exports: class Config | get_config()
-used_by: manager/src/admin/menu.py → DB_FILE, logger [cascade]
-rules:   Never read os.environ at import time; load lazily in get_config().
-agent:   claude-fable-5 | anthropic | 2026-07-24 | s_example | tightened lazy load
-"""
-```
-
-Go, TypeScript, JavaScript, or Rust leading comments:
-
-```go
-// auth.go — API-key middleware for the ZiVPN HTTP surface.
-//
-// exports: Middleware
-// used_by: ZiVPN/cmd/zivpn-api/main.go → Middleware
-// rules:   none
-// agent:   claude-fable-5 | anthropic | 2026-07-24 | s_example | reviewed guard
-```
-
-#### Function annotation (L2)
-
-Every public function carries a `Rules:` block in its docstring or leading
-comment stating what the agent must or must not do there. Omit it only for
-trivial functions with no domain constraint. The first line may be a one-line
-summary of what the function does, 15 words or fewer like the module header;
-every line after it is a `Rules:` or `message:` line.
-
-```python
-def charge(amount_cents: int) -> None:
-    """Charge the customer for a completed order.
-
-    Rules:   amount_cents is in cents, not euros; divide by 100 before display.
-    """
-```
-
-#### Inline annotations on complex logic
-
-Place a `# Rules:` or `# message:` comment (native comment syntax) directly
-above a block when the block encodes a business rule, filters or transforms in a
-non-obvious way, depends on step order, or works around an edge case. Skip
-simple getters and setters, obvious control flow, and standard library calls.
-
-```python
-# Rules: skip cancelled orders — status=4 means cancelled in the legacy DB.
-```
-
-#### Agent protocols
-
-**Reading files.** Read the module header before any code. Parse `exports:`,
-the symbols you must never rename or remove without explicit instruction. Parse
-`used_by:` and `related:`, then follow only the callers whose domain intersects
-your current task, not all of them blindly. Parse `rules:`, the hard constraints
-for every edit in this file. Parse `agent:`, the session history that explains
-why the current state exists. Read the `Rules:` block of any function before
-writing logic in it.
-
-**Writing new files.** Begin every new source file with a complete L1 module
-header; public functions carry the L2 block described above.
-
-**Writing good rules.** Rules must be specific and actionable. Write
-`soft-delete via deleted_at — never issue DELETE` rather than a vague line such
-as `handle deletes carefully`. Never write vague rules such as `handle errors
-gracefully` or `follow best practices`. Use `rules: none` only when a file
-genuinely has no domain constraint. Every time you discover a constraint, fix a
-bug, or notice a non-obvious behavior, add it to `rules:` immediately. This is
-how you communicate with the next agent.
-
-**Writing critical functions.** For a function that guards auth, data, money, or
-an external boundary, the `Rules:` block carries each constraint, invariant, and
-edge case rather than the headline rule alone.
-
-**Editing files.** Re-read `rules:`, the `agent:` history, and the `Rules:` of
-the function you are editing. Apply all file-level constraints before writing.
-After editing, check `used_by:` targets, especially `[cascade]`-tagged ones.
-Keep `exports:` accurate: a symbol leaves the list in the same commit that
-removes it, once no caller remains. If you discover a constraint or fix a bug,
-update `rules:` for the next agent. Append a
-new `agent:` line to the module header in the form `model-id | provider |
-YYYY-MM-DD | session_id | what you did and what you noticed`. Keep only the last
-5 entries; drop the oldest when adding a 6th. Full history is in git. Run the
-checker the agents-contract skill ships after any annotation edit:
-`scripts/codedna_check.py` beside that skill's `SKILL.md`. Resolve the path from
-the skill directory the harness reports and never search the filesystem for it —
-a `find /` sweep for this script is slow enough to be killed. In user scope the
-skill is symlinked into each harness config directory, so the path is
-`~/.commandcode/skills/agents-contract/scripts/codedna_check.py`,
-`~/.claude/skills/agents-contract/scripts/codedna_check.py`, or
-`~/.grok/skills/agents-contract/scripts/codedna_check.py`; in a project-scope
-checkout it is `.agents/skills/agents-contract/scripts/codedna_check.py`.
-Skip the run when an install ships no script. With no flags it
-checks L1 headers (missing
-files/fields, `filename — description` form, field order, `used_by:` targets
-that do not exist, `exports:` names absent from the file body, agent-entry
-shape and the 5-entry cap) AND comment content (prose, commented-out code, TODO
-markers outside `Rules:`/`message:`), across Python, Go, JavaScript/JSX/mjs/cjs,
-TypeScript/TSX, Rust, shell, CSS, and HTML, with line numbers on every finding.
-`--skip-content` limits it to the header checks. It is line-based and errs toward
-reporting; a false positive is a signal that the comment belongs under
-`Rules:`/`message:`. When the scanned paths hold an `AGENTS.md`, it also lints
-that document's Python examples against these rules.
-
-**Session end protocol.** At the end of every session that modifies files,
-record the work in the git commit with the session trailers defined under Git
-Workflow; do not keep a separate ledger file.
+- **Only comment content.** No prose comments, commented-out code, `TODO`/
+  `FIXME` markers, or section dividers. Tool directives, license headers, and
+  user-visible documentation strings are exempt.
+- **L1 module header.** Every source file starts with `filename — description`,
+  then `exports:`, `used_by:`, optional `related:`, `rules:`, and a rolling
+  `agent:` history capped at 5 entries. Optional `message:` sits beneath
+  `agent:`.
+- **L2 function annotation.** Every public function carries a `Rules:` block
+  unless it is trivial and has no domain constraint. Guards, invariants, and
+  edge cases belong there.
+- **Inline annotations.** `# Rules:` or `# message:` only for non-obvious
+  business rules, step-order dependencies, and edge cases. Skip obvious code.
+- **Maintain as you edit.** Update `rules:` when you learn a constraint, append
+  one `agent:` line per session, and run the skill's `codedna_check.py` after
+  annotation edits. Delete non-CodeDNA comments in code you touch; this is the
+  one exception to Surgical changes.
 
 ### Testing Requirements
 
-**Scope of these rules.** Task sizing decides whether a change writes tests at
-all: a small non-behavioral change adds none, a medium bug fix ships its
-regression test, a large change runs the full protocol. TDD governs how any test
-you write is written. The 80% floor and the three test types below describe the
-suite as a whole, not every change.
+**Scope.** Task sizing decides whether a change writes tests at all: a small
+non-behavioral change adds none, a medium bug fix ships its regression test, a
+large change runs the full protocol. The suite-wide floor below applies only
+where the project has coverage tooling and a defined threshold.
 
-**Minimum coverage: 80%.** All three test types are required:
-1. **Unit tests** — individual functions, utilities, components.
-2. **Integration tests** — API endpoints, database operations.
-3. **E2E tests** — critical user flows (framework chosen per language).
+**Coverage.** Use the project's configured threshold; 80% is the default when
+no threshold exists. Unit, integration, and E2E tests are required where they
+apply to the surface: E2E only for critical user-facing flows.
 
-**Two test lanes, different budgets.** What you write and what you run are both
-scoped by Task sizing — the full suite is for large
-and contract changes, the touched module's tests for everything else.
-- **Gate tests** — deterministic, local, fast. Run on every change; never
-  flaky.
-- **Periodic evals** — paid or slow, quality-measuring (LLM, ranking, or
-  long-running suites). Run before ship and on a schedule; allowed to be
-  non-deterministic but must have a pass threshold.
+**Two test lanes.** Gate tests are deterministic, local, and fast — run on
+every change, never flaky. Periodic evals are paid or slow, quality-measuring
+(LLM, ranking, long-running suites) — run before ship and on a schedule, with
+a pass threshold.
 
-**Test-Driven Development (mandatory wherever a test is written):**
-1. Write the test first (RED) — it must fail.
-2. Write the minimal implementation (GREEN) — it must pass.
-3. Refactor (IMPROVE).
-4. Verify coverage (80%+).
+**Test-Driven Development.** Where a test is written: RED (it fails) → GREEN
+(minimal implementation) → IMPROVE (refactor) → verify the threshold.
 
-**Test structure:** AAA pattern — Arrange / Act / Assert — with descriptive
-names explaining the behavior under test.
+**Structure.** AAA — Arrange / Act / Assert — with descriptive names that state
+the behavior under test.
 
-**When tests fail, troubleshoot in order:**
-1. Verify test isolation — each test runs independently of others.
-2. Verify mocks — mock assumptions match real behavior.
-3. Fix the implementation — not the tests, unless the test is wrong.
+**When tests fail, troubleshoot in order:** test isolation, mocks, then the
+implementation — not the tests, unless the test is wrong.
 
 ### Security Guidelines
 
 **Mandatory checks before any commit:**
+
 - [ ] No hardcoded secrets (API keys, passwords, tokens)
 - [ ] All user inputs validated
 - [ ] SQL injection prevention (parameterized queries)
@@ -517,126 +381,53 @@ commit. Code Review Standards defines the reviewer and the recording rule.
 
 ### Command Style
 
-- These RTK and discovery rules are instruction-only. No harness hook rewrites or refuses a command, so apply them yourself.
-- Wrap shell commands through **RTK**. RTK supports `git`, `go`, `pytest`,
-  `ruff`, `npm`, `cargo`, `docker`, `kubectl`, `psql`, `curl`, `ls`, `tree`,
-  `find`, `grep`, `read`, `wc`, `json`, `env`, `deps`, `log`, and many more.
-  Run `rtk --help` to confirm support before reaching for a raw command.
-- The mapping is transparent: `git status` becomes `rtk git status`,
-  `cat file.py` becomes `rtk read file.py`, `python3 -m pytest -q` becomes
-  `rtk pytest -q`. Treat any command missing from `rtk --help` as unsupported.
-- Decide by intent, never by size: wrap by default (`rtk <cmd>` compresses
-  noise, keeps errors and exit codes), run raw only when you need exact bytes
-  or parseable structure (diffs to apply, JSON to parse, streaming output),
-  and prefer the native Read/Grep tools for file access. If a wrapped view hid
-  something you needed, re-run raw once and stop wrapping that command. Fall
-  back to raw whenever RTK is not installed or the subcommand is unsupported
-  — or use `caveman shrink` when the layer is installed (Communication
-  Style). See `RTK.md` for the full command catalogue or `rtk discover` for
-  missed-savings hints.
+- These RTK and discovery rules are instruction-only. No harness hook rewrites
+  or refuses a command, so apply them yourself.
+- Wrap shell commands through **RTK** by default: `git status` becomes
+  `rtk git status`, `python3 -m pytest -q` becomes `rtk pytest -q`. RTK
+  compresses noise while keeping errors and exit codes. Run raw when you need
+  exact bytes or parseable structure (patches to apply, JSON to parse,
+  streaming output), and use native Read/Grep for file access. Fall back to raw
+  whenever RTK is missing or does not support the subcommand. Full catalogue
+  and fidelity zones: `RTK.md`.
+- If a wrapped view hid something you needed, re-run raw once and stop wrapping
+  that command. `rtk recall <hash>` recovers elided output when available.
+- One read-compressor per command, after the intent gate: RTK by default; when
+  RTK cannot wrap a command, `caveman shrink` stands in if the caveman layer is
+  installed, raw otherwise.
 - Avoid compound `cd <path> && <command>` chains. Use `git -C <path> ...`,
   pass the target path as an argument, or set the tool working directory.
 - **Never run `git commit` or `git push` without explicit user approval.** This
-  repository rule overrides any upstream templates that suggest automatic
+  repository rule overrides any upstream template that suggests automatic
   commit and push behavior.
 
 #### Tool ladder for code discovery
 
-Locating code is a different job from reading it, and the token economics
-differ. **Try semble and RTK first; native tools are the fallback, not the
-opening move.** Take the first rung that answers the question:
+Locating code is not reading it. Take the first rung that answers the question:
 
-1. **Semble MCP** — `search` / `find_related`, when the MCP server is
-   connected. Ranked chunks with file and line at a fraction of grep+read cost.
-   The qualified name is harness-specific: `mcp__semble__search` on Claude Code
-   and Command Code, `semble__search` on Grok, whose catalog carries no `mcp__`
-   prefix. Calling the wrong one fails with `Tool not found`. On Grok the tool
-   is also callable directly under that name; `search_tool` → `use_tool` is the
-   meta-tool path to the same catalog key, and a server whose handshake is still
-   running is absent from the first prompt, so send a second one before
-   concluding the tool does not exist.
+1. **Semble MCP** — `search` / `find_related`, when connected. The qualified
+   name is harness-specific (`mcp__semble__search` on Claude Code and Command
+   Code, `semble__search` on Grok); the wrong name fails with `Tool not found`.
 2. **Semble CLI** — `semble search "<query>" . --max-snippet-lines 10` when
-   the MCP is not wired in but the binary is on PATH.
-3. **`rtk grep`** — a lossy survey: 0–90%+ smaller than native grep output
-   (near-zero when a query has few matches). It collapses file paths and
-   truncates lines, so it answers "roughly where", not "give me every match".
-4. **Native Grep/Glob** — the fallback when no earlier rung answers: exact
-   `line:content`, every occurrence, no caps. Always available, never lossy.
+   the binary is on PATH.
+3. **`rtk grep`** — a lossy survey: answers "roughly where", not "every match".
+4. **Native Grep/Glob** — exact `line:content`, every occurrence, no caps.
 
-Rungs 1–3 come first for *finding* code. Reach for native Grep/Glob when the
-earlier rungs return nothing, when you need every occurrence of a literal
-string, or when attention must be exact — not as the default first attempt.
-
-Three rules keep the ladder honest:
-
-- **Discovery first, reading native.** Find the file with semble or `rtk grep`,
-  then read it with the native Read tool. `rtk read` with no `-l` is
-  byte-identical to `cat` (verified) — it has no token advantage; use
-  `rtk read -l aggressive` only to skim a huge file you will not edit.
-- **Semble returns top-k, not every match.** Use native Grep to confirm an
-  exhaustive set.
-- **Compressing *command* output is where RTK pays.** `rtk pytest`, `rtk cargo
-  test`, `rtk git status`, build and log output collapse 90%+ with errors and
-  exit codes intact. That is RTK's designed strength, separate from discovery.
-
-A tool that is absent changes nothing you must do: drop to the next rung.
-Discovery is never blocked on semble or RTK being installed.
-
-**RTK quick reference.** RTK is a token-optimized CLI proxy that cuts 60–90% of
-the bash output an agent reads — estimated as `bytes / 4`, so a share of
-output, never of the bill. Full catalogue: `RTK.md` and `rtk --help`. `rtk grep`
-and `rtk rg` are lossy by design — they group matches by file, strip
-whitespace, and truncate lines; correct for surveys and rough counts, and
-`rtk recall <hash>` recovers what they elided, so use the native Grep tool for
-exact `line:content`.
-
-| Area | Commands |
-|---|---|
-| Core navigation | `rtk ls`, `rtk tree`, `rtk read <file>`, `rtk smart <file>`, `rtk find "*.go" .`, `rtk grep -rn "p" dir`, `rtk rg "p" dir`, `rtk ast-grep run -p '<pat>'`, `rtk wc <file>`, `rtk diff <f1> <f2>` |
-| Git | `rtk git status`, `rtk git log --oneline -10`, `rtk git diff`, `rtk git show <commit>`, `rtk git blame <file>`, `rtk git add/commit/push/pull`, `rtk git branch`, `rtk gt stack` |
-| Go | `rtk go build ./...`, `rtk go test ./...`, `rtk go vet ./...`, `rtk go mod tidy`, `rtk golangci-lint run` |
-| JS/frontend | `rtk npm test`, `rtk npx tsc --noEmit`, `rtk pnpm test`, `rtk pnpm list`, `rtk pnpm outdated`, `rtk bun test`, `rtk bun install/build`, `rtk bunx`, `rtk jest`, `rtk vitest`, `rtk tsc --noEmit`, `rtk next build`, `rtk lint .`, `rtk prettier --check .`, `rtk format .`, `rtk playwright test`, `rtk prisma generate`, `rtk ctest` |
-| Python | `rtk pytest -q`, `rtk ruff check .`, `rtk ruff format --check .`, `rtk mypy .`, `rtk pip list`, `rtk pip outdated`, `rtk uv run <cmd>`, `rtk sqlfluff lint models/`, `rtk deno test`, `rtk deno lint/check` |
-| Rust/Ruby/.NET/Android | `rtk cargo test`, `rtk cargo build/clippy`, `rtk rake test`, `rtk rubocop`, `rtk rspec`, `rtk dotnet test`, `rtk gradlew test`, `rtk sbt test`, `rtk mvn test`, `rtk mvnd test` |
-| PHP | `rtk php artisan list`, `rtk phpunit`, `rtk phpstan analyze`, `rtk phpt`, `rtk pest`, `rtk paratest`, `rtk ecs`, `rtk pint` |
-| GitHub | `rtk gh pr list`, `rtk gh pr view <number>`, `rtk gh issue list`, `rtk gh run list`, `rtk glab mr list` |
-| Cloud/containers/DB | `rtk aws sts get-caller-identity`, `rtk docker ps`, `rtk docker images/logs <c>`, `rtk docker compose ps`, `rtk kubectl pods`, `rtk kubectl logs <pod>`, `rtk oc pods/logs <pod>`, `rtk psql -c "select 1"`, `rtk curl <url>`, `rtk wget <url>` |
-| Test/lint helpers | `rtk test <cmd>`, `rtk err <cmd>`, `rtk run -c '<script>'`, `rtk lint <cmd>`, `rtk log <file>`, `rtk summary <cmd>` |
-| Data/config | `rtk json <file>`, `rtk json --keys-only <file>`, `rtk deps`, `rtk env -f <FILTER>`, `rtk pipe` |
-| Meta/analytics | `rtk gain`, `rtk gain --graph`, `rtk gain --history`, `rtk gain --daily`, `rtk gain --quota`, `rtk gain --failures`, `rtk gain --recalls`, `rtk gain --all --format json`, `rtk cc-economics`, `rtk config`, `rtk config recall [mode]`, `rtk telemetry`, `rtk learn`, `rtk recall <hash>`, `rtk bypass <cmd>`, `rtk run <cmd>`, `rtk discover`, `rtk session` |
-| Hooks/filters | `rtk init`, `rtk rewrite <cmd>`, `rtk hook <tool>`, `rtk hook-audit`, `rtk trust`, `rtk untrust`, `rtk verify`, `rtk pipeline`, `rtk methods list`, `rtk plugins new\|list\|build`, `rtk tasks list`, `rtk llm-proxy <start\|stop\|status>` |
-| Options | `-v/--verbose`, `--ultra-compact`, `--skip-env` |
+Find with rungs 1–3, then read the file with the native Read tool; `rtk read`
+equals `cat` unless you opt into a lossy level. A missing rung drops to the
+next; discovery is never blocked on an install. Full detail: `semble.md` and
+`RTK.md`.
 
 ### Communication Style
 
-**Caveman.** Replies default to terse caveman mode: answer first
-(`[thing] [action] [reason]. [next step].`), no greeting, no "let me", no
-recap, no filler or hedging; fragments are fine. Meaning never drops —
-*not*, *never*, *only*, numbers, and units stay exact. Payload verbatim:
-code, commands, paths, and error text are untouched character-for-character,
-and a fix shows the changed lines, not the whole file again.
-Quiet tool runs: one line per phase, one line with the result.
-No performance — no "me think" dialect; when caveman phrasing is not shorter,
-plain wins. User prompts are never rewritten.
-
-Full sentences return, then caveman resumes, for: security warnings,
-irreversible-action confirmations, step-by-step orders where dropped
-conjunctions risk misreading, ambiguous compression, and a confused or
-questioning user. Anything persisted outside chat — code, docs, PR bodies,
-memory files — keeps normal prose; caveman governs the chat channel only.
-Two artifacts have their own terse formats: commit messages (Conventional
-Commits, terse and imperative) and review findings (one line each: severity,
-location, problem, fix). Both, the modes, and the layer live in `caveman.md`.
-
-Precedence is unchanged: the harness system prompt and the user's request
-outrank this mode. Off: "stop caveman" / "normal mode" / `/caveman off`.
-Modes: caveman by default, `/caveman ultra` (ultracave) for maximum
-compression, and `/caveman wenyan` (megacave, a classical-Chinese register).
-The optional caveman layer compresses what the agent *reads* (logs, test
-output, JSON, diffs, web pages). One read-compressor per command, after
-Command Style's intent gate: RTK by default; when RTK cannot wrap a command,
-`caveman shrink` stands in if the layer is installed, raw otherwise; and
-`caveman browse` covers pages.
+Replies default to terse caveman mode: answer first (`[thing] [action] [reason].
+[next step].`), no greeting or recap, fragments fine. Meaning never drops —
+*not*, *never*, *only*, numbers, and units stay exact; code, commands, paths,
+and error text stay verbatim. Use full sentences for security warnings,
+irreversible actions, order-sensitive steps, and confused users. Anything
+persisted outside chat keeps normal prose. Commit messages and review findings
+have their own formats. Full rules, modes, and the optional read-compression
+layer: `caveman.md`.
 
 ### Git Workflow
 
@@ -649,7 +440,6 @@ Command Style's intent gate: RTK by default; when RTK cannot wrap a command,
 ```
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
-Attribution is disabled globally via `~/.claude/settings.json`.
 
 #### Session trailers
 
@@ -675,6 +465,8 @@ when the block parses and prints nothing when it does not. Write `unknown` for a
 value the harness does not expose; never invent an ID.
 
 Git is the authoritative audit log; do not keep a separate ledger file.
+Attribution settings are harness-specific; this contract does not assume a
+particular global config path.
 
 #### Pull requests
 
@@ -722,20 +514,12 @@ too.
 
 ## Environment & Source Repositories
 
-### Companion surfaces
-
-| File | Role |
-|---|---|
-| `RTK.md` | Token-efficient CLI proxy command reference — catalogue verified against rtk 1.0.1 |
-| `semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
-| `caveman.md` | Terse-reply mode — voice rules, modes, commit and review formats, optional output layer |
-| `ponytail.md` | Laziness ladder — smallest complete change, root-cause fixes, disclosure and shortcut conventions |
-
 ### Installed plugins / skills
 
 | Plugin / skill | Source | Purpose |
 |---|---|---|
-| `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code-search server — `search` / `find_related`, top rung of the discovery ladder |
+| `agents-contract` | this repository, `.agents/skills/agents-contract/` | Repo-local skill encoding this contract as executable steps |
+| `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code-search server — top rung of the discovery ladder |
 | `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
 
 Use the Skill tool when a Superpowers skill matches the task; otherwise read
@@ -767,14 +551,10 @@ Put captured knowledge in the right place:
 |---|---|
 | `https://github.com/rtk-ai/rtk` | RTK CLI and command reference |
 | `https://github.com/MinishLab/semble` | Semble MCP code-search server and CLI |
-| `https://github.com/JuliusBrussee/caveman` | Caveman communication mode — terse replies, commit and review formats, optional output layer |
-| `https://github.com/DietrichGebert/ponytail` | Ponytail laziness ladder — smallest complete change, root-cause fixes, disclosure line |
+| `https://github.com/JuliusBrussee/caveman` | Caveman communication mode |
+| `https://github.com/DietrichGebert/ponytail` | Ponytail laziness ladder |
+| `https://github.com/Larens94/codedna` | CodeDNA source-annotation convention |
 | `https://github.com/obra/superpowers` | Superpowers plugin |
-| `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence merged into this file |
+| `https://github.com/jbarbier/CLAUDE.md` | Operating-contract influence |
 | `https://github.com/multica-ai/andrej-karpathy-skills` | Karpathy behavioral guidelines |
-| `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review, development workflow |
-
-@RTK.md
-@semble.md
-@caveman.md
-@ponytail.md
+| `https://github.com/affaan-m/ECC` | Rule-pack influence for coding style, security, testing, git workflow, code review |

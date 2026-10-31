@@ -2,17 +2,17 @@
 
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
-rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. Cleanup tests seed legacy handlers explicitly, so a pass proves the installer removed ours and kept foreign ones.
+rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | first cut: asserted the per-harness shapes after Grok was found not to expand @-imports, so it needs the companions as standalone rules files while the other two get one symlink
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | added the per-harness companion-import check: the existing project case applies every plan at once, so Claude's companions satisfied the imports for all three and the commandcode-only case went untested. Each subtest now gets its own root.
 agent:   fx | unknown | 2026-10-31 | unknown | dropped hook wiring, vendored-skill cases, and the cleanup pass after the one-shot removal tool was deleted
 agent:   fx | unknown | 2026-10-31 | unknown | covered the user-scope companion links, skill links, and both reference mirrors; added a real skill directory as a refusal case
+agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: project cases now assert every named companion ships and AGENTS.md carries no @ imports
 """
 
 from __future__ import annotations
 
 import importlib
-import re
 import sys
 import tempfile
 import unittest
@@ -66,7 +66,7 @@ class InstallerTestCase(unittest.TestCase):
         self.assertIn(self.home / ".commandcode" / "AGENTS.md", links)
         self.assertNotIn(self.home / ".commandcode" / "CLAUDE.md", links)
 
-    def test_every_user_harness_resolves_the_companion_imports_it_ships(self) -> None:
+    def test_every_user_harness_ships_the_companions_it_names(self) -> None:
         plans = install.plan_harnesses(self.home)
 
         for harness in ("claude", "commandcode"):
@@ -74,10 +74,9 @@ class InstallerTestCase(unittest.TestCase):
                 plan = plans[harness]
                 install.apply_plan(plan, install.CONTRACT_DIR, dry_run=False)
                 base = self.home / install.HOME_DIR[harness]
-                contract = (base / "AGENTS.md").read_text(encoding="utf-8")
-                imported = re.findall(r"^@(\S+)$", contract, re.MULTILINE)
-                self.assertTrue(imported, harness)
-                missing = [name for name in imported if not (base / name).is_file()]
+                missing = [
+                    name for name in install.COMPANIONS if not (base / name).is_file()
+                ]
                 self.assertEqual([], missing, harness)
 
     def test_a_real_skill_directory_is_refused_not_replaced(self) -> None:
@@ -158,22 +157,21 @@ class GrokRulesTestCase(unittest.TestCase):
 
 
 class MirrorTestCase(unittest.TestCase):
-    def test_both_mirrors_are_byte_identical_to_their_sources(self) -> None:
+    def test_all_mirrors_are_byte_identical_to_their_sources(self) -> None:
         targets = install.sync_contract_mirror(install.CONTRACT_DIR, install.SKILL_DIR)
 
         self.assertEqual(
             [
                 install.SKILL_DIR / "references" / "contract.md",
+                install.SKILL_DIR / "references" / "codedna.md",
                 install.SKILL_DIR / "references" / "commands.md",
             ],
             targets,
         )
-        self.assertEqual(
-            (install.CONTRACT_DIR / "AGENTS.md").read_bytes(), targets[0].read_bytes()
-        )
-        self.assertEqual(
-            (install.CONTRACT_DIR / "RTK.md").read_bytes(), targets[1].read_bytes()
-        )
+        for source, target in zip(
+            ("AGENTS.md", "codedna.md", "RTK.md"), targets, strict=True
+        ):
+            self.assertEqual((install.CONTRACT_DIR / source).read_bytes(), target.read_bytes())
 
 
 class ProjectScopeTestCase(unittest.TestCase):
@@ -200,7 +198,7 @@ class ProjectScopeTestCase(unittest.TestCase):
     def test_project_install_writes_real_files_not_symlinks(self) -> None:
         self.apply()
 
-        for name in ("AGENTS.md", "CLAUDE.md", "RTK.md", "semble.md"):
+        for name in ("AGENTS.md", "CLAUDE.md", *install.COMPANIONS):
             path = self.root / name
             self.assertTrue(path.is_file(), path)
             self.assertFalse(path.is_symlink(), path)
@@ -213,13 +211,15 @@ class ProjectScopeTestCase(unittest.TestCase):
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 self.assertNotIn(str(install.CONTRACT_DIR), text, path)
 
-    def test_project_files_keep_the_imports_that_reach_the_companions(self) -> None:
+    def test_project_contract_names_every_companion_and_imports_none(self) -> None:
         self.apply()
 
         contract = (self.root / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertIn("@RTK.md", contract)
+        self.assertNotRegex(contract, r"(?m)^@\S+$")
+        for name in install.COMPANIONS:
+            self.assertIn(name, contract)
 
-    def test_every_project_harness_resolves_the_companion_imports_it_ships(self) -> None:
+    def test_every_project_harness_ships_the_companions_it_names(self) -> None:
         for harness in install.HARNESSES:
             with self.subTest(harness=harness):
                 root = Path(tempfile.mkdtemp())
@@ -234,10 +234,9 @@ class ProjectScopeTestCase(unittest.TestCase):
                         harness,
                     ]
                 )
-                contract = (root / "AGENTS.md").read_text(encoding="utf-8")
-                imported = re.findall(r"^@(\S+)$", contract, re.MULTILINE)
-                self.assertTrue(imported, harness)
-                missing = [name for name in imported if not (root / name).is_file()]
+                missing = [
+                    name for name in install.COMPANIONS if not (root / name).is_file()
+                ]
                 self.assertEqual([], missing, harness)
 
     def test_second_project_run_reports_unchanged(self) -> None:

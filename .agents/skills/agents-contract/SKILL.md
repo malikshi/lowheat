@@ -1,317 +1,188 @@
 ---
 name: agents-contract
-description: Execute tasks using the repository's operating contract from AGENTS.md — the 7-step Work Loop, Operating Principles, Definition of Done, CodeDNA annotations, testing/security standards, code review, and git commit with session trailers. Use when starting any task, writing or editing code, writing tests, reviewing code, committing changes, wrapping shell commands through RTK, replying in caveman mode, keeping scope ponytail-lazy, or following the cross-agent contract.
+description: Execute tasks under the repository's AGENTS.md operating contract — the 7-step Work Loop, task sizing, CodeDNA annotations, testing and security gates, code review, and git session trailers. Use when starting any task, editing code or tests, reviewing a diff, running commands through RTK, replying in caveman mode, or committing.
 ---
 
-# Agents Contract — Operating Contract Execution
+# Agents Contract — execution checklist
 
-This skill executes the repository's cross-agent operating contract defined in
-`AGENTS.md`. It encodes the Operating Principles and the Work Loop, the
-Engineering Standards (Definition of Done, Verification, Coding Style, CodeDNA,
-Testing, Security), Execution & Delivery (Command Style, Communication Style,
-Git Workflow, Code Review), and the Environment notes as executable steps. The
-full contract text lives in `references/contract.md`; the RTK command
-catalogue lives in `references/commands.md`. The caveman, ponytail, and semble
-companion catalogues live beside the contract itself, as `caveman.md`,
-`ponytail.md`, and `semble.md` — in the checkout's `contract/` directory,
-reached through the `@RTK.md`, `@semble.md`, `@caveman.md`, and `@ponytail.md`
-imports at the end of the contract, and in a project install beside the root
-`AGENTS.md`, which is the same directory as `references/contract.md`'s source.
-They are never inside this skill directory, so do not look for them here. Read
-them when the steps below need detail.
+The canonical contract is `references/contract.md`, byte-identical to
+`AGENTS.md`. This file is the executable checklist; load the reference section
+when a step needs detail.
 
-## 1. Start a task — the Work Loop
+- `references/codedna.md` — full CodeDNA convention and checker behaviour.
+- `references/commands.md` — full RTK catalogue, byte-identical to `RTK.md`.
+- Companions `caveman.md`, `ponytail.md`, and `semble.md` sit beside the
+  `AGENTS.md` the harness loaded, or in its rules directory for Grok; this skill
+  does not duplicate them.
 
-Follow all 7 steps in order; each step ends with a verification point before the
-next begins. If any step fails, stop and fix the root cause — do not work around
-it and do not declare done.
+## 1. Work Loop
 
-1. **Understand.** Read the request twice. State the problem, the *why* behind
-   it, and the acceptance criteria.
+Follow all 7 steps; each ends with a verification gate. If a step fails, fix the
+root cause and do not declare done.
+
+1. **Understand.** Read the request twice. State the problem, the *why*, and
+   acceptance criteria.
    → Verify: you can say what "done" looks like.
 2. **Read first.** Read the files you will touch, their CodeDNA headers, and
-   their tests. Never propose changes to code you have not read.
-   → Verify: you know what exists before you add anything.
-3. **Plan the smallest change.** Name the risks and the revert path. For
-   multi-step tasks, state a brief: `1. [Step] → verify: [check]`.
+   their tests. Never propose changes to unread code.
+   → Verify: you know what exists before adding anything.
+3. **Plan the smallest change.** Name risks and the revert path. For
+   multi-step work: `1. [Step] → verify: [check]`.
    → Verify: the plan fits the request and nothing else.
-4. **Implement with TDD.** Where Task sizing calls for a test, write it first —
-   RED → GREEN → IMPROVE, per §5 Testing. Work in small increments; verify each
-   step before starting the next.
-   → Verify: the targeted tests pass, not just the suite.
-5. **Self-review the diff.** Run the Definition of Done checklist on your own
-   work before anyone else sees it; a change bound for a shared branch, a merge,
-   or a STOP trigger also gets the independent review in §6.
-   → Verify: every changed line traces back to the request.
-6. **Prove it.** Run the smallest check that proves the change per the
-   Verification section (`references/contract.md#verification`).
-   → Verify: evidence exists for every claim you will make.
+4. **Implement with TDD.** Where task sizing calls for a test, write it first:
+   RED → GREEN → IMPROVE (§5).
+   → Verify: the targeted tests pass.
+5. **Self-review the diff.** Run the Definition of Done checklist; shared
+   branches, merges, and STOP triggers also need independent review (§6).
+   → Verify: every changed line traces to the request.
+6. **Prove it.** Run the smallest check that proves the change (§8).
+   → Verify: evidence exists for every claim.
 7. **Report and record.** Report status honestly; if files changed, commit with
-   the session trailers under Git Workflow (§7 below).
+   the session trailers in §7.
 
-## 2. Operating principles (decision rules)
+## 2. Decision rules
 
-Apply on every task, not just code changes:
-
-- **Precedence.** When instruction sources disagree, the higher entry wins: the
-  harness system prompt and the user's current request, then `AGENTS.md` on
-  disk, then skill summaries, pinned copies, and mirrors of it. A copy that
-  lacks the `Contract-Version` line, or shows a different one, is stale —
-  refresh it from the canonical checkout, then act on the file on disk.
-- **Task sizing.** Scale ceremony to the change and say the call out loud:
-  **small** (mechanical, no behavior change — solo, touched checks only, no
-  new test), **medium** (localized behavior change — solo, touched module's
-  tests, regression test for fixes), **large** (feature, cross-module, or
-  judgment-heavy — full protocol, full suites, consider fan-out). When torn,
-  pick the smaller and say so; escalate with an updated call if the change
-  outgrows the triage, and restate in the final report what was actually run.
-- **Think before coding.** State assumptions; distinguish verified facts from
-  uncertainty. If multiple interpretations exist, present them — do not pick
-  silently; challenge weak assumptions candidly; if a simpler approach exists,
-  say so. Ask questions only when a decision is materially ambiguous or risky,
-  or needs approval. Name what "done" looks like (metric, workflow step,
-  user-visible behavior) before writing code; "it works" is not an outcome.
-- **Smallest thing that works.** The smallest change that *fully* works —
-  completeness is the floor, minimalism the ceiling. No speculative features,
-  no single-use abstractions, no error handling for impossible scenarios. If
-  200 lines could be 50, rewrite; ask whether a senior engineer would call it
-  overcomplicated. Search existing code, stdlib, and proven deps before
-  building; prefer boring technology; add a dependency only when clearly better
-  than the existing path. Surgical changes only: match existing style, touch
-  only what the request requires, remove only orphans your change created,
-  mention pre-existing dead code rather than deleting it, every changed line
-  traces back to it.
-- **Ponytail ladder.** Take the first rung that fully works — needs to exist →
-  already exists here → standard library → native platform → installed
-  dependency → one line → the minimum that works — *after* reading the code
-  the change touches and listing every caller, test, fixture, config, and
-  export it must reach. Never cut trust-boundary validation, data-loss
-  handling, security, accessibility, or anything explicitly requested; a bug
-  fix greps every caller and fixes the shared code once; end every report with
-  what you skipped or did not check and any risk (`ponytail.md`).
-- **Caveman replies.** Terse by default: answer first, no filler or recap;
-  code, commands, paths, errors, and numbers stay verbatim; full sentences for
-  security warnings, irreversible actions, order-sensitive steps, and confused
-  users; `/caveman ultra` and `/caveman wenyan` escalate, "stop caveman" /
-  "normal mode" / `/caveman off` turn it off; commit and review formats live
-  in `caveman.md`.
-- **Verify, don't assume.** Split deterministic work (scripts, tests,
-  formatters, schema checks, targeted shell) from reasoning work — if the same
-  question asked twice gives the same answer by definition, script it; never do
-  arithmetic, date math, or structured parsing inside a reasoning step. Tie
-  every claim to visible evidence (test result, config check, log line, metric,
-  diff inspection); ground research in authoritative, current sources and name
-  gaps. Verify every example you ship by running it; state anything unverified
-  as unverified. Features and fixes need deterministic tests; LLM, prompt, and
-  ranking behavior needs an eval or documented manual rubric; config and docs
-  changes need syntax, diff, link, and marker checks. Report final status as
-  `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT` with its evidence.
-- **Complete real fixes.** Preserve the user's original goal and constraints;
-  don't leave a workaround, loose plan, or follow-up note when finishing now is
-  safer and practical. Tests passing is necessary evidence, not sufficient —
-  verify the actual result and think through the failure modes.
-- **Curate context.** Load only the relevant contract section, module headers,
-  source files, and tests. Use skills when one matches; visualize explanations
-  with diagrams/tables/code blocks where they aid understanding.
-- **Codify repeated work.** By the third time a manual flow is needed, turn it
-  into a script, skill, hook, or documented workflow.
-- **Confusion protocol.** For high-stakes ambiguity (destructive ops,
-  contradictory requirements, unclear prod impact, competing architectures):
-  stop, name the ambiguity, present 2–3 options with trade-offs, ask.
-- **Operations discipline.** Background jobs/backfills: snapshot or document
-  the rollback path first, monitor from a deterministic state, report
-  before/after with file paths and metrics. Report restart needs as changes —
-  list the exact command for the human. Never run `sudo` restarts unless
-  explicitly authorized. Preserve unrelated work; never commit secrets,
-  destructive commands, production mutations, force pushes, hook bypasses,
-  binaries, or model weights without explicit approval + a rollback plan.
-- **Fan out only with clear boundaries.** Isolated sessions, worktrees, or
-  subagents only for genuinely independent units; coordinate through contracts,
-  avoid overlapping write sets, synthesize findings before reporting. Keep new
-  subsystems parallel-friendly: clear ownership, contracts, tests, docs, and
-  the current repository layout unless the task includes restructuring.
-- **Delegation completion contract.** Your final message is the deliverable.
-  If you delegate, you own collection: wait for results, integrate them, then
-  report. Never end a turn while spawned work is still running. Decompose
-  only when the work cannot fit in one context.
+- **Precedence.** Harness system prompt and safety rules, then the user's
+  current request, then `AGENTS.md` on disk, then skill summaries and mirrors.
+  A copy with a different `Contract-Version` is stale; refresh it, then act on
+  the file on disk.
+- **Task sizing.** Say the size out loud.
+  **small** — mechanical, no behavior change; solo, touched checks only, no new
+  test. **medium** — localized behavior change or bug fix; solo, touched module
+  tests, regression test for fixes. **large** — feature, cross-module, contract,
+  or judgment-heavy; full protocol, full suites, consider fan-out.
+  When torn, pick smaller and say so; escalate with the new call.
+- **Think first.** State assumptions; separate verified facts from uncertainty;
+  present competing interpretations instead of picking silently. Ask only when
+  materially ambiguous, risky, or approval-bound. Name the outcome and what
+  "done" looks like before coding.
+- **Smallest complete change.** Completeness is the floor, minimalism the
+  ceiling. No speculative features, single-use abstractions, or impossible-case
+  handling. Read the touched code, list callers/tests/fixtures/config/exports,
+  then climb: YAGNI → existing code → standard library → native platform →
+  installed dependency → one line → minimum code. Search before building.
+  Surgical changes; fix a bug once at the shared root. Never cut trust-boundary
+  validation, data-loss handling, security, accessibility, or explicit requests.
+  End every report with what you skipped and the remaining risk.
+- **Verify, don't assume.** Script deterministic work: lookups, parsing,
+  counting, date math, validation. Tie every claim to evidence: test result,
+  config check, log line, metric, diff. Test features and fixes; eval LLM,
+  prompt, and ranking behavior; syntax/diff/link/marker-check docs and config.
+  Never ship an unverified example. Status is `DONE`, `DONE_WITH_CONCERNS`,
+  `BLOCKED`, or `NEEDS_CONTEXT`, with evidence.
+- **Context.** Load the relevant contract section, module header, source,
+  tests, and examples only. Use a matching skill. Prefer tables or code blocks
+  when they explain faster than prose.
+- **Codify repeated work** by the third manual run.
+- **Confusion protocol.** For destructive, contradictory, production-impacting,
+  or architectural ambiguity: stop, name it, present 2–3 options with
+  trade-offs, ask.
+- **Operations.** Document rollback before background jobs or backfills;
+  monitor from a deterministic state; report before/after with paths and
+  metrics. List exact restart commands for the human; never `sudo` restart
+  unless authorized. Never commit secrets, destructive commands, production
+  mutations, force pushes, hook bypasses, binaries, or model weights without
+  approval and a rollback plan. Preserve unrelated work.
+- **Delegation.** Your final message is the deliverable. Wait for subagents,
+  integrate results, then report; never end a turn with work still running.
+  Fan out only for independent units with disjoint write sets. Keep new
+  subsystems ownership-, contract-, test-, and docs-clear.
 
 ## 3. Command style
 
-- These rules are instruction-only: no hook rewrites or refuses commands; invoke them yourself.
-- Locate code down the discovery ladder, trying the cheap rungs first: semble
-  MCP → semble CLI → `rtk grep` → native Grep/Glob. Native is the fallback when
-  the earlier rungs return nothing or you need every occurrence; reads stay
-  native (`rtk read` equals `cat`). The MCP tool is `mcp__semble__search` on
-  Claude Code and Command Code, `semble__search` on Grok — the wrong name fails
-  with `Tool not found`. On Grok `search_tool` → `use_tool` reaches the same
-  key, and a server still handshaking is missing from the first prompt.
+- Instruction-only: no hook rewrites or refuses commands; invoke RTK and the
+  discovery ladder yourself.
+- Discovery ladder: semble MCP (`mcp__semble__search` on Claude Code and
+  Command Code, `semble__search` on Grok) → semble CLI → `rtk grep` → native
+  Grep/Glob. Native is the fallback for every-occurrence or exact
+  `line:content`; reads stay native (`rtk read` equals `cat`).
 - Wrap shell commands through RTK by default (`rtk git status`,
-  `rtk pytest -q`); run raw only when exact bytes or parseable structure are
-  the requirement, or when RTK is unavailable or the subcommand is
-  unsupported.
-- If a wrapped view hid something you needed, re-run raw once and stop
-  wrapping that command.
-- One read-compressor per command, after the intent gate above: RTK by
-  default; when RTK cannot wrap a command, `caveman shrink` stands in if the
-  caveman layer is installed, raw otherwise; `caveman browse` covers pages.
-- Prefer native Read/Grep tools when you need exact `line:content` for an
-  edit; native Grep truncates very long lines, and `rtk read -n` covers bulk
-  reads.
-- Avoid `cd <path> && <command>` chains — pass the path as an argument or set
-  the tool working directory.
+  `rtk pytest -q`). Run raw for exact bytes, parseable output, streaming, and
+  secrets. Re-run raw once if a wrapped view hid something, then stop wrapping
+  that command.
+- One read-compressor per command: RTK; if RTK cannot wrap it, `caveman shrink`
+  when installed; otherwise raw. `caveman browse` covers pages.
+- Avoid `cd <path> && <command>`; pass the path or set the working directory.
 - **Never run `git commit` or `git push` without explicit user approval.**
 
 ## 4. CodeDNA annotations
 
-CodeDNA is a hand-applied source-annotation convention. There is no binary,
-validator, hook, or ledger — git is the authoritative audit log. Apply it to
-every source file whose language supports comments (Python, Go, JS, TS, Rust,
-shell, and any other commented source). Do **not** annotate `.md`, `.tex`,
-`.rst`, `.txt`, `.json`, or other commentless formats.
+Apply to every source file whose language supports comments; do not annotate
+`.md`, `.tex`, `.rst`, `.txt`, `.json`, or other commentless formats. No
+comment content exists outside CodeDNA: no prose, commented-out code,
+`TODO`/`FIXME`, or dividers. Tool directives, license headers, and user-visible
+documentation strings are exempt.
 
-- **L1 module header** — first lines of each file, in the file's comment syntax:
-  `filename — <what it does, 15 words or fewer>` then `exports:` (public
-  symbols, ` | `-separated, `->` for a return type), `used_by:` (consumers as
-  `consumer_file → symbol(s)`; tag `[cascade]` when an edit here must be
-  verified against them), optional `related:`, `rules:` (hard constraints or
-  `none`), and `agent:` (a rolling history of the last 5 sessions, oldest
-  first: `model-id | provider | YYYY-MM-DD | session_id | what you did and what
-  you noticed`), optional `message:` beneath `agent:`.
-- **L2 function annotation** — every public function carries a `Rules:` block
-  in its docstring or leading comment stating what the agent must or must not do
-  there; a function guarding auth, data, money, or an external boundary states
-  each constraint, invariant, and edge case rather than the headline rule.
-  Omit it only for trivial functions with no domain constraint. The first line
-  may be a one-line summary of what the function does, 15 words or fewer; every
-  line after it is a `Rules:` or `message:` line.
-- **Inline annotations** — `# Rules:` / `# message:` above blocks that encode a
-  business rule, non-obvious transform, step-order dependency, or edge case.
-  Skip simple getters, obvious control flow, standard library calls.
+- **L1 header** — `filename — description` (≤15 words), `exports:`,
+  `used_by:` (`[cascade]` when edits must be verified there), optional
+  `related:`, `rules:` (hard constraints or `none`), `agent:` (last 5 sessions,
+  oldest first: `model-id | provider | YYYY-MM-DD | session_id | what changed`),
+  optional `message:` beneath `agent:`.
+- **L2 function** — every public function carries a `Rules:` block unless it is
+  trivial and has no domain constraint. Auth, data, money, and external
+  boundaries list every invariant and edge case.
+- **Inline** — `# Rules:` / `# message:` only above non-obvious business rules,
+  step-order dependencies, or edge cases. Skip simple getters and obvious code.
 
-**Rules for writing rules:** be specific and actionable — write `soft-delete
-via deleted_at — never issue DELETE`, never `handle errors gracefully` or
-`follow best practices`. Use `rules: none` only when a file genuinely has no
-domain constraint. Every time you discover a constraint, fix a bug, or notice a
-non-obvious behavior, add it to `rules:` immediately — that is how you
-communicate with the next agent.
-
-**Reading protocol:** read the module header before any code. Parse `exports:`
-as symbols you must never rename or remove without explicit instruction; follow
-only the `used_by:`/`related:` callers whose domain intersects the task; treat
-`rules:` as hard constraints on every edit; read `agent:` for why the current
-state exists; read a function's `Rules:` block before writing logic in it.
-
-**Editing protocol:** re-read `rules:`, the `agent:` history, and the `Rules:`
-of the function you are editing; apply the file-level constraints first; keep
-`exports:` accurate — a symbol leaves the list in the same commit that removes
-it, once no caller remains; after editing, check `used_by:` targets especially
-`[cascade]`-tagged ones; append a new `agent:` line in the form above, keep only
-the last 5 entries, and drop the oldest when adding a 6th (full history is in
-git). Run this skill's checker after any annotation edit — it ships at
-`scripts/codedna_check.py` beside this file. Never search the filesystem for
-it: a `find /` sweep is slow enough to be killed. The script sits one level
-below this `SKILL.md`, so in user scope the path is
-`~/.commandcode/skills/agents-contract/scripts/codedna_check.py` (likewise
-`~/.claude/skills/...` and `~/.grok/skills/...`), and in a project checkout it
-is `.agents/skills/agents-contract/scripts/codedna_check.py`. An install that
-omits the scripts directory skips the run: with no flags it checks L1 headers
-(missing files/fields, `filename —` form, field order, dead `used_by:` targets,
-`exports:` names absent from the file body, agent-entry shape and the 5-entry
-cap) and comment content (prose,
-commented-out code, TODO markers outside `Rules:`/`message:`) across Python,
-Go, JavaScript/JSX/mjs/cjs, TypeScript/TSX, Rust, shell, CSS, and HTML, with
-line numbers on every finding; `--skip-content` limits it to headers. It is
-line-based and errs toward reporting — a false positive usually means the
-comment belongs under `Rules:`/`message:`. When the scanned paths hold an
-`AGENTS.md`, it lints that document's Python examples against the same rules.
-
-**Session end protocol:** at the end of every session that modifies files,
-record the work in the git commit with the session trailers under Git Workflow
-(§7); do not keep a separate ledger file.
-
-**CodeDNA is the only comment content.** No comment content outside CodeDNA may
-exist in source files — no explanatory prose, no commented-out code, no
-`TODO`/`FIXME` markers, no section dividers. The permitted set is a single-line
-summary of what the file or function does, the L1 fields, L2 `Rules:` blocks,
-and inline `Rules:`/`message:`. Constraints go in `rules:`/`Rules:`; open items
-go in `message:`. Delete every non-CodeDNA comment in the code you touch — the
-one exception to the Surgical-changes rule and the trace-back requirement. Tool
-directives and license headers (`//go:build`, linter pragmas, type-ignore
-comments, SPDX lines) are exempt — they are code, not comments. User-visible
-documentation strings are exempt on the same footing: CLI help text, API and
-OpenAPI descriptions, and public-library docstrings are product surface. Keep
-them short and factual; constraints still belong in `rules:`/`Rules:`.
+Read headers first: `exports:` as rename/removal guards, `used_by:`/`related:`
+for scope, `rules:` as constraints, `agent:` as history. On edit, keep
+`exports:` accurate, append one `agent:` line, drop the oldest beyond five, and
+run this skill's `scripts/codedna_check.py` after annotation changes. In user
+scope the skill is linked at `~/.claude/skills`, `~/.commandcode/skills`, or
+`~/.grok/skills`; in the lowheat checkout it is
+`.agents/skills/agents-contract/scripts/codedna_check.py`. Never `find /` for
+it. Skip the run when the install ships no script.
 
 ## 5. Engineering standards
 
-- **Definition of Done** — before any change is complete, self-reviewed,
-  committed, or merged: readable, well-named identifiers; no magic numbers
-  (named constants); functions <50 lines; files cohesive within the 800-line
-  soft ceiling; nesting <4 levels; errors handled explicitly; no hardcoded
-  secrets; input validated at every boundary; no debug statements or dead code;
-  no comments outside CodeDNA annotations; tests exist (80% coverage minimum);
-  change is the smallest that satisfies the request; evidence exists per
-  Verification.
-- **Coding style** — KISS, DRY, YAGNI; immutability (create new objects, never
-  mutate in place); many small files (200–400 lines, 800-line soft ceiling —
-  test/generated/vendored files may exceed it when justified) organized by
-  feature/domain, not by type; handle errors explicitly at every level (UI
-  messages user-facing, detail server-side; never swallow silently); validate
-  input at every boundary, schema-based where available, fast fail with clear
-  messages — all external data is untrusted; naming: names describe what the
-  thing holds or does without a comment, and language idiom (Go, Rust, Python
-  casing) wins over the defaults — variables `camelCase`, booleans
-  `is/has/should/can`, interfaces/types/components `PascalCase`, constants
-  `UPPER_SNAKE_CASE`, tests `snake_case`.
-- **Testing** — Task sizing decides whether tests are written (none for a small
-  non-behavioral change, a regression test for a medium bug fix); TDD governs
-  how they are written (RED → GREEN → IMPROVE), with AAA structure and
-  descriptive names. The 80% coverage floor and the unit/integration/E2E mix
-  describe the suite, not every change. Two lanes: gate tests (fast, local,
-  every change, never flaky) vs periodic evals (paid/slow, before ship, pass
-  threshold); run what Task sizing calls for, the full suite only for large or
-  contract changes. When tests fail, troubleshoot in order: test isolation →
-  mocks → the implementation (not the tests, unless the test is wrong).
-- **Security** — before any commit: no hardcoded secrets, input validation,
-  SQLi/XSS/CSRF protection, auth verified, rate limiting, no sensitive data in
-  error messages. STOP triggers — the independent review in §6, security-scoped,
-  runs before proceeding when the change touches auth, user input, DB queries,
-  file ops, external APIs, crypto, or payments, scoped to those checks and the
-  touched surface; a CRITICAL or HIGH finding blocks the commit. On exposure:
-  stop, identify, fix, rotate, review.
+- **Definition of Done.** Named identifiers, no magic numbers; functions <50
+  lines; cohesive files within the 800-line soft ceiling; nesting <4 levels;
+  explicit error handling; no secrets; boundary validation; no debug or dead
+  code; no non-CodeDNA comments; tests for new behavior and the project's
+  coverage threshold; smallest change; evidence per §8.
+- **Coding style.** KISS, DRY, YAGNI. Prefer new objects for shared state,
+  domain models, and concurrent code; local accumulators are fine. Organize by
+  feature/domain (200–400 lines typical, 800 soft ceiling; test/generated/
+  vendored files may exceed it). Handle errors at every level, never swallow.
+  Validate external input at boundaries, schema-based where available, fast
+  fail with clear messages. Names describe the thing; language idiom wins over
+  defaults (variables `camelCase`, booleans `is/has/should/can`, types
+  `PascalCase`, constants `UPPER_SNAKE_CASE`, tests `snake_case`).
+- **Testing.** Task sizing decides whether tests exist; the suite-wide coverage
+  floor uses the project's threshold, defaulting to 80% only when none exists.
+  Unit, integration, and E2E apply where relevant; E2E only for critical
+  user-facing flows. Gate tests are fast, local, every change, never flaky;
+  periodic evals are paid/slow, before ship, with a pass threshold. TDD where a
+  test is written; AAA structure; descriptive names. On failure: isolation →
+  mocks → implementation, not the test unless the test is wrong.
+- **Security.** Before commit: no hardcoded secrets; validate input; prevent
+  SQLi (parameterized queries) and XSS (sanitize HTML); enable CSRF; verify
+  authn/authz; rate-limit appropriate surfaces; never leak sensitive data in
+  errors. On exposure: stop, identify, fix, rotate, review. STOP triggers
+  require an independent security-scoped review before proceeding: auth, user
+  input, database queries, file operations, external APIs, crypto, payments. A
+  CRITICAL or HIGH finding blocks the commit.
 
 ## 6. Code review
 
-Two modes, each mandatory where it applies:
-
-- **Self-review** — the author applies the DoD checklist and the severity table
-  to the diff and fixes CRITICAL and HIGH findings before anyone else sees it:
-  Work Loop step 5, every change.
-- **Independent review** — a reviewer other than the author owns the verdict,
-  using a reviewer subagent where the harness provides one and a human
-  otherwise. Required for every change bound for a shared branch (pushed to a
-  shared remote, or targeted by a merge or PR — a local scratch branch is not
-  shared) or a merge, and for every change that trips the §5 STOP triggers. The
-  reviewer records the verdict, covered scope, and open risk in the PR body or
+- **Self-review** — author runs the Definition of Done and severity table, and
+  fixes CRITICAL/HIGH before anyone else sees the diff. Every change.
+- **Independent review** — a non-author owns the verdict, using a reviewer
+  subagent or a human. Required for shared branches, merges, and every STOP
+  trigger. Record verdict, covered scope, and open risk in the PR body or
   commit message.
-- Pre-review for independent review: all automated checks (CI/CD) passing, no
-  merge conflicts, branch up to date with target.
-- Severity: CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an
-  unexplained file over the soft 800-line ceiling); LOW = NOTE.
-- A MEDIUM finding is either fixed or recorded with a reason — PR body or
-  commit message — never silently dropped; LOW findings may be skipped.
-- The independent reviewer approves only when no CRITICAL or HIGH issues remain,
-  warns on HIGH-only, and blocks on any CRITICAL; a security-scoped review (§5
-  STOP triggers) blocks on a HIGH finding too.
+- Pre-review: CI passing, no conflicts, branch current with target.
+- CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an unexplained file
+  over the 800-line ceiling); LOW = NOTE. MEDIUM findings are fixed or recorded
+  with a reason; LOW may be skipped. Approve only with no CRITICAL/HIGH; a
+  security review also blocks on HIGH.
 
-## 7. Git workflow with session trailers
+## 7. Git workflow
 
-- **Never run `git commit` or `git push` without explicit user approval.** This
-  repo rule overrides any upstream template suggesting automatic commit.
-- **Commit format:** `<type>: <description>` where type is `feat`, `fix`,
-  `refactor`, `docs`, `test`, `chore`, `perf`, or `ci`.
-- **Session trailers** — at the end of every session that modified files, add
-  these trailers to the commit:
+- Commit format: `<type>: <description>` with `feat`, `fix`, `refactor`,
+  `docs`, `test`, `chore`, `perf`, or `ci`.
+- Session trailers go in the final paragraph, no blank lines inside, after any
+  `Co-authored-by:` line:
 
   ```
   AI-Agent:    <model-id | unknown>
@@ -322,54 +193,30 @@ Two modes, each mandatory where it applies:
   AI-Message:  <one-line summary of what was found or left open>
   ```
 
-  The AI block is the last paragraph of the message, with no blank line inside
-  it, and any `Co-authored-by:` line goes above it — git parses trailers from
-  the final paragraph only, so a misplaced block is invisible to tooling. Check
-  with `git log -1 --format='%(trailers:key=AI-Agent,valueonly)'`: it prints the
-  agent when the block parses, and nothing when it does not. Write `unknown` for
-  a value the harness does not expose; never invent an ID.
-
-- **Git is the authoritative audit log** — do not keep a separate ledger file.
-- **Pull requests:** analyze full commit history, diff against base
-  (`rtk git diff [base-branch]...HEAD`), comprehensive summary, test plan with
-  TODOs, push with `-u` on new branches.
+  Confirm with `git log -1 --format='%(trailers:key=AI-Agent,valueonly)'`.
+  Write `unknown` when the harness exposes no value; never invent an ID. Git is
+  the audit log; no separate ledger.
+- Pull requests: analyze full history, diff against base, write a comprehensive
+  summary and test plan, push with `-u` on new branches.
 
 ## 8. Verification
 
-Run the smallest check that proves the change before claiming completion:
+Run the smallest check that proves the change:
 
-- Config/docs edits: syntax checks or targeted grep checks.
-- Python: the relevant `rtk pytest` targets.
-- Go: `rtk go build ./...` and `rtk go vet ./...`.
-- Browser/user-facing work: test observable behavior, verify with the real
-  interface when possible.
-- Report any check that could not run and why. Report meaningful blockers,
-  outcomes, and evidence without noisy progress narration.
+- docs/config: syntax check or targeted grep;
+- Python: the relevant `rtk pytest` target, or `python3 -m pytest` without RTK;
+- Go: `rtk go build ./...` and `rtk go vet ./...`;
+- browser/user-facing: exercise observable behavior.
+
+Report checks that could not run, meaningful blockers, outcomes, and evidence.
+No noisy progress narration.
 
 ## 9. Environment
 
-- Use the Skill tool when a `superpowers` skill matches the task; otherwise
-  read the tracked `SKILL.md` for project guidance.
-- The context window is your main control surface: load the relevant contract
-  section, files, and examples; leave the noise out. Avoid the last 20% of the
-  context window for large multi-file refactors or complex debugging; single
-  edits and docs tolerate higher utilization. When a task goes sideways, ask
-  what was in the window first.
-- Capture knowledge in the right place: personal notes → memory; team/project
-  knowledge → the project's existing docs. Never duplicate what's already
-  documented; ask before creating a new top-level file.
-
-## Worked example
-
-Task: "add a `get_config()` helper to src/config.py".
-
-1. **Understand** — acceptance: lazy env loading, no import-time reads.
-2. **Read first** — read `src/config.py`, its module header, and tests.
-3. **Plan** — `1. Write failing test → verify: test fails for right reason.
-   2. Implement lazy load → verify: targeted tests pass. 3. Annotate →
-   verify: header + Rules present.`
-4. **Implement with TDD** — test first (RED), minimal impl (GREEN), refactor.
-5. **Self-review** — run the DoD checklist (size, errors, secrets, coverage).
-6. **Prove it** — `rtk pytest src/config_test.py`.
-7. **Report and record** — status + commit with session trailers (approval
-   first).
+- Use a matching superpowers skill when available; otherwise read the tracked
+  `SKILL.md` for project guidance.
+- Treat context as an input. Avoid the last 20% of the window for multi-file
+  refactors or complex debugging; single edits and docs tolerate more. When a
+  task goes sideways, inspect what was in the window first.
+- Personal notes → memory; team/project knowledge → existing docs. Do not
+  duplicate an existing doc; ask before adding a top-level file.

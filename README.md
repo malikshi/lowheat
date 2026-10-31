@@ -1,40 +1,47 @@
 # lowheat
 
-Minimal agent-operations bootstrap — the single, self-contained multi-agent
-workspace contract lives in `contract/AGENTS.md`.
+Minimal agent-operations bootstrap — a thin cross-agent contract in
+`contract/AGENTS.md`, with detailed references loaded on demand.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `install.py` | Per-harness installer — symlinks the contract, companions, and skill where each harness reads them, writes Grok's rules files, and syncs the skill references |
-| `contract/AGENTS.md` | Canonical contract — operating principles, Work Loop, engineering standards, CodeDNA, execution & delivery, environment |
+| `contract/AGENTS.md` | Canonical thin contract — operating principles, Work Loop, engineering standards, execution & delivery, environment |
+| `contract/codedna.md` | Full CodeDNA convention — module headers, function annotations, inline rules, checker behaviour |
 | `contract/RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
 | `contract/semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
 | `contract/caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
 | `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
+| `.agents/skills/agents-contract/references/codedna.md` | Byte-identical mirror of `contract/codedna.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/commands.md` | Byte-identical mirror of `contract/RTK.md`, written by `install.py` (do not edit directly) |
-| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 languages, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
+| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 file suffixes, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
-| `tests/test_install.py` | Tests for the per-harness install shapes, Grok rules rendering, skill links, and both mirrors |
+| `tests/test_install.py` | Tests for the per-harness install shapes, Grok rules rendering, skill links, and all three mirrors |
+| `tests/test_docs.py` | Tests for contract thinness, version line, named companions, skill mirrors, and reference paths |
 | `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
 | `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
 | `LICENSE` | MIT |
 
 ## Contract structure
 
-`contract/AGENTS.md` is the cross-agent source of truth. Six top-level sections:
+`contract/AGENTS.md` is the thin cross-agent core. Its six top-level sections:
 
 | Section | Covers |
 |---|---|
-| How to use this file | Task → section routing table, precedence order, staleness check |
+| How to use this file | Task → section routing, companion table, precedence order, staleness check |
 | Operating Principles | Task sizing, think before coding, smallest change, verify don't assume, confusion protocol, operations discipline |
 | The Work Loop | 7-step delivery loop — each step ends with a verify gate |
-| Engineering Standards | Definition of Done, Verification, Coding Style, CodeDNA, Testing Requirements, Security Guidelines |
-| Execution & Delivery | Command Style, Communication Style (caveman), Git Workflow (commit format + session trailers), Code Review Standards |
-| Environment & Source Repositories | Installed plugins / skills, context window management, knowledge capture, source repositories |
+| Engineering Standards | Definition of Done, Verification, Coding Style, CodeDNA summary, Testing Requirements, Security Guidelines |
+| Execution & Delivery | Command Style, Communication Style, Git Workflow, Code Review Standards |
+| Environment & Source Repositories | Installed plugins / skills, context management, knowledge capture, sources |
+
+The companions hold the detail the core points to: `codedna.md` for annotations,
+`RTK.md` for command fidelity and catalogue, `semble.md` for discovery,
+`caveman.md` for reply modes, and `ponytail.md` for scope discipline.
 
 ## Bootstrapping
 
@@ -63,16 +70,17 @@ Each harness gets the shape it can actually read:
 | Command Code | `~/.commandcode/AGENTS.md` → `contract/AGENTS.md`, companions beside it, skill at `~/.commandcode/skills/agents-contract` | `<root>/AGENTS.md` + companions |
 | Grok | `~/.grok/AGENTS.md` link, each companion as `~/.grok/rules/*.md`, skill at `~/.grok/skills/agents-contract` | same, under `<root>/.grok/rules/` |
 
-The Grok row is the one worth knowing: the same single `AGENTS.md` serves all
-three harnesses, but Grok would have silently received only that file and lost
-RTK, caveman, ponytail, and semble. `install.py` emits the companions there
-instead of relying on a mechanism Grok does not have.
+The Grok row is the one worth knowing: the same `AGENTS.md` serves all three
+harnesses, but Grok would have silently received only that file and lost the
+companions the contract names. `install.py` emits them there as standalone
+rules instead of relying on a mechanism Grok does not have.
 
-Because the contract text ends in `@RTK.md`, `@semble.md`, `@caveman.md`, and
-`@ponytail.md` imports, every harness that receives `AGENTS.md` also receives
-those four files beside it — in either scope, and for any `--harness` subset.
-A Command Code-only project install would otherwise commit a contract whose
-four imports resolve to nothing.
+`AGENTS.md` names `codedna.md`, `RTK.md`, `semble.md`, `caveman.md`, and
+`ponytail.md` by bare filename for on-demand reads. Every harness that receives
+the contract also receives those five files — beside `AGENTS.md` for Claude Code
+and Command Code, as `.grok/rules/*.md` for Grok — in either scope and for any
+`--harness` subset, so a named reference always resolves without loading every
+reference into context up front.
 
 **User scope links; project scope copies.** A user install symlinks the
 contract, companions, and skill, so a `git pull` in the checkout re-syncs what
@@ -95,12 +103,14 @@ repo root.
 ### Keeping the mirrors in sync
 
 `references/contract.md` is written by `install.py` from `contract/AGENTS.md`,
-and `references/commands.md` from `contract/RTK.md`, on every run; do not edit
-either copy by hand. Edit the source under `contract/`, then re-run the
-installer. To verify without writing:
+`references/codedna.md` from `contract/codedna.md`, and
+`references/commands.md` from `contract/RTK.md`, on every run; do not edit the
+copies by hand. Edit the source under `contract/`, then re-run the installer.
+To verify without writing:
 
 ```bash
 cmp contract/AGENTS.md .agents/skills/agents-contract/references/contract.md
+cmp contract/codedna.md .agents/skills/agents-contract/references/codedna.md
 cmp contract/RTK.md .agents/skills/agents-contract/references/commands.md
 ```
 
@@ -120,10 +130,10 @@ side by side in the project root, or the companions alone in `.grok/rules/`.
 
 ```bash
 mkdir -p .grok/rules
-for f in AGENTS.md RTK.md semble.md caveman.md ponytail.md; do
+for f in AGENTS.md codedna.md RTK.md semble.md caveman.md ponytail.md; do
   curl -fsSL "https://raw.githubusercontent.com/malikshi/lowheat/main/contract/$f" -o "$f"
 done
-for f in RTK.md semble.md caveman.md ponytail.md; do
+for f in codedna.md RTK.md semble.md caveman.md ponytail.md; do
   cp "$f" ".grok/rules/$f"
 done
 ```

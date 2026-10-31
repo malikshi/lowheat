@@ -4,11 +4,12 @@ exports: HARNESSES | HarnessPlan | find_conflicts | main | plan_harnesses | plan
 used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, SKILL_DIR, HarnessPlan, apply_plan, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness; never hand-copy. Claude Code and Command Code expand `@path` imports in AGENTS.md, so they get one symlink to the contract and symlinks to the four companions beside it, because an import resolves relative to the reading file. Grok does not expand imports — verified on grok 1.0.67, where a marker in an @-imported file was absent from the instruction context — so it gets the companions as separate files in a rules directory it scans. The contract text ends in `@`-imports for its four companions, so any harness receiving AGENTS.md must receive them beside it, in every scope and every harness subset; attaching them to one plan leaves the others loading a contract with dangling pointers. Every user-scope harness also gets the skill linked into its skills directory, so the agent reads the same skill the checkout carries instead of a stale vendored copy. Both mechanisms load only files that exist: a broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first.
+rules:   Emit per harness; never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it and reads the one it needs on demand. Claude Code and Command Code get symlinks in user scope; Grok gets the companions as standalone files in a rules directory it scans, because it does not expand imports. Every user-scope harness also gets the skill linked into its skills directory, so the agent reads the same skill the checkout carries instead of a stale vendored copy. A broken symlink silently contributes nothing, so every emitted path is verified before the run reports success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first.
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-23 | 81e2ea63-c0ca-489d-a506-5ec094106a17 | closed the last overwrite gap: provenance was unknowable from a path comparison alone, so a vendored file edited in place was replaced silently; vendor_skill now writes .vendored.json and find_vendored_edits diffs against it, which also keeps a stale upstream copy replaceable
 agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | plan_project attached the companions to claude only, though all three plans share the root AGENTS.md whose tail imports them — a commandcode-only project install loaded the contract with four dangling @-pointers. Companions now attach to every plan; main's emitted-set dedup keeps a multi-harness run to one write each. Also dry_run now reports hook changes instead of silently skipping them.
 agent:   fx | unknown | 2026-10-31 | unknown | removed the hook runtime and installer wiring, then deleted the one-shot cleanup tool; install now writes the contract only
 agent:   fx | unknown | 2026-10-31 | unknown | user scope now links the companions beside AGENTS.md and links the skill into each harness skills directory; the skill mirror also syncs commands.md from RTK.md, closing the stale global-copy and catalogue drift
+agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: AGENTS.md drops @-imports, CodeDNA moves to its own companion, and the skill mirrors contract plus CodeDNA plus RTK on demand
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 CONTRACT_DIR = _HERE / "contract"
 SKILL_DIR = _HERE / ".agents" / "skills" / "agents-contract"
-COMPANIONS = ("RTK.md", "semble.md", "caveman.md", "ponytail.md")
+COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md")
 HARNESSES = ("claude", "commandcode", "grok")
 
 HOME_DIR = {
@@ -37,7 +38,7 @@ HOME_DIR = {
 class HarnessPlan:
     """One harness's install shape and the paths it needs.
 
-    Rules:   `links` maps a path to create to the contract file it should resolve to; `rules_dir` names the directory Grok scans for companion files. A harness that expands imports gets `links` only, because its one AGENTS.md already reaches the companions. `copy` writes the file's contents instead of a symlink — required for project scope, where a link into the installer's checkout is dead on any other clone.
+    Rules:   `links` maps a path to create to the contract file it should resolve to; `rules_dir` names the directory Grok scans for companion files. Every harness gets the companions because AGENTS.md names them by bare filename for on-demand reads. `copy` writes the file's contents instead of a symlink — required for project scope, where a link into the installer's checkout is dead on any other clone.
     """
 
     harness: str
@@ -70,13 +71,14 @@ def _sync_copy(source: Path, target: Path) -> Path:
 
 
 def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> list[Path]:
-    """Write the skill's copies of the contract and RTK catalogue from their sources.
+    """Write the skill's copies of the contract, CodeDNA, and RTK catalogue.
 
-    Rules:   The skill reads references/contract.md and references/commands.md, and both copies must match contract/AGENTS.md and contract/RTK.md byte for byte — a stale mirror is what made the skill and the contract disagree, and a hand-condensed catalogue drifted the same way. Rewrite both on every install; return every path written so the caller reports each one.
+    Rules:   The skill reads references/contract.md, references/codedna.md, and references/commands.md; each copy must match its source byte for byte — a stale mirror is what made the skill and the contract disagree. Rewrite all three on every install; return every path written so the caller reports each one.
     """
     references = skill_dir / "references"
     return [
         _sync_copy(contract_dir / "AGENTS.md", references / "contract.md"),
+        _sync_copy(contract_dir / "codedna.md", references / "codedna.md"),
         _sync_copy(contract_dir / "RTK.md", references / "commands.md"),
     ]
 
@@ -84,7 +86,7 @@ def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> list[Path]:
 def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
     """Return the user-scope install shape for each harness under one home.
 
-    Rules:   Resolve every target under the caller's home so a test can point at a temporary directory and never touch real configs. Claude Code reads CLAUDE.md and AGENTS.md, so it gets both; Command Code reads AGENTS.md only. Both land beside the harness's own config directory, which is where each looks for global memory. Every harness gets the four companions beside its AGENTS.md because the contract imports them by bare filename, and the skill linked into its skills directory so the loader reads the checkout's skill rather than a stale copy.
+    Rules:   Resolve every target under the caller's home so a test can point at a temporary directory and never touch real configs. Claude Code reads CLAUDE.md and AGENTS.md, so it gets both; Command Code reads AGENTS.md only. Both land beside the harness's own config directory, which is where each looks for global memory. Every harness gets the companions beside its AGENTS.md so the named references resolve on demand, and the skill linked into its skills directory so the loader reads the checkout's skill rather than a stale copy.
     """
     plans: dict[str, HarnessPlan] = {}
     for harness in HARNESSES:
@@ -104,7 +106,7 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
 def plan_project(root: Path) -> dict[str, HarnessPlan]:
     """Return the project-scope shape, rooted at one repository.
 
-    Rules:   A project install lands real files, not links: the contract is committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone — it loads no contract. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, so the imports resolve in place. Those imports are in the contract text, so every harness that gets `<root>/AGENTS.md` needs the companions there too — including a Command Code-only install, which expands `@`-imports and would otherwise load the contract with four dangling pointers. Grok scans `<root>/.grok/rules`; it does not expand imports, so the root companions are unused there and the rules directory carries them whole.
+    Rules:   A project install lands real files, not links: the contract is committed, and a symlink into the installing machine's checkout resolves to nothing on a teammate's clone. Claude Code and Command Code read `<root>/AGENTS.md` and the companions beside it, where the contract's named references resolve for on-demand reads. Every harness plan carries the companions because they share one root AGENTS.md. Grok scans `<root>/.grok/rules`; its rules directory carries them whole as well.
     """
     agent = root / "AGENTS.md"
     plans = {
