@@ -56,5 +56,5 @@ python3 install.py --harness auto
 python3 install.py --scope project --root /path/to/repo
 ```
 
-The installer refuses foreign files, keeps a `.bak` on `--force`, and reports
+The installer refuses foreign files, replaces them with `--force`, and reports
 `unchanged` on an idempotent re-run.

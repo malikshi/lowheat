@@ -4,12 +4,12 @@ exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | detect | find_conflicts
 used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force writes a .bak first. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
-agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: AGENTS.md drops @-imports, CodeDNA moves to its own companion, and the skill mirrors contract plus CodeDNA plus RTK on demand
+rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
 agent:   fx | unknown | 2026-10-31 | unknown | replaced the three hardcoded harnesses with a HarnessSpec registry and added detection, Codex, OpenCode, Factory, Kilo, Pi, Cline, Gemini, Cursor, Aider, and Qwen adapters
 agent:   fx | unknown | 2026-10-31 | unknown | added Aider's config file, dropped Gemini's duplicate skill link because Gemini discovers the central .agents/skills, and verified Command Code, Grok, and OpenCode load Contract-Version 2026-10-31
 agent:   fx | unknown | 2026-10-31 | unknown | added fx, hermes, claw, jcode, omp, forge, smelt, codewhale, and copilot adapters; fx now gets regular instruction files and a real skill copy because it refuses symlinks
 agent:   fx | unknown | 2026-10-31 | unknown | ignored Python bytecode caches when comparing and copying the fx skill, so test runs no longer look like source drift
+agent:   fx | unknown | 2026-11-01 | 01a196ba-7693-7c40-9caa-dff862b90cac | dropped the .bak backup from --force: repeated forced runs had piled up agents-contract.bak and .bak1 beside the fx skill copy
 """
 
 from __future__ import annotations
@@ -207,7 +207,7 @@ def plan_project(root: Path) -> dict[str, HarnessPlan]:
 def _link(target: Path, source: Path, dry_run: bool = False) -> str:
     """Point target at source and report what happened.
 
-    Rules:   Replace a stale link or an existing file, because a leftover copy shadows the contract and drifts from it — that is the failure this script exists to end. Remove a real directory only when the caller has already backed it up and chosen --force, since a skill directory is not a file to unlink. Create the parent directory first; a harness directory may not exist yet. A dry run reports the same decision and changes nothing.
+    Rules:   Replace a stale link or an existing file, because a leftover copy shadows the contract and drifts from it — that is the failure this script exists to end. Remove a real directory only when the caller chose --force, since a skill directory is not a file to unlink. Create the parent directory first; a harness directory may not exist yet. A dry run reports the same decision and changes nothing.
     """
     current = target.is_symlink() and Path(os.path.realpath(target)) == source
     if current:
@@ -288,25 +288,6 @@ def find_conflicts(
             for name, text in render_grok_rules(contract_dir).items():
                 note(plan.rules_dir / name, text.encode())
     return conflicts
-
-
-def backup(target: Path) -> Path:
-    """Copy target to a .bak before it is overwritten.
-
-    Rules:   Never overwrite an existing backup, since that would destroy the oldest copy of the user's file — suffix with a counter instead. Copy a real directory recursively, since the only directory target is a skill and --force must preserve it whole. Return the path written so the caller reports it.
-    """
-    directory, stem = target.parent, target.name
-    directory.mkdir(parents=True, exist_ok=True)
-    candidate = directory / f"{stem}.bak"
-    counter = 1
-    while candidate.exists():
-        candidate = directory / f"{stem}.bak{counter}"
-        counter += 1
-    if target.is_dir() and not target.is_symlink():
-        shutil.copytree(target, candidate, ignore=_COPY_IGNORE)
-    else:
-        shutil.copyfile(target, candidate)
-    return candidate
 
 
 def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
@@ -424,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="overwrite an existing contract file, keeping a .bak of it",
+        help="overwrite an existing contract file or directory",
     )
     parser.add_argument(
         "--list-harnesses",
@@ -477,16 +458,10 @@ def main(argv: list[str] | None = None) -> int:
         for path in conflicts:
             print(f"install: refusing to overwrite {path}", file=sys.stderr)
         print(
-            "install: that file is not ours; re-run with --force to keep a .bak and replace it",
+            "install: that file is not ours; re-run with --force to replace it",
             file=sys.stderr,
         )
         return 1
-    if conflicts:
-        for path in conflicts:
-            if args.dry_run:
-                print(f"install: would back up {path} to {path.name}.bak")
-            else:
-                print(f"install: backed up {path} to {backup(path)}")
 
     if not args.dry_run:
         for mirror in sync_contract_mirror(CONTRACT_DIR, SKILL_DIR):

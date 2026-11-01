@@ -118,8 +118,8 @@ checked before the run reports success, and a re-run reports `unchanged`.
 **Nothing is overwritten by accident.** The installer refuses to replace any
 existing file whose contents differ from the contract — a project's own
 `AGENTS.md`, a hand-written `.grok/rules/RTK.md`, or a real skill directory —
-and exits 1 without touching it. `--force` replaces it only after writing a
-`.bak` (recursively, for a directory). Project scope also refuses to run against
+and exits 1 without touching it. `--force` replaces it outright; copy anything
+you want to keep before running it. Project scope also refuses to run against
 the lowheat checkout itself, where it would duplicate `contract/` back into the
 repo root.
 

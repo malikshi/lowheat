@@ -221,7 +221,7 @@ class InstallerTestCase(unittest.TestCase):
 
         self.assertEqual([agents], conflicts)
 
-    def test_force_backs_up_a_real_skill_directory_before_replacing_it(self) -> None:
+    def test_force_replaces_a_real_skill_directory_without_a_backup(self) -> None:
         skill = self.home / ".claude" / "skills" / install.SKILL_DIR.name
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text("MY OWN SKILL\n", encoding="utf-8")
@@ -230,10 +230,7 @@ class InstallerTestCase(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertTrue(skill.is_symlink())
-        backup = skill.with_name(skill.name + ".bak")
-        self.assertEqual(
-            "MY OWN SKILL\n", (backup / "SKILL.md").read_text(encoding="utf-8")
-        )
+        self.assertFalse(skill.with_name(skill.name + ".bak").exists())
 
     def test_apply_creates_links_that_resolve_to_the_contract(self) -> None:
         plan = install.plan_harnesses(self.home)["claude"]
@@ -424,7 +421,7 @@ class ConflictGuardTestCase(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual("MY OWN RULES\n", agents.read_text(encoding="utf-8"))
 
-    def test_force_replaces_a_foreign_agents_md_and_keeps_a_backup(self) -> None:
+    def test_force_replaces_a_foreign_agents_md_without_a_backup(self) -> None:
         agents = self.root / "AGENTS.md"
         agents.write_text("MY OWN RULES\n", encoding="utf-8")
 
@@ -434,10 +431,7 @@ class ConflictGuardTestCase(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertNotEqual("MY OWN RULES\n", agents.read_text(encoding="utf-8"))
-        self.assertEqual(
-            "MY OWN RULES\n",
-            (self.root / "AGENTS.md.bak").read_text(encoding="utf-8"),
-        )
+        self.assertFalse((self.root / "AGENTS.md.bak").exists())
 
     def test_a_matching_file_is_not_a_conflict_so_re_runs_stay_quiet(self) -> None:
         self.apply()
