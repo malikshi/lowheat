@@ -40,6 +40,7 @@ you need, follow it, and move on.
 | `semble.md` | locating code | discovery ladder, CLI verbs, MCP fallback, caveats |
 | `caveman.md` | changing reply mode, commits, or reviews | voice rules, modes, commit and review formats, optional layer |
 | `ponytail.md` | choosing scope or explaining a shortcut | ladder, never-cut list, levels, disclosure line |
+| `loop.md` | running multi-unit or risky work | machine check, unit graph, retry limits, merge, failure return, undo gates |
 
 ### Precedence
 
@@ -235,30 +236,44 @@ present two or three real options with trade-offs, and ask before proceeding.
 ## The Work Loop
 
 This is the canonical way every task is delivered. Each step ends with a
-verification point before the next begins.
+verification point before the next begins. Detailed unit mechanics live in
+`loop.md`; this section is the gate summary.
 
-1. **Understand.** Read the request twice. State the problem, the *why* behind
-   it, and the acceptance criteria.
-   → Verify: you can say what "done" looks like.
+1. **Understand and define the check.** Read the request twice. State the
+   problem, the *why*, and the acceptance criteria. Write the pass condition as
+   a command and exit code, schema, diff boundary, or eval threshold; "looks
+   good" and "I'm confident" never pass.
+   → Verify: you can say what "done" looks like and how a program will decide.
 2. **Read first.** Read the files you will touch, their CodeDNA headers, and
    their tests. Never propose changes to code you have not read.
    → Verify: you know what exists before you add anything.
-3. **Plan the smallest change.** Name the risks and the revert path. For
-   multi-step tasks, state a brief: `1. [Step] → verify: [check]`.
-   → Verify: the plan fits the request and nothing else.
-4. **Implement with TDD.** Where Task sizing calls for a test, write it first —
-   RED → GREEN → IMPROVE, per Testing Requirements. Work in small increments;
-   verify each step before starting the next.
-   → Verify: the targeted tests pass, not just the suite.
-5. **Self-review the diff.** Run the Definition of Done checklist on your own
-   work before anyone else sees it; a change bound for a shared branch, a merge,
-   or a STOP trigger also gets the independent review in Code Review Standards.
-   → Verify: every changed line traces back to the request.
-6. **Prove it.** Run the smallest check that proves the change per the
-   Verification section.
+3. **Plan the smallest unit graph.** Name the risks and the revert path. For
+   multi-unit work, give each unit one job, input, output, check, failure state,
+   and write set; draw an edge only for a real data dependency; parallelize only
+   when write sets are disjoint and checks independent.
+   → Verify: the plan fits the request, and no unit writes another's files.
+4. **Implement with TDD, one unit at a time.** Change, run the fixed check, keep
+   it if it passes, revert it if it does not. Cap a behavior unit at three
+   attempts; after the third failure stop and report the plan wrong rather than
+   retrying. Revert only your own edits, never user work.
+   → Verify: the targeted check passes, not just the suite.
+5. **Merge, then review.** Merge, deduplicate, sort, and compare with code; a
+   failed unit returns `UNIT`, `VERDICT`, `REASON`, `EVIDENCE`, and `SCOPE`, and
+   a passed unit is never redone. Self-review the diff; a shared branch, merge,
+   or STOP trigger also gets independent review.
+   → Verify: every changed line traces to a unit and its check.
+6. **Prove it and gate by undo cost.** Run the smallest check that proves the
+   change. Cheap, contained changes may proceed; reversible, wide changes need
+   hard evidence and a rollback path; irreversible changes stop for explicit
+   approval. Passing a check never authorizes a commit or push.
    → Verify: evidence exists for every claim you will make.
-7. **Report and record.** Report status honestly; if files changed, commit with
-   the session trailers under Git Workflow.
+7. **Report, learn, and record.** Stop when the check passes, after two
+   consecutive rounds with no new evidence, or when the budget ends. Report what
+   changed, what was checked, rejected attempts, approvals still needed, and
+   what remains unverified. Write a learned rule into CodeDNA `rules:` or the
+   contract, never a second ledger; commit with the session trailers once the
+   user approves.
+   → Verify: the final report is honest and a reviewer can rerun its evidence.
 
 If any step fails, stop and fix the root cause — do not work around it, do not
 declare done.

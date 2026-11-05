@@ -5,11 +5,11 @@ used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
 rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
-agent:   fx | unknown | 2026-10-31 | unknown | added fx, hermes, claw, jcode, omp, forge, smelt, codewhale, and copilot adapters; fx now gets regular instruction files and a real skill copy because it refuses symlinks
 agent:   fx | unknown | 2026-10-31 | unknown | ignored Python bytecode caches when comparing and copying the fx skill, so test runs no longer look like source drift
 agent:   fx | unknown | 2026-11-01 | 01a196ba-7693-7c40-9caa-dff862b90cac | dropped the .bak backup from --force: repeated forced runs had piled up agents-contract.bak and .bak1 beside the fx skill copy
 agent:   fx | unknown | 2026-11-05 | unknown | hardened install paths, force directory replacement, target verification, no-op reporting, and mirror idempotency
 agent:   fx | unknown | 2026-11-05 | unknown | added read-only --check drift verification and documented the contract bootstrap
+agent:   fx | unknown | 2026-11-05 | unknown | added loop.md to the companion set installed for every adapter
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 CONTRACT_DIR = _HERE / "contract"
 SKILL_DIR = _HERE / ".agents" / "skills" / "agents-contract"
-COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md")
+COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md", "loop.md")
 _COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
 
 
@@ -145,7 +145,7 @@ def sync_contract_mirror(
 def _companion_links(base: Path) -> dict[Path, Path]:
     """Return the companion links that live beside one harness's AGENTS.md.
 
-    Rules:   The contract names each companion by bare filename, so a harness reading sibling files gets all five. A rules-directory harness gets none here because its whole companions are written into the rules directory instead.
+    Rules:   The contract names each companion by bare filename, so a harness reading sibling files gets all six. A rules-directory harness gets none here because its whole companions are written into the rules directory instead.
     """
     return {base / name: CONTRACT_DIR / name for name in COMPANIONS}
 

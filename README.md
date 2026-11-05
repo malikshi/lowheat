@@ -14,6 +14,7 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | `contract/semble.md` | Semble code-search reference — discovery ladder, CLI verbs, MCP fallback, caveats |
 | `contract/caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
+| `contract/loop.md` | Unit-loop companion — machine check, unit cards, bounded retries, deterministic merge, failure returns, undo gates |
 | `contract/aider.conf.yml` | Aider config that reads the project `CONVENTIONS.md` alias |
 | `contract/continue.md` | Continue project rule that points at `AGENTS.md` and its companions |
 | `.agents/skills/agents-contract/SKILL.md` | Mandatory session-bootstrap skill encoding the AGENTS.md contract as executable steps |
@@ -39,14 +40,15 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 |---|---|
 | How to use this file | Task → section routing, companion table, precedence, session bootstrap, staleness check |
 | Operating Principles | Task sizing, think before coding, smallest change, verify don't assume, confusion protocol, operations discipline |
-| The Work Loop | 7-step delivery loop, each ending with a verify gate, plus the required compliance record |
+| The Work Loop | 7-step delivery loop, each ending with a verify gate, plus the required compliance record; unit mechanics in `loop.md` |
 | Engineering Standards | Definition of Done, Verification, Coding Style, CodeDNA summary, Testing Requirements, Security Guidelines |
 | Execution & Delivery | Command Style, Communication Style, Git Workflow, Code Review Standards |
 | Environment & Source Repositories | Installed plugins / skills, context management, knowledge capture, sources |
 
 The companions hold the detail the core points to: `codedna.md` for annotations,
 `RTK.md` for command fidelity and catalogue, `semble.md` for discovery,
-`caveman.md` for reply modes, and `ponytail.md` for scope discipline.
+`caveman.md` for reply modes, `ponytail.md` for scope discipline, and `loop.md`
+for the unit-level execution loop.
 
 ## Bootstrapping
 
@@ -105,7 +107,7 @@ scope copies.
 
 The Grok row is the one worth knowing: Grok scans standalone rule files and
 does not expand imports, so its companions are written into `.grok/rules`.
-Every other adapter receives the five companions beside the contract or alias;
+Every other adapter receives the six companions beside the contract or alias;
 `AGENTS.md` names them by bare filename for on-demand reads.
 
 **User scope normally links; project scope copies.** A user install symlinks the
@@ -180,10 +182,10 @@ side by side in the project root, or the companions alone in `.grok/rules/`.
 
 ```bash
 mkdir -p .grok/rules
-for f in AGENTS.md codedna.md RTK.md semble.md caveman.md ponytail.md; do
+for f in AGENTS.md codedna.md RTK.md semble.md caveman.md ponytail.md loop.md; do
   curl -fsSL "https://raw.githubusercontent.com/malikshi/lowheat/main/contract/$f" -o "$f"
 done
-for f in codedna.md RTK.md semble.md caveman.md ponytail.md; do
+for f in codedna.md RTK.md semble.md caveman.md ponytail.md loop.md; do
   cp "$f" ".grok/rules/$f"
 done
 ```

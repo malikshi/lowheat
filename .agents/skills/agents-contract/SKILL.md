@@ -11,9 +11,9 @@ when a step needs detail.
 
 - `references/codedna.md` — full CodeDNA convention and checker behaviour.
 - `references/commands.md` — full RTK catalogue, byte-identical to `RTK.md`.
-- Companions `caveman.md`, `ponytail.md`, and `semble.md` sit beside the
-  `AGENTS.md` the harness loaded, or in its rules directory for Grok; this skill
-  does not duplicate them.
+- Companions `caveman.md`, `ponytail.md`, `semble.md`, and `loop.md` sit beside
+  the `AGENTS.md` the harness loaded, or in its rules directory for Grok; this
+  skill does not duplicate them.
 
 ## 0. Startup gate (before any tool call)
 
@@ -39,28 +39,41 @@ perform them, then continue.
 
 ## 1. Work Loop
 
-Follow all 7 steps; each ends with a verification gate. If a step fails, fix the
-root cause and do not declare done.
+Follow all 7 steps; each ends with a verification gate. Detailed unit mechanics
+are in the `loop.md` companion beside `AGENTS.md`. If a step fails, fix the root
+cause and do not declare done.
 
-1. **Understand.** Read the request twice. State the problem, the *why*, and
-   acceptance criteria.
-   → Verify: you can say what "done" looks like.
+1. **Understand and define the check.** Read the request twice. State the
+   problem, the *why*, and acceptance criteria. Write the pass condition as a
+   command/exit code, schema, diff boundary, or eval threshold; confidence never
+   passes.
+   → Verify: you can say what "done" looks like and how a program decides.
 2. **Read first.** Read the files you will touch, their CodeDNA headers, and
    their tests. Never propose changes to unread code.
    → Verify: you know what exists before adding anything.
-3. **Plan the smallest change.** Name risks and the revert path. For
-   multi-step work: `1. [Step] → verify: [check]`.
-   → Verify: the plan fits the request and nothing else.
-4. **Implement with TDD.** Where task sizing calls for a test, write it first:
-   RED → GREEN → IMPROVE (§5).
+3. **Plan the smallest unit graph.** Name risks and the revert path. For
+   multi-unit work, give each unit a job, input, output, check, failure state,
+   and write set; edge only real data dependencies; parallel only disjoint
+   writes.
+   → Verify: the plan fits the request and no unit writes another's files.
+4. **Implement with TDD, one unit at a time.** Change, run the fixed check, keep
+   or revert. Cap a behavior unit at three attempts; after three, stop and
+   report the plan wrong. Revert only your own edits.
    → Verify: the targeted tests pass.
-5. **Self-review the diff.** Run the Definition of Done checklist; shared
-   branches, merges, and STOP triggers also need independent review (§6).
-   → Verify: every changed line traces to the request.
-6. **Prove it.** Run the smallest check that proves the change (§8).
+5. **Merge, then review.** Merge/dedupe/sort/compare with code; failed units
+   return `UNIT`, `VERDICT`, `REASON`, `EVIDENCE`, `SCOPE`; never redo a passed
+   unit. Run the Definition of Done; shared branches, merges, and STOP triggers
+   also need independent review (§6).
+   → Verify: every changed line traces to a unit and its check.
+6. **Prove it and gate by undo cost.** Run the smallest check (§8). Cheap,
+   contained changes may proceed; reversible, wide changes need evidence and a
+   rollback; irreversible changes stop for approval.
    → Verify: evidence exists for every claim.
-7. **Report and record.** Report status honestly; if files changed, commit with
-   the session trailers in §7.
+7. **Report, learn, and record.** Stop on a passing check, two rounds with no
+   new evidence, or the budget. Report changed/checked/rejected/approval/
+   unverified; write the learned rule into CodeDNA or the contract, not a second
+   ledger; commit with the session trailers in §7.
+   → Verify: a reviewer can rerun every claimed check.
 
 ## 2. Decision rules
 
