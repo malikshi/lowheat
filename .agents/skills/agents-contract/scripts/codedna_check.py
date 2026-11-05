@@ -5,11 +5,11 @@ used_by: tests/test_codedna_check.py → main, check_file, check_comment_content
 used_by: contract/AGENTS.md → CodeDNA editing protocol (checker mentions)
 related: codedna_spec.py, codedna_masking.py, codedna_headers.py, codedna_content.py hold the split implementation.
 rules:   Read-only — report findings carrying line numbers; never rewrite a file. The sibling imports need this directory on sys.path first — the bootstrap below stays above them for direct execution and for importlib path loading. Re-export every name the tests load; the split must stay invisible from the command line.
-agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-review | fixed mask_code OR-precedence, HTML double-report, dup type_body_depth reset; dropped dead HEADER_LINE_LIMIT; --skip-content also skips contract examples
 agent:   claude-fable-5 | anthropic | 2026-10-09 | ddf225f-lowfix | agent-entry shape via two-pipe regex with per-line malformed reports; SPDX directive exemption; over-cap summary gets word-cap finding, not commented-code
 agent:   grok-build | xai | 2026-10-09 | 01a120bc-e75a-79c3-8ab4-e055948b9a83 | skipped tool-owned dirs below the scanned root, added --exclude, scanned Python # comments via tokenize, made Python finding lines absolute, exempted shell heredoc bodies, survived binary input, and after review made a false heredoc opener fail open and the terminator match bash exactly
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split the 1135-line scanner into codedna_spec, codedna_masking, codedna_headers, and codedna_content; this file is now the entry with the public surface unchanged
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | collect_source_files now lowercases the suffix so `.R`/`.C` files reach the profile map
+agent:   fx | unknown | 2026-11-05 | unknown | split contract-document linting out of main; exported surface unchanged
 message: Keep this file thin — new scan logic belongs in the module named for its job, and tests load the entry by path, so re-check the sys.path bootstrap after any import edit.
 """
 from __future__ import annotations
@@ -56,6 +56,29 @@ def collect_source_files(roots, ignored_dirs=DEFAULT_IGNORED_DIRS) -> list[Path]
     return found
 
 
+def _check_contract_documents(
+    roots, files: list[Path], skip_content: bool
+) -> tuple[int, int]:
+    """Lint the Python examples in each scanned root's `AGENTS.md`.
+
+    Rules:   Only a root that directly holds `AGENTS.md` counts; a file already scanned as source is skipped; `--skip-content` skips contracts too. Return findings and document count for the summary line.
+    """
+    documents = [
+        item / "AGENTS.md"
+        for item in roots
+        if (item / "AGENTS.md").is_file()
+    ]
+    total = 0
+    for document in documents:
+        if document in files or skip_content:
+            continue
+        doc_findings = check_examples(document.read_text(encoding="utf-8", errors="replace"), str(document))
+        for finding in doc_findings:
+            print(finding)
+        total += len(doc_findings)
+    return total, len(documents)
+
+
 def main(argv=None) -> int:
     """Run the checker over the given paths.
 
@@ -82,11 +105,6 @@ def main(argv=None) -> int:
         return 2
     root = Path(args.root)
     files = collect_source_files(roots, DEFAULT_IGNORED_DIRS | frozenset(args.exclude))
-    documents = [
-        item / "AGENTS.md"
-        for item in roots
-        if (item / "AGENTS.md").is_file()
-    ]
     total = 0
     for path in files:
         findings = check_file(path, root)
@@ -95,16 +113,9 @@ def main(argv=None) -> int:
         for finding in findings:
             print(f"{path}: {finding}")
         total += len(findings)
-    for document in documents:
-        if document in files:
-            continue
-        if args.skip_content:
-            continue
-        doc_findings = check_examples(document.read_text(encoding="utf-8", errors="replace"), str(document))
-        for finding in doc_findings:
-            print(finding)
-        total += len(doc_findings)
-    print(f"codedna_check: {total} finding(s) in {len(files)} file(s) and {len(documents)} contract(s)")
+    doc_total, doc_count = _check_contract_documents(roots, files, args.skip_content)
+    total += doc_total
+    print(f"codedna_check: {total} finding(s) in {len(files)} file(s) and {doc_count} contract(s)")
     return 1 if total else 0
 
 

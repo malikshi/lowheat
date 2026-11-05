@@ -20,13 +20,15 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/codedna.md` | Byte-identical mirror of `contract/codedna.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/commands.md` | Byte-identical mirror of `contract/RTK.md`, written by `install.py` (do not edit directly) |
-| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 15 file suffixes, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
+| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 87 file suffixes, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
 | `tests/test_install.py` | Tests for the adapter registry, per-harness install shapes, Grok rules rendering, skill links, and all three mirrors |
 | `tests/test_docs.py` | Tests for contract thinness, version line, named companions, skill mirrors, and reference paths |
 | `HARNESSES.md` | Supported harnesses, install surfaces, verified versions, and smoke-test status |
 | `bench/discovery_tokens.py` | Code-discovery token benchmark — semble vs `rtk grep` vs native grep+read (`python3 bench/discovery_tokens.py <corpus>`) |
 | `tests/test_discovery_tokens.py` | Tests for the benchmark helpers |
+| `pyproject.toml` | pytest paths and the 80% coverage floor |
+| `.github/workflows/ci.yml` | CI: pytest with coverage, then the CodeDNA checker over source and contract |
 | `LICENSE` | MIT |
 
 ## Contract structure
@@ -76,7 +78,7 @@ scope copies.
 | Claude Code | `~/.claude/{AGENTS,CLAUDE}.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions, `CLAUDE.md` |
 | Codex | `~/.codex/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
 | Command Code | `~/.commandcode/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
-| Grok | `~/.grok/AGENTS.md`, `.grok/rules/*.md`, `skills/agents-contract` | `AGENTS.md`, companions, `.grok/rules/*.md` |
+| Grok | `~/.grok/AGENTS.md`, `~/.grok/rules/*.md`, `skills/agents-contract` | `AGENTS.md`, companions, `.grok/rules/*.md` |
 | OpenCode | `~/.config/opencode/AGENTS.md`, companions | `AGENTS.md`, companions |
 | Factory Droid | `~/.factory/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions |
 | Kilo | `~/.config/kilo/AGENTS.md`, companions | `AGENTS.md`, companions |
@@ -112,8 +114,14 @@ directories, so its adapter writes regular files and a real skill copy. A projec
 install writes real files, because its output is committed: a symlink into the
 installing machine's checkout resolves to nothing on a teammate's clone.
 
-A broken symlink contributes nothing and fails silently — every emitted path is
-checked before the run reports success, and a re-run reports `unchanged`.
+A broken symlink contributes nothing and fails silently — every linked or copied
+file is verified before the run reports success, and directory trees and rules
+files are verified after write. A re-run reports `unchanged` for files, trees,
+and unchanged mirror bytes.
+
+User scope requires `--home` to exist and be a directory; project scope requires
+`--root` to be an existing directory that does not overlap the lowheat checkout,
+because that would overwrite or duplicate `contract/` sources.
 
 **Nothing is overwritten by accident.** The installer refuses to replace any
 existing file whose contents differ from the contract — a project's own
@@ -140,7 +148,7 @@ cmp contract/RTK.md .agents/skills/agents-contract/references/commands.md
 Run the contract's own checks:
 
 ```bash
-python3 .agents/skills/agents-contract/scripts/codedna_check.py
+python3 .agents/skills/agents-contract/scripts/codedna_check.py . contract
 python3 -m pytest tests
 ```
 
@@ -255,14 +263,17 @@ against semble 0.7.0.
 ### Benchmark
 
 `bench/discovery_tokens.py` measures tokens *an agent ingests* per query across
-the ladder, with `tiktoken` when installed (`bytes/4` otherwise). On an ~466-file
-Python corpus it measured **semble ~99.5% and `rtk grep`+read ~28%** below
-native grep+read. `rtk read` was excluded on purpose: it is byte-identical to
-`cat`, so it has no token advantage — the measured savings come from `rtk grep`.
-Reproduce against any corpus:
+the ladder, with `tiktoken` when installed (`bytes/4` otherwise). A historical
+run on an external ~466-file Python corpus (not vendored here) measured
+**semble ~99.5% and `rtk grep`+read ~28%** below native grep+read. `rtk read`
+was excluded on purpose: it is byte-identical to `cat`, so it has no token
+advantage — the measured savings come from `rtk grep`. The built-in query set
+targets that corpus; pass `--query TEXT` or `--query TEXT=KEYWORD` for another
+corpus. If it has no conventional source directories, the bench falls back to
+its non-hidden top-level entries, including root files.
 
 ```bash
-python3 bench/discovery_tokens.py /path/to/repo
+python3 bench/discovery_tokens.py /path/to/repo --query "renew user" --query "vpn api=zivpn"
 ```
 
 ## Operating contract sources

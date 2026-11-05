@@ -3,11 +3,11 @@
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
 rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc, percent, or sigil literal never silences the rest of the file — a false opener must fail open. Block and line markers come from the language profile, never from a suffix test: a marker inside a literal is consumed by the literal first, and a line marker needs a code position so `https://` and `a//b` stay code.
-agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; mask_code's template-literal branch became two helpers and the masking pass is now a flat branch list.
 agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | restricted `/* */` to C-style profiles after an HTML page with `<b>provider/*</b>` masked the rest of the file as one block comment
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | made masking profile-driven: block markers, line and word markers, quoting styles, Lua long brackets, and nested blocks
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: Ruby `%`/Elixir `~` literals mask, operator delimiters rejected, unterminated literals fail open, unused suffix parameter dropped
+agent:   fx | unknown | 2026-11-05 | unknown | split mask_code into prefix, long-string, line, and quoted literal helpers
 """
 from __future__ import annotations
 
@@ -16,6 +16,119 @@ import re
 import tokenize
 
 from codedna_spec import _HEREDOC_OPEN, _PY_MASKED_TOKENS, BlockMarker, LanguageProfile
+
+
+def _mask_prefix_at(
+    profile: LanguageProfile,
+    text: str,
+    i: int,
+    out: list[str],
+    spans: list[tuple[int, int]] | None,
+) -> int | None:
+    """Mask a percent/sigil/block/long comment starting at `i`.
+
+    Rules:   Percent and sigil literals are tried before comment markers; block markers are longest-first; every consumed comment range is appended to `spans`. Return the next index, or None when nothing matched.
+    """
+    c = text[i]
+    if profile.percent_literals and c == "%":
+        percent_end = _percent_literal_end(text, i)
+        if percent_end is not None:
+            out.append(re.sub(r"[^\n]", " ", text[i:percent_end]))
+            return percent_end
+    if profile.sigils and c == "~":
+        sigil_end = _sigil_end(text, i)
+        if sigil_end is not None:
+            out.append(re.sub(r"[^\n]", " ", text[i:sigil_end]))
+            return sigil_end
+    long_comment = _long_bracket_at(profile.long_bracket, text, i)
+    if long_comment is not None:
+        start = i
+        opener_end, closer = long_comment
+        end = _mask_through(text, start, opener_end, closer, out)
+        if spans is not None:
+            spans.append((start, end))
+        return end
+    block = _block_at(profile, text, i)
+    if block is not None:
+        start = i
+        end = _mask_block(text, i, block, out)
+        if spans is not None:
+            spans.append((start, end))
+        return end
+    return None
+
+
+def _mask_long_string_at(profile: LanguageProfile, text: str, i: int, out: list[str]) -> int | None:
+    """Mask a long-bracket string starting at `i`.
+
+    Rules:   Long strings blank like any other literal; they are never reported as comments.
+    """
+    long_string = _long_bracket_at(profile.long_string, text, i)
+    if long_string is None:
+        return None
+    opener_end, closer = long_string
+    return _mask_through(text, i, opener_end, closer, out)
+
+
+def _mask_line_at(
+    profile: LanguageProfile,
+    text: str,
+    i: int,
+    out: list[str],
+    spans: list[tuple[int, int]] | None,
+) -> int | None:
+    """Mask a line comment starting at `i`.
+
+    Rules:   The marker must sit at a code position; the span ends at the newline, which is preserved.
+    """
+    marker = profile.line_marker_at(text, i)
+    if marker is None:
+        return None
+    start = i
+    end = _mask_to_eol(text, i, out)
+    if spans is not None:
+        spans.append((start, end))
+    return end
+
+
+def _mask_quoted_at(profile: LanguageProfile, text: str, i: int, out: list[str]) -> int | None:
+    """Mask a triple, raw, here, quoted, template, or regex literal at `i`.
+
+    Rules:   Preserve newlines inside every literal; an unterminated literal runs to EOF rather than swallowing the rest of the scan. Return None when no literal starts here.
+    """
+    n = len(text)
+    c = text[i]
+    if profile.triple_quotes and text.startswith('"""', i):
+        end = text.find('"""', i + 3)
+        end = n if end < 0 else end + 3
+        out.append(re.sub(r"[^\n]", " ", text[i:end]))
+        return end
+    if profile.triple_single_quotes and text.startswith("'''", i):
+        end = text.find("'''", i + 3)
+        end = n if end < 0 else end + 3
+        out.append(re.sub(r"[^\n]", " ", text[i:end]))
+        return end
+    if profile.raw_strings and text.startswith('R"', i):
+        raw_end = _raw_string_end(text, i)
+        if raw_end is not None:
+            out.append(re.sub(r"[^\n]", " ", text[i:raw_end]))
+            return raw_end
+    if profile.here_strings and (
+        text.startswith('@"', i) or text.startswith("@'", i)
+    ):
+        here_end = _here_string_end(text, i)
+        if here_end is not None:
+            out.append(re.sub(r"[^\n]", " ", text[i:here_end]))
+            return here_end
+    if c in profile.string_quotes:
+        return _mask_quoted(text, i, out, profile.doubled_quotes)
+    if c == "`" and profile.backtick:
+        return _mask_template(text, i, profile.backtick == "js", out)
+    regex_end = _regex_literal_end(profile, text, i)
+    if regex_end is not None:
+        out.append(re.sub(r"[^\n]", " ", text[i:regex_end]))
+        return regex_end
+    return None
 
 
 def mask_code(
@@ -27,7 +140,6 @@ def mask_code(
 
     Rules:   Block markers are tried longest-first and before line markers; `nested` counts the opener again inside the body; an `at_line_start` marker opens only at column 0. String, template, and long-bracket interiors blank; JS templates track `${...}` nesting; newlines preserved. When `spans` is passed, append each comment's absolute `(start, end)` range so the content scanner can inspect trailing and multiline comment bodies.
     """
-    js_family = profile.backtick == "js"
     in_php = False
     out: list[str] = []
     i, n = 0, len(text)
@@ -52,81 +164,15 @@ def mask_code(
             i += 2
             in_php = False
             continue
-        if profile.percent_literals and c == "%":
-            percent_end = _percent_literal_end(text, i)
-            if percent_end is not None:
-                out.append(re.sub(r"[^\n]", " ", text[i:percent_end]))
-                i = percent_end
-                continue
-        if profile.sigils and c == "~":
-            sigil_end = _sigil_end(text, i)
-            if sigil_end is not None:
-                out.append(re.sub(r"[^\n]", " ", text[i:sigil_end]))
-                i = sigil_end
-                continue
-        long_comment = _long_bracket_at(profile.long_bracket, text, i)
-        if long_comment is not None:
-            start = i
-            opener_end, closer = long_comment
-            i = _mask_through(text, start, opener_end, closer, out)
-            if spans is not None:
-                spans.append((start, i))
-            continue
-        block = _block_at(profile, text, i)
-        if block is not None:
-            start = i
-            i = _mask_block(text, i, block, out)
-            if spans is not None:
-                spans.append((start, i))
-            continue
-        long_string = _long_bracket_at(profile.long_string, text, i)
-        if long_string is not None:
-            opener_end, closer = long_string
-            i = _mask_through(text, i, opener_end, closer, out)
-            continue
-        marker = profile.line_marker_at(text, i)
-        if marker is not None:
-            start = i
-            i = _mask_to_eol(text, i, out)
-            if spans is not None:
-                spans.append((start, i))
-            continue
-        if profile.triple_quotes and text.startswith('"""', i):
-            end = text.find('"""', i + 3)
-            end = n if end < 0 else end + 3
-            out.append(re.sub(r"[^\n]", " ", text[i:end]))
-            i = end
-            continue
-        if profile.triple_single_quotes and text.startswith("'''", i):
-            end = text.find("'''", i + 3)
-            end = n if end < 0 else end + 3
-            out.append(re.sub(r"[^\n]", " ", text[i:end]))
-            i = end
-            continue
-        if profile.raw_strings and text.startswith('R"', i):
-            raw_end = _raw_string_end(text, i)
-            if raw_end is not None:
-                out.append(re.sub(r"[^\n]", " ", text[i:raw_end]))
-                i = raw_end
-                continue
-        if profile.here_strings and (
-            text.startswith('@"', i) or text.startswith("@'", i)
-        ):
-            here_end = _here_string_end(text, i)
-            if here_end is not None:
-                out.append(re.sub(r"[^\n]", " ", text[i:here_end]))
-                i = here_end
-                continue
-        if c in profile.string_quotes:
-            i = _mask_quoted(text, i, out, profile.doubled_quotes)
-            continue
-        if c == "`" and profile.backtick:
-            i = _mask_template(text, i, js_family, out)
-            continue
-        regex_end = _regex_literal_end(profile, text, i)
-        if regex_end is not None:
-            out.append(re.sub(r"[^\n]", " ", text[i:regex_end]))
-            i = regex_end
+        next_i = _mask_prefix_at(profile, text, i, out, spans)
+        if next_i is None:
+            next_i = _mask_long_string_at(profile, text, i, out)
+        if next_i is None:
+            next_i = _mask_line_at(profile, text, i, out, spans)
+        if next_i is None:
+            next_i = _mask_quoted_at(profile, text, i, out)
+        if next_i is not None:
+            i = next_i
             continue
         out.append(c)
         i += 1

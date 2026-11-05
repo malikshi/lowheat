@@ -9,6 +9,7 @@ agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | spl
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | kept the closing line of a multi-line css/html header and skipped a leading `#!` in every dialect, so Python and Node shebangs never become the title line
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | header collection now reads the profile's block markers and prologue, so block-only dialects (OCaml, F#, Lua) and `<?php` files parse; suffix checks are case-insensitive
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: directive banners below the title are skipped, doc-marker headers keep their fields, directive-only leading blocks no longer end the search
+agent:   fx | unknown | 2026-11-05 | unknown | split header start and collection helpers out of _header_entries
 """
 from __future__ import annotations
 
@@ -133,12 +134,11 @@ def header_text(path: Path, text: str) -> str:
     return "\n".join(entry[1] for entry in entries if entry[1])
 
 
-def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[int, str]]:
-    """Return (line_number, stripped-comment-text) for the leading header.
+def _header_start(profile: LanguageProfile, lines: list[str]) -> int:
+    """Return the index where a leading header may begin.
 
-    Rules:   A leading `#!` and a profile prologue (`<?php`) are skipped; bare directives and directive-only blocks before the header are skipped without ending the search; block-comment headers run to their close marker; blank comment separators join the block; a block body line loses one leading `*` decoration.
+    Rules:   Skip a leading `#!` and the profile's prologue (`<?php`); blank lines before the title are skipped too. Stop at the first content line.
     """
-    start = 0
     for index, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
@@ -146,9 +146,18 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
         if stripped.startswith("#!") or any(
             stripped.startswith(item) for item in profile.prologue
         ):
-            start = index + 1
             continue
-        break
+        return index
+    return len(lines)
+
+
+def _collect_header(
+    profile: LanguageProfile, lines: list[str], start: int
+) -> list[tuple[int, str]]:
+    """Collect `(line_number, stripped-comment-text)` from the header block.
+
+    Rules:   Bare directives and directive-only blocks before the title are skipped without ending the search; block-comment headers run to their close marker; blank comment separators join the block; a block body line loses one leading `*` decoration.
+    """
     collected: list[tuple[int, str]] = []
     close_marker = ""
     for index in range(start, len(lines)):
@@ -190,6 +199,14 @@ def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[in
             continue
         break
     return collected
+
+
+def _header_entries(profile: LanguageProfile, lines: list[str]) -> list[tuple[int, str]]:
+    """Return (line_number, stripped-comment-text) for the leading header.
+
+    Rules:   A leading `#!` and a profile prologue (`<?php`) are skipped; bare directives and directive-only blocks before the header are skipped without ending the search; block-comment headers run to their close marker; blank comment separators join the block; a block body line loses one leading `*` decoration.
+    """
+    return _collect_header(profile, lines, _header_start(profile, lines))
 
 
 def _header_directive(

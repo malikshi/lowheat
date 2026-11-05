@@ -5,11 +5,11 @@ used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
 rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
-agent:   fx | unknown | 2026-10-31 | unknown | replaced the three hardcoded harnesses with a HarnessSpec registry and added detection, Codex, OpenCode, Factory, Kilo, Pi, Cline, Gemini, Cursor, Aider, and Qwen adapters
 agent:   fx | unknown | 2026-10-31 | unknown | added Aider's config file, dropped Gemini's duplicate skill link because Gemini discovers the central .agents/skills, and verified Command Code, Grok, and OpenCode load Contract-Version 2026-10-31
 agent:   fx | unknown | 2026-10-31 | unknown | added fx, hermes, claw, jcode, omp, forge, smelt, codewhale, and copilot adapters; fx now gets regular instruction files and a real skill copy because it refuses symlinks
 agent:   fx | unknown | 2026-10-31 | unknown | ignored Python bytecode caches when comparing and copying the fx skill, so test runs no longer look like source drift
 agent:   fx | unknown | 2026-11-01 | 01a196ba-7693-7c40-9caa-dff862b90cac | dropped the .bak backup from --force: repeated forced runs had piled up agents-contract.bak and .bak1 beside the fx skill copy
+agent:   fx | unknown | 2026-11-05 | unknown | hardened install paths, force directory replacement, target verification, no-op reporting, and mirror idempotency
 """
 
 from __future__ import annotations
@@ -118,29 +118,28 @@ def render_grok_rules(contract_dir: Path) -> dict[str, str]:
     }
 
 
-def _sync_copy(source: Path, target: Path) -> Path:
-    """Copy source over target through a staged sibling.
+def _sync_copy(source: Path, target: Path, dry_run: bool = False) -> str:
+    """Copy source over target through the shared file writer.
 
-    Rules:   Write through a temporary sibling and move it into place, so a concurrent read never sees a partial file. Copy bytes, not text, so the mirror comparison stays exact.
+    Rules:   Byte comparison and staged replacement live in `_copy`; a mirror re-run must report `unchanged` and a dry run must write nothing. The target is always a regular file, not a linked skill tree.
     """
-    target.parent.mkdir(parents=True, exist_ok=True)
-    staged = target.with_name(target.name + ".staged")
-    shutil.copyfile(source, staged)
-    os.replace(staged, target)
-    return target
+    return _copy(target, source, dry_run)
 
 
-def sync_contract_mirror(contract_dir: Path, skill_dir: Path) -> list[Path]:
+def sync_contract_mirror(
+    contract_dir: Path, skill_dir: Path, dry_run: bool = False
+) -> list[tuple[Path, str]]:
     """Write the skill's copies of the contract, CodeDNA, and RTK catalogue.
 
-    Rules:   The skill reads references/contract.md, references/codedna.md, and references/commands.md; each copy must match its source byte for byte — a stale mirror is what made the skill and the contract disagree. Rewrite all three on every install; return every path written so the caller reports each one.
+    Rules:   The skill reads references/contract.md, references/codedna.md, and references/commands.md; each copy must match its source byte for byte — a stale mirror is what made the skill and the contract disagree. Compare before writing so a re-run reports `unchanged`; return every path with its action so the caller reports each one, and write nothing when `dry_run`.
     """
     references = skill_dir / "references"
-    return [
-        _sync_copy(contract_dir / "AGENTS.md", references / "contract.md"),
-        _sync_copy(contract_dir / "codedna.md", references / "codedna.md"),
-        _sync_copy(contract_dir / "RTK.md", references / "commands.md"),
-    ]
+    pairs = (
+        (contract_dir / "AGENTS.md", references / "contract.md"),
+        (contract_dir / "codedna.md", references / "codedna.md"),
+        (contract_dir / "RTK.md", references / "commands.md"),
+    )
+    return [(target, _sync_copy(source, target, dry_run)) for source, target in pairs]
 
 
 def _companion_links(base: Path) -> dict[Path, Path]:
@@ -293,7 +292,7 @@ def find_conflicts(
 def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
     """Write source's contents to target and report what happened.
 
-    Rules:   Compare bytes so a re-run reports `unchanged` instead of rewriting — a project install is committed, and a spurious write shows as churn. Write through a staged sibling and move it into place so a concurrent read never sees a partial file. A dry run reports the decision and writes nothing.
+    Rules:   Compare bytes so a re-run reports `unchanged` instead of rewriting — a project install is committed, and a spurious write shows as churn. Write through a staged sibling and move it into place so a concurrent read never sees a partial file. A directory or symlink at the target is removed before the move: `--force` must replace the shape the user had, and `os.replace` cannot put a file over a directory. A dry run reports the decision and writes nothing.
     """
     same = target.is_file() and not target.is_symlink() and target.read_bytes() == source.read_bytes()
     if same:
@@ -304,25 +303,53 @@ def _copy(target: Path, source: Path, dry_run: bool = False) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(target.name + ".staged")
     shutil.copyfile(source, staged)
+    if target.is_symlink():
+        target.unlink()
+    elif target.exists() and not target.is_file():
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
     os.replace(staged, target)
     return action
 
 
-def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
-    """Create one harness's links or copies and rules files, reporting each change.
+def _verify_target(target: Path, expected: str) -> None:
+    """Raise when a written install path is missing or the wrong shape.
 
-    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing. Report every action so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract.
+    Rules:   A link to a missing source and a copy that landed in the wrong shape both load nothing, so verify after every write. `file` rejects a directory; `dir` rejects a symlink because a copied skill must be real files.
+    """
+    if expected == "dir":
+        ok = target.is_dir() and not target.is_symlink()
+    elif expected == "link":
+        ok = target.exists()
+    else:
+        ok = target.is_file()
+    if not ok:
+        raise OSError(f"{target} is not a {expected} after writing")
+
+
+def _apply_links(plan: HarnessPlan, dry_run: bool) -> list[str]:
+    """Write or report one plan's file and skill links.
+
+    Rules:   A dry run reports the decision without checking resolution, since nothing was written. A real write is verified before it is reported.
     """
     actions: list[str] = []
     writer = _copy if plan.copy else _link
     for target, source in plan.links.items():
-        if dry_run:
-            actions.append(f"{plan.harness}: {writer(target, source, dry_run=True)} {target}")
-            continue
-        action = writer(target, source)
-        if not target.exists():
-            raise SystemExit(f"install: {target} does not resolve after writing")
+        action = writer(target, source, dry_run)
+        if not dry_run:
+            _verify_target(target, "link" if source.is_dir() else "file")
         actions.append(f"{plan.harness}: {action} {target}")
+    return actions
+
+
+def _apply_dirs(plan: HarnessPlan, dry_run: bool) -> list[str]:
+    """Copy or report one plan's directory trees, such as a real skill copy.
+
+    Rules:   Compare the whole tree first so a re-run stays `unchanged`; stage the copy before replacing the target, because replacing first would lose the old tree when the copy fails. Ignore bytecode caches in both comparison and copy.
+    """
+    actions: list[str] = []
     for target, source in plan.dirs.items():
         same = _same_tree(target, source)
         if dry_run:
@@ -342,45 +369,82 @@ def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str
         elif target.exists():
             shutil.rmtree(target)
         os.replace(staged, target)
-        actions.append(f"{plan.harness}: wrote {target}")
-    if plan.rules_dir is None:
-        return actions
-    for name, text in render_grok_rules(contract_dir).items():
-        target = plan.rules_dir / name
-        same = target.is_file() and target.read_text(encoding="utf-8") == text
-        if dry_run:
-            actions.append(
-                f"{plan.harness}: {'unchanged' if same else 'write'} {target} (dry run)"
-            )
-            continue
-        if same:
-            actions.append(f"{plan.harness}: unchanged {target}")
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        staged = target.with_name(target.name + ".staged")
-        staged.write_text(text, encoding="utf-8")
-        os.replace(staged, target)
+        _verify_target(target, "dir")
         actions.append(f"{plan.harness}: wrote {target}")
     return actions
 
 
-def print_harnesses(home: Path) -> None:
-    """Print the adapter registry with detection status.
+def _write_text(target: Path, text: str) -> str:
+    """Write text through a staged sibling and report the action.
 
-    Rules:   Report the tier and every candidate binary so a missing install is actionable. Detection is advisory, not proof that the harness loads the contract.
+    Rules:   Write the staged file before removing a directory or symlink at the target, so a failed write cannot destroy the user's existing path. Return `unchanged` when the bytes already match.
+    """
+    same = target.is_file() and not target.is_symlink() and target.read_text(encoding="utf-8") == text
+    if same:
+        return "unchanged"
+    action = "replaced" if target.is_symlink() or target.exists() else "wrote"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staged = target.with_name(target.name + ".staged")
+    staged.write_text(text, encoding="utf-8")
+    if target.is_symlink():
+        target.unlink()
+    elif target.exists() and not target.is_file():
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    os.replace(staged, target)
+    return action
+
+
+def _apply_rules(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
+    """Write or report the standalone companion files a rules-directory harness scans.
+
+    Rules:   Each companion ships whole; a dry run reports the decision and writes nothing; a real write is verified as a regular file.
+    """
+    if plan.rules_dir is None:
+        return []
+    actions: list[str] = []
+    for name, text in render_grok_rules(contract_dir).items():
+        target = plan.rules_dir / name
+        same = target.is_file() and target.read_text(encoding="utf-8") == text
+        if dry_run:
+            action = "unchanged" if same else "write"
+            actions.append(f"{plan.harness}: {action} {target} (dry run)")
+            continue
+        action = _write_text(target, text)
+        _verify_target(target, "file")
+        actions.append(f"{plan.harness}: {action} {target}")
+    return actions
+
+
+def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
+    """Create one harness's links or copies and rules files, reporting each change.
+
+    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing. Report every action so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract.
+    """
+    actions = _apply_links(plan, dry_run)
+    actions.extend(_apply_dirs(plan, dry_run))
+    actions.extend(_apply_rules(plan, contract_dir, dry_run))
+    return actions
+
+
+def print_harnesses(home: Path, show_status: bool = True) -> None:
+    """Print the adapter registry, optionally with detection status.
+
+    Rules:   Report the tier and every candidate binary so a missing install is actionable. `--list-harnesses` omits detection so it stays a pure registry; `--detect` adds it. Detection is advisory, not proof that the harness loads the contract.
     """
     for spec in SPECS:
-        status = "detected" if detect(spec, home) else "missing"
-        print(
-            f"{spec.name:12} {spec.tier:7} {status:8} "
-            f"config={spec.config_dir} binaries={','.join(spec.binaries) or '-'}"
-        )
+        base = f"{spec.name:12} {spec.tier:7} "
+        if show_status:
+            base += f"{'detected' if detect(spec, home) else 'missing':8} "
+        print(f"{base}config={spec.config_dir} binaries={','.join(spec.binaries) or '-'}")
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Wire the contract into harnesses, then sync the skill mirror.
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """Parse the installer command line.
 
-    Rules:   Refuse to run when the contract source is missing — a half-installed contract is worse than none. Print every action; exit 0 whether or not anything changed, so a re-run is safe in a script. `--list-harnesses` and `--detect` are read-only.
+    Rules:   Defaults stay safe: user scope, all harnesses, no writes when `--dry-run`. Every harness name is a valid choice so a typo fails in argparse rather than silently installing nothing.
     """
     parser = argparse.ArgumentParser(
         description="Install the lowheat contract into each harness."
@@ -398,9 +462,7 @@ def main(argv: list[str] | None = None) -> int:
         default="user",
         help="user scope wires harness config dirs; project scope writes the repo root",
     )
-    parser.add_argument(
-        "--root", default=".", help="project root for --scope project"
-    )
+    parser.add_argument("--root", default=".", help="project root for --scope project")
     parser.add_argument("--dry-run", action="store_true", help="report, do not write")
     parser.add_argument(
         "--force",
@@ -417,56 +479,82 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print harness detection status and exit",
     )
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
 
-    home = Path(args.home).expanduser()
-    if args.list_harnesses or args.detect:
-        print_harnesses(home)
-        return 0
 
-    if not (CONTRACT_DIR / "AGENTS.md").is_file():
-        print(f"install: {CONTRACT_DIR / 'AGENTS.md'} is missing", file=sys.stderr)
-        return 1
+def _require_directory(path: Path, label: str) -> str | None:
+    """Return a clean error when a CLI path is missing or not a directory.
 
-    project_root = None if args.scope == "user" else Path(args.root).expanduser().resolve()
-    if project_root is not None and project_root == _HERE:
-        print(
-            f"install: {project_root} is the lowheat source checkout, not a project — "
-            "project scope would duplicate contract/ back into the repo root",
-            file=sys.stderr,
-        )
-        return 1
+    Rules:   Validate before any mirror or target write; a file at the path would otherwise raise from `mkdir` or `os.replace` after partial work.
+    """
+    if not path.exists():
+        return f"install: {label} {path} does not exist"
+    if not path.is_dir():
+        return f"install: {label} {path} is not a directory"
+    return None
 
+
+def _resolve_scope(args: argparse.Namespace, home: Path) -> tuple[Path | None, str | None]:
+    """Return the resolved project root, or validate the user-scope home.
+
+    Rules:   Project scope accepts an existing repository outside the lowheat checkout; nesting inside it would overwrite `contract/` sources. User scope needs an existing home but never touches the project root.
+    """
+    if args.scope == "project":
+        root = Path(args.root).expanduser().resolve()
+        error = _require_directory(root, "project root")
+        if error is not None:
+            return None, error
+        if root == _HERE or root.is_relative_to(_HERE) or _HERE.is_relative_to(root):
+            return None, (
+                f"install: {root} overlaps the lowheat source checkout, not a project — "
+                "project scope would duplicate contract/ into that tree"
+            )
+        return root, None
+    error = _require_directory(home, "home")
+    return (None, error) if error is not None else (None, None)
+
+
+def _select_harnesses(args: argparse.Namespace, home: Path) -> tuple[tuple[str, ...], str | None]:
+    """Return the harnesses the request selected.
+
+    Rules:   `all` is the full registry; `auto` selects detected harnesses and refuses an empty result; one name is passed through. A harness without a user-scope plan is reported by the caller, not treated as a detection failure.
+    """
     if args.harness == "all":
-        chosen = HARNESSES
-    elif args.harness == "auto":
+        return HARNESSES, None
+    if args.harness == "auto":
         chosen = tuple(spec.name for spec in SPECS if detect(spec, home))
         if not chosen:
-            print("install: no harness detected under this home", file=sys.stderr)
-            return 1
-    else:
-        chosen = (args.harness,)
+            return (), "install: no harness detected under this home"
+        return chosen, None
+    return (args.harness,), None
 
-    plans = (
-        plan_harnesses(home)
-        if args.scope == "user"
-        else plan_project(project_root)
-    )
 
-    conflicts = find_conflicts(plans, chosen, CONTRACT_DIR)
-    if conflicts and not args.force:
-        for path in conflicts:
-            print(f"install: refusing to overwrite {path}", file=sys.stderr)
-        print(
-            "install: that file is not ours; re-run with --force to replace it",
-            file=sys.stderr,
-        )
-        return 1
+def _selected_plans(
+    plans: dict[str, HarnessPlan], chosen: tuple[str, ...]
+) -> dict[str, HarnessPlan]:
+    """Return the plans for the selected harnesses only.
 
-    if not args.dry_run:
-        for mirror in sync_contract_mirror(CONTRACT_DIR, SKILL_DIR):
-            print(f"contract: wrote {mirror}")
+    Rules:   Project-only harnesses have no user-scope plan; dropping them here is what makes a no-op explicit instead of installing nothing silently.
+    """
+    return {name: plan for name, plan in plans.items() if name in chosen}
 
+
+def _sync_mirrors(dry_run: bool) -> None:
+    """Write or report the three skill mirrors.
+
+    Rules:   Report `unchanged` instead of rewriting equal bytes, and honor `--dry-run` so the report matches a real run.
+    """
+    for path, action in sync_contract_mirror(CONTRACT_DIR, SKILL_DIR, dry_run):
+        print(f"contract: {action} {path}")
+
+
+def _apply_selected(
+    plans: dict[str, HarnessPlan], chosen: tuple[str, ...], dry_run: bool
+) -> None:
+    """Apply each selected harness once, skipping paths an earlier harness already emitted.
+
+    Rules:   Cline and the central `.agents` adapter share the same targets; custom adapters may overlap too. Deduplicate links and tree targets before writing so the second harness never repeats a write.
+    """
     emitted: set[Path] = set()
     for harness, plan in plans.items():
         if harness not in chosen:
@@ -480,9 +568,73 @@ def main(argv: list[str] | None = None) -> int:
         )
         emitted.update(unique.links)
         emitted.update(unique.dirs)
-        for action in apply_plan(unique, CONTRACT_DIR, args.dry_run):
+        for action in apply_plan(unique, CONTRACT_DIR, dry_run):
             print(action)
 
+
+def _refuse_conflicts(
+    plans: dict[str, HarnessPlan], chosen: tuple[str, ...], force: bool
+) -> bool:
+    """Report and refuse foreign files unless the caller forced replacement.
+
+    Rules:   Every conflicting path is printed before the run exits, and `--force` bypasses the refusal entirely. A missing conflict means the install may proceed.
+    """
+    conflicts = find_conflicts(plans, chosen, CONTRACT_DIR)
+    if not conflicts or force:
+        return False
+    for path in conflicts:
+        print(f"install: refusing to overwrite {path}", file=sys.stderr)
+    print(
+        "install: that file is not ours; re-run with --force to replace it",
+        file=sys.stderr,
+    )
+    return True
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Wire the contract into harnesses, then sync the skill mirror.
+
+    Rules:   Refuse to run when the contract source is missing — a half-installed contract is worse than none. Validate paths before writing, report project-only selections instead of silently doing nothing, and print every action; exit 0 whether or not anything changed, so a re-run is safe in a script. `--list-harnesses` and `--detect` are read-only.
+    """
+    args = _parse_args(argv)
+    home = Path(args.home).expanduser()
+    if args.list_harnesses or args.detect:
+        print_harnesses(home, show_status=args.detect)
+        return 0
+
+    if not (CONTRACT_DIR / "AGENTS.md").is_file():
+        print(f"install: {CONTRACT_DIR / 'AGENTS.md'} is missing", file=sys.stderr)
+        return 1
+
+    project_root, error = _resolve_scope(args, home)
+    if error is not None:
+        print(error, file=sys.stderr)
+        return 1
+
+    chosen, error = _select_harnesses(args, home)
+    if error is not None:
+        print(error, file=sys.stderr)
+        return 1
+
+    plans = plan_harnesses(home) if args.scope == "user" else plan_project(project_root)
+    selected = _selected_plans(plans, chosen)
+    skipped = [name for name in chosen if name not in plans]
+    if skipped and args.harness != "all":
+        print(
+            f"install: {', '.join(skipped)} not available in user scope; use --scope project",
+            file=sys.stderr,
+        )
+    if not selected:
+        return 0
+
+    try:
+        if _refuse_conflicts(plans, tuple(selected), args.force):
+            return 1
+        _sync_mirrors(args.dry_run)
+        _apply_selected(plans, tuple(selected), args.dry_run)
+    except OSError as error:
+        print(f"install: {error}", file=sys.stderr)
+        return 1
     return 0
 
 

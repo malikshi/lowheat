@@ -10,6 +10,8 @@ agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | spl
 agent:   fx | unknown | 2026-10-31 | unknown | tightened the agent-history regex to require session and note, and allowed raw/unicode Python docstring prefixes
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | replaced the suffix switch tables with explicit per-language profiles (line, word, and block markers) covering the declared language set
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: `#` after `{`/`$` and PHP `#[` stay code, Clojure character literals stay code, functional profiles drop the single-quote string form
+agent:   fx | unknown | 2026-11-05 | unknown | recorded why the 87-profile data module exceeds the soft size ceiling
+message: The 87 suffix profiles are data, not branches. Keeping them in one module avoids import cycles between the masker, header parser, and content scanner; the file exceeds the 800-line soft ceiling by accepted data volume, not by unreviewed logic.
 """
 from __future__ import annotations
 
@@ -319,8 +321,21 @@ class LanguageProfile:
         self.php_mode = php_mode
         self.percent_literals = percent_literals
         self.sigils = sigils
-        strip = list(self.line_markers) + list(self.word_markers)
-        for marker in self.block_markers:
+        self._init_strip_prefixes(self.line_markers, self.word_markers, self.block_markers, prefixes)
+
+    def _init_strip_prefixes(
+        self,
+        line_markers: tuple[str, ...],
+        word_markers: tuple[str, ...],
+        block_markers: tuple[BlockMarker, ...],
+        prefixes: tuple[str, ...] | None,
+    ) -> None:
+        """Build the longest-first prefix list shared by stripping and line starts.
+
+        Rules:   An explicit `prefixes` argument wins; otherwise every line, word, and block marker contributes. Longest-first keeps `//go:` ahead of `//`.
+        """
+        strip = list(line_markers) + list(word_markers)
+        for marker in block_markers:
             strip.extend((marker.open, marker.close))
         self.strip_prefixes = tuple(
             sorted(prefixes if prefixes is not None else strip, key=len, reverse=True)

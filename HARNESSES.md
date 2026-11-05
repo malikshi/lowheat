@@ -2,7 +2,8 @@
 
 Verified on 2026-10-31 against the binaries installed on the build host. Detection
 is advisory; a green row means the installer emitted the paths, not that a live
-session authenticated and loaded them.
+session authenticated and loaded them. Installer changes after that date are
+covered by the test suite and CI, not by a live harness session.
 
 Node `24.22.1` is installed at `/opt/node-v24.22.1` and linked from
 `/usr/local/bin`; the Debian `/usr/bin/node` `24.21.0` remains as a fallback.
@@ -12,7 +13,7 @@ Node `24.22.1` is installed at `/opt/node-v24.22.1` and linked from
 | Claude Code | native | `~/.claude/{AGENTS,CLAUDE}.md`, companions, `skills/agents-contract` | `AGENTS.md`, `CLAUDE.md`, companions | installed; headless smoke timed out |
 | Codex | native | `~/.codex/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions | `0.166.0`; headless smoke timed out |
 | Command Code | native | `~/.commandcode/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions | installed; smoke returned `2026-10-31` |
-| Grok | native | `~/.grok/AGENTS.md`, `.grok/rules/*.md`, `skills/agents-contract` | `AGENTS.md`, `.grok/rules/*.md` | installed; smoke returned `2026-10-31` |
+| Grok | native | `~/.grok/AGENTS.md`, `~/.grok/rules/*.md`, `skills/agents-contract` | `AGENTS.md`, `.grok/rules/*.md` | installed; smoke returned `2026-10-31` |
 | OpenCode | native | `~/.config/opencode/AGENTS.md`, companions | `AGENTS.md`, companions | installed; smoke returned `2026-10-31` |
 | Factory Droid | native | `~/.factory/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions | installed; not smoke-tested |
 | Kilo | native | `~/.config/kilo/AGENTS.md`, companions | `AGENTS.md`, companions | installed; not smoke-tested |

@@ -3,20 +3,23 @@
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
 rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required. Directory comparisons ignore Python bytecode caches.
-agent:   deepseek-v4.1-flash | nexrouter | 2026-10-24 | 372685f1-d81d-4c7c-8fbb-7e8e636e8b48 | added the per-harness companion-import check: the existing project case applies every plan at once, so Claude's companions satisfied the imports for all three and the commandcode-only case went untested. Each subtest now gets its own root.
 agent:   fx | unknown | 2026-10-31 | unknown | dropped hook wiring, vendored-skill cases, and the cleanup pass after the one-shot removal tool was deleted
 agent:   fx | unknown | 2026-10-31 | unknown | covered the user-scope companion links, skill links, and both reference mirrors; added a real skill directory as a refusal case
 agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: project cases now assert every named companion ships and AGENTS.md carries no @ imports
 agent:   fx | unknown | 2026-10-31 | unknown | added the bytecode-cache regression for the installer's copied-skill comparison
+agent:   fx | unknown | 2026-11-05 | unknown | covered force-directory replacement, path validation, project-only no-op, list/detect, and mirror dry-run
 """
 
 from __future__ import annotations
 
 import importlib
+import io
+import contextlib
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -180,6 +183,74 @@ class InstallerTestCase(unittest.TestCase):
 
         self.assertEqual(0, code)
 
+    def test_auto_with_no_detected_harness_reports_an_error(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch.object(install, "detect", return_value=False):
+            with contextlib.redirect_stderr(stderr):
+                code = install.main(["--home", str(self.home), "--harness", "auto"])
+
+        self.assertEqual(1, code)
+        self.assertIn("no harness detected", stderr.getvalue())
+
+    def test_user_scope_project_only_harness_reports_and_does_not_install(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch.object(install, "sync_contract_mirror") as sync:
+            with contextlib.redirect_stderr(stderr):
+                code = install.main(["--home", str(self.home), "--harness", "cursor"])
+
+        self.assertEqual(0, code)
+        self.assertIn("not available in user scope", stderr.getvalue())
+        self.assertFalse((self.home / ".cursor").exists())
+        sync.assert_not_called()
+
+    def test_list_harnesses_omits_detection_status(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--home", str(self.home), "--list-harnesses"])
+
+        self.assertEqual(0, code)
+        self.assertNotIn("detected", stdout.getvalue())
+        self.assertNotIn("missing", stdout.getvalue())
+
+    def test_detect_adds_detection_status(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--home", str(self.home), "--detect"])
+
+        self.assertEqual(0, code)
+        self.assertRegex(stdout.getvalue(), r"\b(detected|missing)\b")
+
+    def test_a_missing_home_is_refused_cleanly(self) -> None:
+        missing = self.home / "missing-home"
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(missing), "--harness", "claude"])
+
+        self.assertEqual(1, code)
+        self.assertIn("does not exist", stderr.getvalue())
+
+    def test_a_file_at_the_home_path_is_refused_cleanly(self) -> None:
+        home_file = self.home / "not-a-home"
+        home_file.write_text("x\n", encoding="utf-8")
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(home_file), "--harness", "claude"])
+
+        self.assertEqual(1, code)
+        self.assertIn("is not a directory", stderr.getvalue())
+
+    def test_a_file_at_a_target_parent_is_reported_not_raised(self) -> None:
+        (self.home / ".claude").write_text("not a directory\n", encoding="utf-8")
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "claude"])
+
+        self.assertEqual(1, code)
+        self.assertIn("install:", stderr.getvalue())
+
     def test_commandcode_gets_agents_md_without_claude_filename(self) -> None:
         plans = install.plan_harnesses(self.home)
         links = plans["commandcode"].links
@@ -220,6 +291,42 @@ class InstallerTestCase(unittest.TestCase):
         )
 
         self.assertEqual([agents], conflicts)
+
+    def test_force_replaces_a_directory_at_a_file_target(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        (root / "AGENTS.md").mkdir()
+        (root / "AGENTS.md" / "keep.txt").write_text("mine\n", encoding="utf-8")
+
+        code = install.main(
+            ["--scope", "project", "--root", str(root), "--harness", "claude", "--force"]
+        )
+
+        self.assertEqual(0, code)
+        self.assertTrue((root / "AGENTS.md").is_file())
+        self.assertFalse((root / "AGENTS.md").is_symlink())
+        self.assertFalse((root / "AGENTS.md" / "keep.txt").exists())
+
+    def test_force_dry_run_leaves_a_directory_target_intact(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        (root / "AGENTS.md").mkdir()
+
+        code = install.main(
+            [
+                "--scope",
+                "project",
+                "--root",
+                str(root),
+                "--harness",
+                "claude",
+                "--force",
+                "--dry-run",
+            ]
+        )
+
+        self.assertEqual(0, code)
+        self.assertTrue((root / "AGENTS.md").is_dir())
 
     def test_force_replaces_a_real_skill_directory_without_a_backup(self) -> None:
         skill = self.home / ".claude" / "skills" / install.SKILL_DIR.name
@@ -275,21 +382,55 @@ class GrokRulesTestCase(unittest.TestCase):
 
 
 class MirrorTestCase(unittest.TestCase):
-    def test_all_mirrors_are_byte_identical_to_their_sources(self) -> None:
-        targets = install.sync_contract_mirror(install.CONTRACT_DIR, install.SKILL_DIR)
+    def test_mirrors_generate_byte_identical_to_their_sources(self) -> None:
+        skill = Path(tempfile.mkdtemp()) / "agents-contract"
+        self.addCleanup(lambda: __import__("shutil").rmtree(skill.parent, ignore_errors=True))
+        targets = install.sync_contract_mirror(install.CONTRACT_DIR, skill)
 
         self.assertEqual(
             [
-                install.SKILL_DIR / "references" / "contract.md",
-                install.SKILL_DIR / "references" / "codedna.md",
-                install.SKILL_DIR / "references" / "commands.md",
+                skill / "references" / "contract.md",
+                skill / "references" / "codedna.md",
+                skill / "references" / "commands.md",
             ],
-            targets,
+            [path for path, _ in targets],
         )
-        for source, target in zip(
+        self.assertTrue(all(action == "wrote" for _, action in targets), targets)
+        for source, (target, _) in zip(
             ("AGENTS.md", "codedna.md", "RTK.md"), targets, strict=True
         ):
             self.assertEqual((install.CONTRACT_DIR / source).read_bytes(), target.read_bytes())
+
+    def test_checked_in_mirrors_match_their_sources(self) -> None:
+        for source, mirror in (
+            ("AGENTS.md", "contract.md"),
+            ("codedna.md", "codedna.md"),
+            ("RTK.md", "commands.md"),
+        ):
+            self.assertEqual(
+                (install.CONTRACT_DIR / source).read_bytes(),
+                (install.SKILL_DIR / "references" / mirror).read_bytes(),
+                mirror,
+            )
+
+    def test_a_dry_run_writes_no_mirror_and_reports_the_action(self) -> None:
+        skill = Path(tempfile.mkdtemp()) / "agents-contract"
+        self.addCleanup(lambda: __import__("shutil").rmtree(skill.parent, ignore_errors=True))
+
+        targets = install.sync_contract_mirror(install.CONTRACT_DIR, skill, dry_run=True)
+
+        self.assertTrue(all(action == "wrote" for _, action in targets), targets)
+        for path, _ in targets:
+            self.assertFalse(path.exists(), path)
+
+    def test_second_mirror_run_reports_unchanged(self) -> None:
+        skill = Path(tempfile.mkdtemp()) / "agents-contract"
+        self.addCleanup(lambda: __import__("shutil").rmtree(skill.parent, ignore_errors=True))
+        install.sync_contract_mirror(install.CONTRACT_DIR, skill)
+
+        targets = install.sync_contract_mirror(install.CONTRACT_DIR, skill)
+
+        self.assertTrue(all(action == "unchanged" for _, action in targets), targets)
 
 
 class ProjectScopeTestCase(unittest.TestCase):
@@ -393,7 +534,7 @@ class DryRunTestCase(unittest.TestCase):
             ["--home", str(self.home), "--harness", "commandcode", "--dry-run"]
         )
 
-        self.assertFalse((self.home / ".commandcode" / "settings.json").exists())
+        self.assertEqual([], list(self.home.rglob("*")))
 
 
 class ConflictGuardTestCase(unittest.TestCase):
@@ -475,6 +616,36 @@ class ConflictGuardTestCase(unittest.TestCase):
 
         self.assertEqual(1, code)
         self.assertEqual(before, sorted(p.name for p in install._HERE.iterdir()))
+
+    def test_project_scope_refuses_a_nested_source_checkout_root(self) -> None:
+        contract = install._HERE / "contract"
+        before = (contract / "AGENTS.md").read_bytes()
+
+        code = install.main(["--scope", "project", "--root", str(contract)])
+
+        self.assertEqual(1, code)
+        self.assertEqual(before, (contract / "AGENTS.md").read_bytes())
+
+    def test_project_scope_refuses_a_parent_of_the_checkout(self) -> None:
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--scope", "project", "--root", str(install._HERE.parent)])
+
+        self.assertEqual(1, code)
+        self.assertIn("overlaps the lowheat source checkout", stderr.getvalue())
+
+    def test_project_scope_refuses_a_file_root_cleanly(self) -> None:
+        root = Path(tempfile.mkdtemp()) / "not-a-root"
+        root.write_text("x\n", encoding="utf-8")
+        self.addCleanup(lambda: __import__("shutil").rmtree(root.parent, ignore_errors=True))
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--scope", "project", "--root", str(root)])
+
+        self.assertEqual(1, code)
+        self.assertIn("is not a directory", stderr.getvalue())
 
     def apply(self) -> None:
         install.main(["--scope", "project", "--root", str(self.root)])

@@ -3,11 +3,11 @@
 exports: check_comment_content | check_examples
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_comment_content and check_examples [cascade]
 rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line- and span-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments, and a first-line `#!` is a shebang in every dialect.
-agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; the 138-line content scan is now one loop plus state and classification helpers.
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | killed the Python header-zone exemption: docstring-adjacent `#` prose and TODO markers report now; probes confirmed non-Python string masking already correct.
 agent:   fx | unknown | 2026-10-31 | unknown | added span-derived comment bodies so trailing and multiline comments reach the classifier; tool directives and raw binary input stay exempt
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | exempted a first-line `#!` in every dialect after Python probe scripts reported their shebang as prose
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | comments now come from profile-derived spans only, so a marker at the start of a multi-line string line is code; doc markers and reconstructed directives are exempt
+agent:   fx | unknown | 2026-11-05 | unknown | split Python content scanning out of check_comment_content
 message: The scan is line- and span-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: heredoc and here-string bodies outside shell (Ruby, Perl, PHP, PowerShell) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
 """
 from __future__ import annotations
@@ -105,6 +105,42 @@ def _parse_python(text: str) -> ast.Module | None:
         return None
 
 
+def _python_content_findings(path: Path, text: str) -> list[str]:
+    """Scan one Python module's docstrings and `#` comments.
+
+    Rules:   A module that does not parse still gets its `#` comments; one that does not tokenize keeps the docstring findings already collected; line numbers address the comment's own line.
+    """
+    findings: list[str] = []
+    module_doc = _PY_DOCSTRING.match(text)
+    if module_doc:
+        findings.extend(_docstring_findings(module_doc.group(2), L1_FIELDS, f"{path.name} module"))
+    tree = _parse_python(text)
+    if tree is not None:
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            docstring = ast.get_docstring(node, clean=False)
+            if docstring is None:
+                continue
+            findings.extend(
+                _docstring_findings(docstring, L2_FIELDS, f"{path.name} [{getattr(node, 'name', '')}]")
+            )
+    scan_inputs = _python_scan_inputs(text)
+    if scan_inputs is None:
+        return findings
+    masked_text, comment_lines, comment_bodies = scan_inputs
+    findings.extend(
+        _scan_content(
+            profile_for(path),
+            masked_text.split("\n"),
+            text.split("\n"),
+            comment_lines=comment_lines,
+            comment_bodies=comment_bodies,
+        )
+    )
+    return findings
+
+
 def check_comment_content(path: Path) -> list[str]:
     """Return findings for comment lines outside the permitted CodeDNA content.
 
@@ -117,49 +153,18 @@ def check_comment_content(path: Path) -> list[str]:
     if "\x00" in text:
         return []
     profile = profile_for(path)
-    findings: list[str] = []
     if path.suffix.lower() == ".py":
-        module_doc = _PY_DOCSTRING.match(text)
-        if module_doc:
-            findings.extend(_docstring_findings(module_doc.group(2), L1_FIELDS, f"{path.name} module"))
-        tree = _parse_python(text)
-        if tree is not None:
-            for node in ast.walk(tree):
-                if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                docstring = ast.get_docstring(node, clean=False)
-                if docstring is None:
-                    continue
-                findings.extend(
-                    _docstring_findings(docstring, L2_FIELDS, f"{path.name} [{getattr(node, 'name', '')}]")
-                )
-        scan_inputs = _python_scan_inputs(text)
-        if scan_inputs is None:
-            return findings
-        masked_text, comment_lines, comment_bodies = scan_inputs
-        findings.extend(
-            _scan_content(
-                profile,
-                masked_text.split("\n"),
-                text.split("\n"),
-                comment_lines=comment_lines,
-                comment_bodies=comment_bodies,
-            )
-        )
-        return findings
+        return _python_content_findings(path, text)
     spans: list[tuple[int, int]] = []
     masked = mask_code(profile, text, spans)
     skip_lines = _shell_heredoc_lines(text) if profile.name == "shell" else frozenset()
-    findings.extend(
-        _scan_content(
-            profile,
-            masked.splitlines(),
-            text.splitlines(),
-            skip_lines,
-            comment_bodies=_comment_bodies(profile, text, spans),
-        )
+    return _scan_content(
+        profile,
+        masked.splitlines(),
+        text.splitlines(),
+        skip_lines,
+        comment_bodies=_comment_bodies(profile, text, spans),
     )
-    return findings
 
 
 def _comment_bodies(

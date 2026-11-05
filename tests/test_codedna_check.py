@@ -3,11 +3,11 @@
 exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase | class EverySuffixTestCase | class DialectContentTestCase | class CliEntryPointTestCase | language_header | language_fixture | prose_body
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | added masking edge tests after the split: template expressions, escapes, unterminated literals, tokenize failure, and heredoc quote handling; strengthened to pin mask_code output directly after an independent review
 agent:   unknown | unknown | 2026-10-16 | s_gapfix | added prose-above-Python-docstring regression test after fixing the header-zone gap in codedna_content.py
 agent:   fx | unknown | 2026-10-31 | unknown | added regression tests for multiline block comments, trailing comments, incomplete agent entries, raw docstrings, unquoted CSS URLs, and example directives
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | added HTML regressions for `/*` in markup and a header closing line with an agent entry, plus shebang coverage across Python, the JS family, and shell
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | added the every-suffix matrix, per-family directive exemption, lookalike corpus, and a subprocess CLI determinism test
+agent:   fx | unknown | 2026-11-05 | unknown | added the documented-CLI contract scan regression
 """
 
 from __future__ import annotations
@@ -1662,6 +1662,19 @@ class CliEntryPointTestCase(CodednaCheckTestCase):
         for relative, text in clean.items():
             self.write(relative, text)
         self.write("broken/prose.rb", language_fixture(".rb", "#", "x = 1", f"# {PROSE_BODY}\n"))
+
+    def test_lowheat_contract_is_scanned_by_the_documented_cli(self) -> None:
+        repo = CHECKER_PATH.parents[4]
+        result = subprocess.run(
+            [sys.executable, str(CHECKER_PATH), ".", "contract"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("1 contract(s)", result.stdout)
 
     def test_cli_is_deterministic_and_names_the_violating_line(self) -> None:
         self.build_tree()

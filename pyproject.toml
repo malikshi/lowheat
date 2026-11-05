@@ -1,0 +1,16 @@
+[project]
+name = "lowheat"
+version = "0.0.0"
+description = "Agent-operations contract installer, checker, and benchmark"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
