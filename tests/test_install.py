@@ -3,11 +3,11 @@
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
 rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required. Directory comparisons ignore Python bytecode caches.
-agent:   fx | unknown | 2026-10-31 | unknown | dropped hook wiring, vendored-skill cases, and the cleanup pass after the one-shot removal tool was deleted
 agent:   fx | unknown | 2026-10-31 | unknown | covered the user-scope companion links, skill links, and both reference mirrors; added a real skill directory as a refusal case
 agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: project cases now assert every named companion ships and AGENTS.md carries no @ imports
 agent:   fx | unknown | 2026-10-31 | unknown | added the bytecode-cache regression for the installer's copied-skill comparison
 agent:   fx | unknown | 2026-11-05 | unknown | covered force-directory replacement, path validation, project-only no-op, list/detect, and mirror dry-run
+agent:   fx | unknown | 2026-11-05 | unknown | covered --check clean/stale states and refresh of a stale copied skill
 """
 
 from __future__ import annotations
@@ -271,6 +271,32 @@ class InstallerTestCase(unittest.TestCase):
                 ]
                 self.assertEqual([], missing, harness)
 
+    def test_check_with_a_project_only_harness_fails_instead_of_false_clean(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "cursor", "--check"])
+
+        self.assertEqual(1, code)
+        self.assertIn("no installable surface to check", stderr.getvalue())
+
+    def test_check_detects_a_stale_copied_skill_and_force_refreshes_it(self) -> None:
+        install.main(["--home", str(self.home), "--harness", "fx"])
+        skill = self.home / ".fx" / "skills" / install.SKILL_DIR.name
+        (skill / "SKILL.md").write_text("STALE\n", encoding="utf-8")
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "fx", "--check"])
+        self.assertEqual(1, code)
+        self.assertIn("stale", stderr.getvalue())
+
+        install.main(["--home", str(self.home), "--harness", "fx", "--force"])
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--home", str(self.home), "--harness", "fx", "--check"])
+        self.assertEqual(0, code)
+        self.assertIn("all selected paths match", stdout.getvalue())
+
     def test_a_real_skill_directory_is_refused_not_replaced(self) -> None:
         skill = self.home / ".claude" / "skills" / install.SKILL_DIR.name
         skill.mkdir(parents=True)
@@ -515,6 +541,42 @@ class ProjectScopeTestCase(unittest.TestCase):
                     name for name in install.COMPANIONS if not (root / name).is_file()
                 ]
                 self.assertEqual([], missing, harness)
+
+    def test_check_reports_a_clean_project_install(self) -> None:
+        self.apply()
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--scope", "project", "--root", str(self.root), "--check"])
+
+        self.assertEqual(0, code)
+        self.assertIn("all selected paths match", stdout.getvalue())
+
+    def test_check_reports_stale_state_without_rewriting(self) -> None:
+        self.apply()
+        agents = self.root / "AGENTS.md"
+        agents.write_text("DRIFTED\n", encoding="utf-8")
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+            code = install.main(["--scope", "project", "--root", str(self.root), "--check"])
+
+        self.assertEqual(1, code)
+        self.assertIn("stale", stderr.getvalue())
+        self.assertEqual("DRIFTED\n", agents.read_text(encoding="utf-8"))
+
+    def test_check_detects_a_missing_target_in_a_path_containing_unchanged(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="unchanged-project-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        install.main(["--scope", "project", "--root", str(root), "--harness", "claude"])
+        (root / "RTK.md").unlink()
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+            code = install.main(["--scope", "project", "--root", str(root), "--check"])
+
+        self.assertEqual(1, code)
+        self.assertIn("stale", stderr.getvalue())
 
     def test_second_project_run_reports_unchanged(self) -> None:
         self.apply()

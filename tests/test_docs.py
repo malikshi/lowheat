@@ -4,6 +4,7 @@ exports: class DocsTestCase
 used_by: none
 rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and reference companions by name rather than importing them; every reference path the skill names must exist.
 agent:   fx | unknown | 2026-10-31 | unknown | added after the thin-contract restructure to catch missing companions, stale mirrors, and the return of @ imports
+agent:   fx | unknown | 2026-11-05 | unknown | pinned the session-bootstrap, RTK, and compliance-record gates in contract and skill
 """
 
 from __future__ import annotations
@@ -57,6 +58,16 @@ class DocsTestCase(unittest.TestCase):
 
         for source, mirror in pairs:
             self.assertEqual(source.read_bytes(), mirror.read_bytes(), mirror)
+
+    def test_contract_and_skill_carry_bootstrap_gates(self) -> None:
+        contract = AGENTS.read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+
+        for marker in ("Session bootstrap", "RTK gate", "Compliance record"):
+            self.assertIn(marker, contract)
+        for marker in ("Startup gate", "RTK gate", "Compliance record"):
+            self.assertIn(marker, skill)
+        self.assertIn("MANDATORY", skill.split("---", 2)[1])
 
     def test_skill_reference_paths_exist(self) -> None:
         named = set(re.findall(r"references/[\w.-]+\.md", SKILL.read_text(encoding="utf-8")))

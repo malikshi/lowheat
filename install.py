@@ -5,11 +5,11 @@ used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
 rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
-agent:   fx | unknown | 2026-10-31 | unknown | added Aider's config file, dropped Gemini's duplicate skill link because Gemini discovers the central .agents/skills, and verified Command Code, Grok, and OpenCode load Contract-Version 2026-10-31
 agent:   fx | unknown | 2026-10-31 | unknown | added fx, hermes, claw, jcode, omp, forge, smelt, codewhale, and copilot adapters; fx now gets regular instruction files and a real skill copy because it refuses symlinks
 agent:   fx | unknown | 2026-10-31 | unknown | ignored Python bytecode caches when comparing and copying the fx skill, so test runs no longer look like source drift
 agent:   fx | unknown | 2026-11-01 | 01a196ba-7693-7c40-9caa-dff862b90cac | dropped the .bak backup from --force: repeated forced runs had piled up agents-contract.bak and .bak1 beside the fx skill copy
 agent:   fx | unknown | 2026-11-05 | unknown | hardened install paths, force directory replacement, target verification, no-op reporting, and mirror idempotency
+agent:   fx | unknown | 2026-11-05 | unknown | added read-only --check drift verification and documented the contract bootstrap
 """
 
 from __future__ import annotations
@@ -465,6 +465,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--root", default=".", help="project root for --scope project")
     parser.add_argument("--dry-run", action="store_true", help="report, do not write")
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="read-only: exit 1 when a selected path is stale",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="overwrite an existing contract file or directory",
@@ -539,23 +544,28 @@ def _selected_plans(
     return {name: plan for name, plan in plans.items() if name in chosen}
 
 
-def _sync_mirrors(dry_run: bool) -> None:
+def _sync_mirrors(dry_run: bool) -> list[str]:
     """Write or report the three skill mirrors.
 
-    Rules:   Report `unchanged` instead of rewriting equal bytes, and honor `--dry-run` so the report matches a real run.
+    Rules:   Report `unchanged` instead of rewriting equal bytes, and honor `--dry-run` so the report matches a real run. Return every line so `--check` can decide whether any mirror is stale.
     """
+    actions: list[str] = []
     for path, action in sync_contract_mirror(CONTRACT_DIR, SKILL_DIR, dry_run):
-        print(f"contract: {action} {path}")
+        line = f"contract: {action} {path}"
+        print(line)
+        actions.append(line)
+    return actions
 
 
 def _apply_selected(
     plans: dict[str, HarnessPlan], chosen: tuple[str, ...], dry_run: bool
-) -> None:
+) -> list[str]:
     """Apply each selected harness once, skipping paths an earlier harness already emitted.
 
-    Rules:   Cline and the central `.agents` adapter share the same targets; custom adapters may overlap too. Deduplicate links and tree targets before writing so the second harness never repeats a write.
+    Rules:   Cline and the central `.agents` adapter share the same targets; custom adapters may overlap too. Deduplicate links and tree targets before writing so the second harness never repeats a write. Return every action for `--check`.
     """
     emitted: set[Path] = set()
+    actions: list[str] = []
     for harness, plan in plans.items():
         if harness not in chosen:
             continue
@@ -570,6 +580,8 @@ def _apply_selected(
         emitted.update(unique.dirs)
         for action in apply_plan(unique, CONTRACT_DIR, dry_run):
             print(action)
+            actions.append(action)
+    return actions
 
 
 def _refuse_conflicts(
@@ -591,10 +603,54 @@ def _refuse_conflicts(
     return True
 
 
+def _is_unchanged_action(line: str) -> bool:
+    """Return whether a reported action is `unchanged`, not merely a path match.
+
+    Rules:   Match the leading verb after `harness: `, because a target path may itself contain the word `unchanged`. A dry-run rules action reports `write`, which is drift.
+    """
+    body = line.split(": ", 1)[-1]
+    return body.split(maxsplit=1)[0] == "unchanged"
+
+
+def _execute(
+    args: argparse.Namespace,
+    plans: dict[str, HarnessPlan],
+    selected: dict[str, HarnessPlan],
+) -> int:
+    """Run the selected install, or the read-only drift check.
+
+    Rules:   `--check` never writes: conflicts and any action other than `unchanged` mean drift and exit 1. A normal run keeps the existing conflict refusal, then writes mirrors and harness plans.
+    """
+    try:
+        if args.check:
+            conflicts = find_conflicts(plans, tuple(selected), CONTRACT_DIR)
+            if conflicts:
+                for path in conflicts:
+                    print(f"install: stale {path}", file=sys.stderr)
+                return 1
+        elif _refuse_conflicts(plans, tuple(selected), args.force):
+            return 1
+        dry_run = args.dry_run or args.check
+        actions = _sync_mirrors(dry_run)
+        actions.extend(_apply_selected(plans, tuple(selected), dry_run))
+    except OSError as error:
+        print(f"install: {error}", file=sys.stderr)
+        return 1
+    if not args.check:
+        return 0
+    stale = [action for action in actions if not _is_unchanged_action(action)]
+    if stale:
+        for action in stale:
+            print(f"install: stale {action}", file=sys.stderr)
+        return 1
+    print("install: all selected paths match")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Wire the contract into harnesses, then sync the skill mirror.
 
-    Rules:   Refuse to run when the contract source is missing — a half-installed contract is worse than none. Validate paths before writing, report project-only selections instead of silently doing nothing, and print every action; exit 0 whether or not anything changed, so a re-run is safe in a script. `--list-harnesses` and `--detect` are read-only.
+    Rules:   Refuse to run when the contract source is missing — a half-installed contract is worse than none. Validate paths before writing, report project-only selections instead of silently doing nothing, and print every action; exit 0 whether or not anything changed, so a re-run is safe in a script. `--check`, `--list-harnesses`, and `--detect` are read-only.
     """
     args = _parse_args(argv)
     home = Path(args.home).expanduser()
@@ -625,17 +681,14 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     if not selected:
-        return 0
-
-    try:
-        if _refuse_conflicts(plans, tuple(selected), args.force):
+        if args.check:
+            print(
+                "install: no installable surface to check; use --scope project",
+                file=sys.stderr,
+            )
             return 1
-        _sync_mirrors(args.dry_run)
-        _apply_selected(plans, tuple(selected), args.dry_run)
-    except OSError as error:
-        print(f"install: {error}", file=sys.stderr)
-        return 1
-    return 0
+        return 0
+    return _execute(args, plans, selected)
 
 
 if __name__ == "__main__":

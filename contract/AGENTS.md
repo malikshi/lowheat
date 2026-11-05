@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-10-31
+Contract-Version: 2026-11-05
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -13,7 +13,7 @@ Then use the table to find the section you need, and follow it literally.
 
 | When you are… | Read |
 |---|---|
-| Starting any task | Operating Principles + The Work Loop |
+| Starting any task | Session bootstrap, then Operating Principles + The Work Loop |
 | Resolving conflicting instructions | How to use this file → Precedence |
 | Sizing a task | Operating Principles → Task sizing |
 | Deciding how much to build | Operating Principles → Do the smallest thing that works |
@@ -52,6 +52,30 @@ When instruction sources disagree, the higher entry wins:
 
 A copy that lacks this file's `Contract-Version` line, or shows a different one,
 is stale. Refresh the copy from the canonical checkout, then act on this file.
+
+### Session bootstrap (mandatory)
+
+This gate sits below the harness system prompt and the user's current request in
+Precedence. Within those limits, before the first tool call of any task:
+
+1. **Load the `agents-contract` skill.** Its checklist is the executable form of
+   this file. If the harness cannot load it, read the tracked
+   `.agents/skills/agents-contract/SKILL.md` when present; otherwise state
+   `skill unavailable` and follow this file. Do not begin with a tool call and
+   load it later.
+2. **State the task size** in one line: `small`, `medium`, or `large`.
+3. **State the command lane.** RTK-wrapped is the default; raw is allowed only
+   for exact bytes, parseable output, streaming, or secrets, and the reason must
+   be stated. A task that wraps nothing must say why.
+4. **Check installed surfaces** when the contract or skill changed and the
+   lowheat checkout is available: `python3 install.py --check --harness <name>`
+   from that checkout. Refresh a stale copy with `--force`, then restart the
+   harness or session so it reloads instruction and skill metadata. A running
+   session keeps the old snapshot. Without the checkout, compare
+   `Contract-Version` and refresh from the source.
+
+A task started without steps 1–3 is non-compliant. Stop, perform them, then
+continue. The final report carries the compliance record defined below.
 
 ## Operating Principles
 
@@ -164,8 +188,9 @@ and what would break if the assumption is wrong.
 ### Curate context deliberately
 
 Load the relevant contract section, module header, source files, tests, and
-examples. Do not dump unrelated files into context. Use skills when the task
-matches an installed skill. When explaining something to the user, visualize it
+examples. Do not dump unrelated files into context. Load the matching skill
+before substantive work — the `agents-contract` skill is mandatory per Session
+bootstrap. When explaining something to the user, visualize it
 — prefer diagrams, tables, or code blocks over prose where that aids
 understanding. If a repo-local skill is unavailable through the current tool
 surface, read its tracked `SKILL.md` for project guidance.
@@ -238,6 +263,21 @@ verification point before the next begins.
 If any step fails, stop and fix the root cause — do not work around it, do not
 declare done.
 
+### Compliance record
+
+Every final report ends with these four lines, or states why one is unavailable:
+
+```text
+Size:     small | medium | large
+Skill:    agents-contract loaded | SKILL.md fallback | unavailable (reason)
+Commands: RTK-wrapped N, raw M (reasons) | RTK unavailable
+Review:   independent verdict | not required (small) | unavailable (reason)
+```
+
+A missing compliance record is itself a contract violation; do not claim
+`DONE` without it. The record is a self-report: tie its claims to commands and
+artifacts a reviewer can rerun.
+
 ## Engineering Standards
 
 ### Definition of Done
@@ -262,6 +302,9 @@ must hold:
 Run the smallest check that proves the change before claiming completion:
 
 - For config or docs edits: syntax checks or targeted grep checks.
+- For installed contract surfaces when the lowheat checkout is available:
+  `python3 install.py --check --harness <name>` is read-only and exits 1 on
+  drift; refresh with `--force` only after reviewing what it will replace.
 - For Python source edits: the relevant `rtk pytest` targets, or
   `python3 -m pytest` when RTK is unavailable.
 - For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
@@ -390,6 +433,11 @@ commit. Code Review Standards defines the reviewer and the recording rule.
   streaming output), and use native Read/Grep for file access. Fall back to raw
   whenever RTK is missing or does not support the subcommand. Full catalogue
   and fidelity zones: `RTK.md`.
+- **RTK gate.** Attempt RTK first on every shell command. Raw is allowed only
+  for exact bytes, parseable structure, streaming, or secrets — state the reason
+  in the compliance record. A session with no RTK-wrapped command must explain
+  why RTK was unusable or unsupported. The record is self-reported; a reviewer
+  can verify the claimed commands.
 - If a wrapped view hid something you needed, re-run raw once and stop wrapping
   that command. `rtk recall <hash>` recovers elided output when available.
 - One read-compressor per command, after the intent gate: RTK by default; when
@@ -518,7 +566,7 @@ too.
 
 | Plugin / skill | Source | Purpose |
 |---|---|---|
-| `agents-contract` | this repository, `.agents/skills/agents-contract/` | Repo-local skill encoding this contract as executable steps |
+| `agents-contract` | this repository, `.agents/skills/agents-contract/` | Repo-local skill encoding this contract as executable steps; load at session start |
 | `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code-search server — top rung of the discovery ladder |
 | `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
 

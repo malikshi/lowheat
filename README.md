@@ -16,7 +16,7 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `contract/aider.conf.yml` | Aider config that reads the project `CONVENTIONS.md` alias |
 | `contract/continue.md` | Continue project rule that points at `AGENTS.md` and its companions |
-| `.agents/skills/agents-contract/SKILL.md` | Repo-local skill encoding the AGENTS.md contract as executable steps |
+| `.agents/skills/agents-contract/SKILL.md` | Mandatory session-bootstrap skill encoding the AGENTS.md contract as executable steps |
 | `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/codedna.md` | Byte-identical mirror of `contract/codedna.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/commands.md` | Byte-identical mirror of `contract/RTK.md`, written by `install.py` (do not edit directly) |
@@ -37,9 +37,9 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 
 | Section | Covers |
 |---|---|
-| How to use this file | Task → section routing, companion table, precedence order, staleness check |
+| How to use this file | Task → section routing, companion table, precedence, session bootstrap, staleness check |
 | Operating Principles | Task sizing, think before coding, smallest change, verify don't assume, confusion protocol, operations discipline |
-| The Work Loop | 7-step delivery loop — each step ends with a verify gate |
+| The Work Loop | 7-step delivery loop, each ending with a verify gate, plus the required compliance record |
 | Engineering Standards | Definition of Done, Verification, Coding Style, CodeDNA summary, Testing Requirements, Security Guidelines |
 | Execution & Delivery | Command Style, Communication Style, Git Workflow, Code Review Standards |
 | Environment & Source Repositories | Installed plugins / skills, context management, knowledge capture, sources |
@@ -62,6 +62,8 @@ One command wires the contract into every harness, with no hand-copied files:
 ```bash
 python3 install.py                        # all supported harnesses, user scope
 python3 install.py --dry-run              # show what would change
+python3 install.py --check                # read-only drift check; exit 1 if stale
+python3 install.py --check --harness fx   # one installed surface
 python3 install.py --list-harnesses       # registry, binaries, config dirs
 python3 install.py --detect               # installed vs missing
 python3 install.py --harness auto         # only detected harnesses
@@ -130,6 +132,23 @@ and exits 1 without touching it. `--force` replaces it outright; copy anything
 you want to keep before running it. Project scope also refuses to run against
 the lowheat checkout itself, where it would duplicate `contract/` back into the
 repo root.
+
+### Verifying installed surfaces
+
+A user install is a snapshot: editing `contract/` or the skill leaves every
+installed copy stale until the installer runs again. `--check` is read-only and
+exits 1 on any missing, stale, or conflicting selected path:
+
+```bash
+python3 install.py --check --harness fx    # exit 0 = matches, 1 = drift
+python3 install.py --check                 # every harness, user scope
+```
+
+Refresh only after reviewing the report; `--force` replaces mismatched files and
+directories, including a stale copied skill. Run `--check` after every contract
+or skill edit and before relying on an installed skill. Restart the harness or
+session after a refresh: instruction files and skill metadata are snapshotted at
+session start, so a running agent keeps the old copy.
 
 ### Keeping the mirrors in sync
 

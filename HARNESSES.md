@@ -53,9 +53,12 @@ it refuses symlinked rule files and linked skill directories.
 ```bash
 python3 install.py --list-harnesses
 python3 install.py --detect
+python3 install.py --check --harness fx
 python3 install.py --harness auto
 python3 install.py --scope project --root /path/to/repo
 ```
 
 The installer refuses foreign files, replaces them with `--force`, and reports
-`unchanged` on an idempotent re-run.
+`unchanged` on an idempotent re-run. `--check` is read-only and exits 1 on stale
+or missing selected paths. Restart the harness after a refresh: instruction and
+skill metadata load at session start.

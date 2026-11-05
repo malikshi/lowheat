@@ -1,6 +1,6 @@
 ---
 name: agents-contract
-description: Execute tasks under the repository's AGENTS.md operating contract — the 7-step Work Loop, task sizing, CodeDNA annotations, testing and security gates, code review, and git session trailers. Use when starting any task, editing code or tests, reviewing a diff, running commands through RTK, replying in caveman mode, or committing.
+description: MANDATORY bootstrap for every task under the repository's AGENTS.md operating contract — load before the first tool call; covers the 7-step Work Loop, task sizing, CodeDNA annotations, testing and security gates, code review, and git session trailers.
 ---
 
 # Agents Contract — execution checklist
@@ -14,6 +14,28 @@ when a step needs detail.
 - Companions `caveman.md`, `ponytail.md`, and `semble.md` sit beside the
   `AGENTS.md` the harness loaded, or in its rules directory for Grok; this skill
   does not duplicate them.
+
+## 0. Startup gate (before any tool call)
+
+This file is the executable checklist; do not treat it as optional reading.
+Subject to harness-precedence and the user's current request:
+
+1. **Load this skill.** If you are acting on the contract without it, load it
+   now. If the harness cannot load it, read the tracked
+   `.agents/skills/agents-contract/SKILL.md` when present; otherwise state
+   `skill unavailable` in the compliance record and follow the contract.
+2. **State the task size**: `small`, `medium`, or `large`, with the one-line
+   reason when the call is not obvious.
+3. **State the command lane**: RTK-wrapped by default; raw only for exact
+   bytes, parseable output, streaming, or secrets, with the reason.
+4. **Check installed surfaces** after any contract/skill edit when the lowheat
+   checkout is available: `python3 install.py --check --harness <name>`
+   (read-only; exit 1 on drift). After a refresh, restart the harness or session
+   so it reloads instruction and skill metadata; a running session keeps the old
+   snapshot.
+
+Starting a task with a tool call before steps 1–3 is non-compliant. Stop,
+perform them, then continue.
 
 ## 1. Work Loop
 
@@ -100,8 +122,11 @@ root cause and do not declare done.
   `rtk pytest -q`). Run raw for exact bytes, parseable output, streaming, and
   secrets. Re-run raw once if a wrapped view hid something, then stop wrapping
   that command.
-- One read-compressor per command: RTK; if RTK cannot wrap it, `caveman shrink`
-  when installed; otherwise raw. `caveman browse` covers pages.
+- **RTK gate:** attempt RTK first on every shell command. Raw needs a stated
+  fidelity reason; a session with no wrapped command must explain why RTK was
+  unusable or unsupported. One read-compressor per command: RTK; if RTK cannot
+  wrap it, `caveman shrink` when installed; otherwise raw. `caveman browse`
+  covers pages.
 - Avoid `cd <path> && <command>`; pass the path or set the working directory.
 - **Never run `git commit` or `git push` without explicit user approval.**
 
@@ -204,6 +229,9 @@ it. Skip the run when the install ships no script.
 Run the smallest check that proves the change:
 
 - docs/config: syntax check or targeted grep;
+- installed contract surface when the lowheat checkout is available:
+  `python3 install.py --check --harness <name>` (read-only; `--force` refresh
+  only after reviewing replacements);
 - Python: the relevant `rtk pytest` target, or `python3 -m pytest` without RTK;
 - Go: `rtk go build ./...` and `rtk go vet ./...`;
 - browser/user-facing: exercise observable behavior.
@@ -220,3 +248,18 @@ No noisy progress narration.
   task goes sideways, inspect what was in the window first.
 - Personal notes → memory; team/project knowledge → existing docs. Do not
   duplicate an existing doc; ask before adding a top-level file.
+
+## 10. Compliance record
+
+End every final report with these four lines, or state why one is unavailable:
+
+```text
+Size:     small | medium | large
+Skill:    agents-contract loaded | SKILL.md fallback | unavailable (reason)
+Commands: RTK-wrapped N, raw M (reasons) | RTK unavailable
+Review:   independent verdict | not required (small) | unavailable (reason)
+```
+
+A missing record is a contract violation. Do not claim `DONE` without it. The
+record is a self-report; tie each line to a command or artifact a reviewer can
+rerun.
