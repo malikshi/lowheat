@@ -167,4 +167,5 @@ that document's Python examples against these rules.
 
 **Session end protocol.** At the end of every session that modifies files,
 record the work in the git commit with the session trailers defined under Git
-Workflow; do not keep a separate ledger file.
+Workflow; do not keep a separate ledger file. A project `RULES.md` of current
+cross-file invariants is a rulebook, not a session ledger.

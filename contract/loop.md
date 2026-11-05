@@ -6,9 +6,9 @@ including Precedence, approval gates, and the Commit rule.
 
 Adapted from the Karpathy-style loop gist: make one change, measure it against a
 fixed check, keep it if it passes, revert it if it does not. This version keeps
-the graph, the bounded retries, and the failure-return contract. It drops the
-gist's `RULES.md` ledger: CodeDNA `rules:`/`agent:` and git are the record, so
-there is no second source of truth.
+the graph, bounded retries, failure return, and one current project `RULES.md`
+rulebook for cross-file invariants. Git is the audit log; attempts are reported,
+not kept as a second ledger.
 
 ## Contract with the user
 
@@ -124,15 +124,23 @@ never overrides an irreversible gate.
 
 ## Step 6 — Learn one rule
 
-When a fix passes, write its cause as one actionable line in the right place:
+When a fix passes, write its cause in the right home:
 
-- CodeDNA `rules:` for a file-level constraint;
+- CodeDNA `rules:` for a constraint that governs one file;
+- a project-owned `RULES.md` for a cross-file invariant: one that affects two
+  or more files or a workflow/security boundary;
 - an `agent:` entry for session history;
-- a contract or companion line for a repository-wide rule;
 - a test or script when the rule can be enforced mechanically.
 
-Do not create a `RULES.md` ledger. Git is the audit log. Apply the learned rule
-to every unit split after it.
+The contract and companions are read-only in an installed project; write there
+only when contributing to lowheat itself. `RULES.md` is a current rulebook, not
+a ledger: one line per invariant with an owning path or test, no dates or
+attempts. Keep the rule in one home; a file may state its local consequence but
+must not repeat the global text. For example, `RULES.md` says "writes go through
+`repository/`"; a model file's `rules:` says "never import the DB driver." That
+is a local consequence, not a copy. Remove a line in the same commit that makes
+it false. Git remains the audit log; rejected attempts go in the final report or
+commit message. Apply the rule to every unit split after it.
 
 ## Step 7 — Stop and report
 
@@ -172,7 +180,8 @@ compliance record from `AGENTS.md` in the same report.
 - Merging with "looks right" instead of a script.
 - Redoing a passed unit because the merge failed elsewhere.
 - Sending a failure without a check, evidence, or bounded scope.
-- Writing a second rules ledger beside CodeDNA and git.
+- Writing a second history or attempt ledger beside CodeDNA and git; a current
+  project rulebook is not a ledger.
 - Treating "approve the final step" as permission for an irreversible step now.
 - Calling a task done because the model is confident, not because the check
   passed.

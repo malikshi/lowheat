@@ -71,8 +71,9 @@ cause and do not declare done.
    → Verify: evidence exists for every claim.
 7. **Report, learn, and record.** Stop on a passing check, two rounds with no
    new evidence, or the budget. Report changed/checked/rejected/approval/
-   unverified; write the learned rule into CodeDNA or the contract, not a second
-   ledger; commit with the session trailers in §7.
+   unverified; write the learned rule into CodeDNA `rules:`, a project
+   `RULES.md` for cross-file invariants, or the contract when contributing to
+   lowheat; a rulebook is not a ledger; commit with the session trailers in §7.
    → Verify: a reviewer can rerun every claimed check.
 
 ## 2. Decision rules

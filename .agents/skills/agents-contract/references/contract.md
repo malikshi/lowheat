@@ -48,8 +48,9 @@ When instruction sources disagree, the higher entry wins:
 
 1. The harness system prompt and its safety rules.
 2. The user's current request.
-3. This file, read from disk in the project.
-4. Skill summaries, pinned copies, and mirrors of this file.
+3. The project's `RULES.md`, when present.
+4. This file, read from disk in the project.
+5. Skill summaries, pinned copies, and mirrors of this file.
 
 A copy that lacks this file's `Contract-Version` line, or shows a different one,
 is stale. Refresh the copy from the canonical checkout, then act on this file.
@@ -270,9 +271,10 @@ verification point before the next begins. Detailed unit mechanics live in
 7. **Report, learn, and record.** Stop when the check passes, after two
    consecutive rounds with no new evidence, or when the budget ends. Report what
    changed, what was checked, rejected attempts, approvals still needed, and
-   what remains unverified. Write a learned rule into CodeDNA `rules:` or the
-   contract, never a second ledger; commit with the session trailers once the
-   user approves.
+   what remains unverified. Write a learned rule into CodeDNA `rules:`, a
+   project `RULES.md` for cross-file invariants, or the contract when
+   contributing to lowheat itself; a rulebook is not a history ledger. Commit
+   with the session trailers once the user approves.
    → Verify: the final report is honest and a reviewer can rerun its evidence.
 
 If any step fails, stop and fix the root cause — do not work around it, do not
@@ -363,7 +365,7 @@ universal law; relax what your task or agent surface does not need.
 
 CodeDNA is a hand-applied source-annotation convention adapted from
 `https://github.com/Larens94/codedna`. There is no binary, validator, git hook,
-or ledger — git is the audit log. Full convention: `codedna.md`.
+or attempt ledger — git is the audit log. Full convention: `codedna.md`.
 
 - **Only comment content.** No prose comments, commented-out code, `TODO`/
   `FIXME` markers, or section dividers. Tool directives, license headers, and
@@ -605,8 +607,12 @@ Put captured knowledge in the right place:
 - Personal debugging notes, preferences, temporary context → memory
 - Team/project knowledge (architecture decisions, API changes, runbooks) → the
   project's existing docs structure
+- Project rules that span files → the project's existing rules doc, or a
+  project-owned `RULES.md` if none exists. Keep it current-only: one line per
+  invariant with an owner, no history or attempts. Never write project rules
+  into an installed contract copy; it is generated or linked.
 - If an existing doc already captures the information, do not duplicate it
-- If no obvious location exists, ask before creating a new top-level file
+- If no obvious location exists, ask before creating any other top-level file
 
 ### Source Repositories
 

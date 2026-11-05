@@ -135,6 +135,16 @@ you want to keep before running it. Project scope also refuses to run against
 the lowheat checkout itself, where it would duplicate `contract/` back into the
 repo root.
 
+### Project rules (`RULES.md`)
+
+An installed contract is read-only project infrastructure. Keep cross-file
+agent rules in the project's own `RULES.md`, never in the installed `AGENTS.md`
+or a companion. One current line per invariant, with an owning path or test; no
+dates, attempts, or session history. File-local constraints stay in CodeDNA
+`rules:`. `RULES.md` is optional and is never installed by lowheat. It is
+project-specific: it narrows the generic contract, but harness safety and the
+user's current request stay above it.
+
 ### Verifying installed surfaces
 
 A user install is a snapshot: editing `contract/` or the skill leaves every

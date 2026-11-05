@@ -6,6 +6,7 @@ rules:   Assert structure and source-to-mirror equality without writing files. T
 agent:   fx | unknown | 2026-10-31 | unknown | added after the thin-contract restructure to catch missing companions, stale mirrors, and the return of @ imports
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the session-bootstrap, RTK, and compliance-record gates in contract and skill
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the loop companion gates and six-companion contract
+agent:   fx | unknown | 2026-11-05 | unknown | pinned the project rulebook boundary and its exclusion from installed companions
 """
 
 from __future__ import annotations
@@ -68,9 +69,27 @@ class DocsTestCase(unittest.TestCase):
             "Three attempts maximum",
             "UNIT:",
             "cost to undo",
-            "Do not create a `RULES.md` ledger",
+            "project-owned `RULES.md`",
+            "rulebook, not",
+            "contract and companions are read-only",
         ):
             self.assertIn(marker, loop)
+        self.assertNotIn("drops the gist's `RULES.md`", loop)
+
+    def test_project_rulebook_is_documented_but_not_installed(self) -> None:
+        contract = AGENTS.read_text(encoding="utf-8")
+        codedna = (install.CONTRACT_DIR / "codedna.md").read_text(encoding="utf-8")
+        readme = (install.CONTRACT_DIR.parent / "README.md").read_text(encoding="utf-8")
+
+        for marker in (
+            "project-owned `RULES.md`",
+            "installed contract copy",
+            "The project's `RULES.md`, when present",
+        ):
+            self.assertIn(marker, contract)
+        self.assertIn("rulebook, not a session ledger", codedna)
+        self.assertIn("never installed by lowheat", readme)
+        self.assertNotIn("RULES.md", install.COMPANIONS)
 
     def test_contract_and_skill_carry_bootstrap_gates(self) -> None:
         contract = AGENTS.read_text(encoding="utf-8")
