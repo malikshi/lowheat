@@ -60,7 +60,7 @@ cause and do not declare done.
    or revert. Cap a behavior unit at three attempts; after three, stop and
    report the plan wrong. Revert only your own edits.
    → Verify: the targeted tests pass.
-5. **Merge, then review.** Merge/dedupe/sort/compare with code; failed units
+5. **Merge, then review.** Merge and compare with code; failed units
    return `UNIT`, `VERDICT`, `REASON`, `EVIDENCE`, `SCOPE`; never redo a passed
    unit. Run the Definition of Done; shared branches, merges, and STOP triggers
    also need independent review (§6).
@@ -79,12 +79,14 @@ cause and do not declare done.
 ## 2. Decision rules
 
 - **Precedence.** Harness system prompt and safety rules, then the user's
-  current request, then `AGENTS.md` on disk, then skill summaries and mirrors.
-  A copy with a different `Contract-Version` is stale; refresh it, then act on
-  the file on disk.
+  current request, then the project's `RULES.md` (it narrows the contract and
+  never relaxes the approval gates), then `AGENTS.md` on disk, then skill
+  summaries and mirrors. A copy with a different `Contract-Version` is stale;
+  refresh it, then act on the file on disk.
 - **Task sizing.** Say the size out loud.
   **small** — mechanical, no behavior change; solo, touched checks only, no new
-  test. **medium** — localized behavior change or bug fix; solo, touched module
+  test; the check is the diff boundary or a targeted grep over the touched
+  lines. **medium** — localized behavior change or bug fix; solo, touched module
   tests, regression test for fixes. **large** — feature, cross-module, contract,
   or judgment-heavy; full protocol, full suites, consider fan-out.
   When torn, pick smaller and say so; escalate with the new call.
@@ -218,8 +220,8 @@ it. Skip the run when the install ships no script.
 
 ## 7. Git workflow
 
-- Commit format: `<type>: <description>` with `feat`, `fix`, `refactor`,
-  `docs`, `test`, `chore`, `perf`, or `ci`.
+- Commit format: `<type>(<scope>): <description>` with `feat`, `fix`,
+  `refactor`, `docs`, `test`, `chore`, `perf`, or `ci`; the scope is optional.
 - Session trailers go in the final paragraph, no blank lines inside, after any
   `Co-authored-by:` line:
 
@@ -229,6 +231,7 @@ it. Skip the run when the install ships no script.
   AI-Session:  <session_id | unknown>
   AI-Visited:  <files read, derived from the diff and the session's read log>
   AI-Verified: <commands run and their result, one line>
+  AI-Rejected: <attempts tried and reverted, or none>
   AI-Message:  <one-line summary of what was found or left open>
   ```
 
@@ -271,7 +274,7 @@ End every final report with these four lines, or state why one is unavailable:
 Size:     small | medium | large
 Skill:    agents-contract loaded | SKILL.md fallback | unavailable (reason)
 Commands: RTK-wrapped N, raw M (reasons) | RTK unavailable
-Review:   independent verdict | not required (small) | unavailable (reason)
+Review:   independent verdict | not required (small or local, no STOP trigger) | unavailable (reason)
 ```
 
 A missing record is a contract violation. Do not claim `DONE` without it. The

@@ -6,7 +6,7 @@ including Precedence, approval gates, and the Commit rule.
 
 Adapted from the Karpathy-style loop gist: make one change, measure it against a
 fixed check, keep it if it passes, revert it if it does not. This version keeps
-the graph, bounded retries, failure return, and one current project `RULES.md`
+the graph, bounded retries, failure return, and a current project `RULES.md`
 rulebook for cross-file invariants. Git is the audit log; attempts are reported,
 not kept as a second ledger.
 
@@ -78,13 +78,13 @@ it if it does not.
   not retry the same hypothesis.
 - Mechanical docs or formatting units normally need one pass. They also cap at
   three attempts; after three, report the plan wrong.
-- Record rejected attempts in the final report or commit message. Do not create
-  a separate attempt ledger.
+- Record rejected attempts in the final report and in the `AI-Rejected:` commit
+  trailer. Do not create a separate attempt ledger.
 
 ## Step 3 — Merge with code
 
-Merge, deduplicate, sort, and compare with scripts, not with model judgment.
-Spend reasoning only on steps that judge or decide.
+Merge and compare with scripts, not with model judgment. Spend reasoning only on
+steps that judge or decide.
 
 - Re-run the integration check after the merge, not just each unit's check.
 - Never redo a unit that already passed.
@@ -128,7 +128,8 @@ When a fix passes, write its cause in the right home:
 
 - CodeDNA `rules:` for a constraint that governs one file;
 - a project-owned `RULES.md` for a cross-file invariant: one that affects two
-  or more files or a workflow/security boundary;
+  or more files or a workflow/security boundary. It narrows the contract and
+  never relaxes an approval gate;
 - an `agent:` entry for session history;
 - a test or script when the rule can be enforced mechanically.
 
@@ -139,8 +140,8 @@ attempts. Keep the rule in one home; a file may state its local consequence but
 must not repeat the global text. For example, `RULES.md` says "writes go through
 `repository/`"; a model file's `rules:` says "never import the DB driver." That
 is a local consequence, not a copy. Remove a line in the same commit that makes
-it false. Git remains the audit log; rejected attempts go in the final report or
-commit message. Apply the rule to every unit split after it.
+it false. Git remains the audit log; rejected attempts go in the final report and
+the `AI-Rejected:` trailer.
 
 ## Step 7 — Stop and report
 
@@ -160,7 +161,7 @@ Unverified: what remains, and what would settle it
 Do not claim `DONE` while the check is unrun, failing, or unverified. Carry the
 compliance record from `AGENTS.md` in the same report.
 
-## Mapping to the seven Work Loop steps
+## Mapping to the Work Loop steps
 
 | Work Loop step | This companion |
 |---|---|

@@ -4,9 +4,10 @@ Normative summary: `AGENTS.md` → Engineering Standards → CodeDNA. This file 
 
 CodeDNA is a source-annotation convention adapted from
 `https://github.com/Larens94/codedna`. This repository uses the convention only.
-It does not use the `codedna` binary, a validator, git hooks, or a `.codedna`
-ledger file. Git is the authoritative audit log. Agents apply and maintain
-these annotations by hand while reading and editing code.
+It uses no upstream `codedna` binary, validator, or git hook, and no `.codedna`
+ledger file; the agents-contract skill ships its own read-only checker. Git is
+the authoritative audit log. Agents apply and maintain these annotations by hand
+while reading and editing code.
 
 **CodeDNA is the only comment content.** No comment content outside CodeDNA may
 exist in source files — no explanatory prose, no commented-out code, no

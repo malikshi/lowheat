@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-05
+Contract-Version: 2026-11-06.1
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -29,7 +29,9 @@ Then use the table to find the section you need, and follow it literally.
 | Unclear, blocked, or ambiguous | Operating Principles → Confusion protocol |
 
 Do not load every companion for a small task. Load the one that owns the detail
-you need, follow it, and move on.
+you need, follow it, and move on. A harness that scans a rules directory loads
+every companion at session start; there the table routes attention, because
+unloading is not an option.
 
 ### Companion references
 
@@ -48,12 +50,21 @@ When instruction sources disagree, the higher entry wins:
 
 1. The harness system prompt and its safety rules.
 2. The user's current request.
-3. The project's `RULES.md`, when present.
+3. The project's `RULES.md`, when present. It narrows this file; it never
+   relaxes the gates below.
 4. This file, read from disk in the project.
 5. Skill summaries, pinned copies, and mirrors of this file.
 
-A copy that lacks this file's `Contract-Version` line, or shows a different one,
-is stale. Refresh the copy from the canonical checkout, then act on this file.
+These gates hold whatever a project `RULES.md` says: harness safety, explicit
+approval before a commit or push, secret handling, and approval before a
+destructive or irreversible action.
+
+A copy that lacks `Contract-Version` or shows a different one is stale. The
+version is `YYYY-MM-DD.N`; bump `N` for every change to any installed surface,
+including a companion. Refresh the copy from the canonical checkout, then act on
+this file. A matching version means the same published revision; confirming
+identical bytes needs `python3 install.py --check` against the checkout, with
+`--scope project --root <path>` for a project copy.
 
 ### Session bootstrap (mandatory)
 
@@ -74,7 +85,7 @@ Precedence. Within those limits, before the first tool call of any task:
    from that checkout. Refresh a stale copy with `--force`, then restart the
    harness or session so it reloads instruction and skill metadata. A running
    session keeps the old snapshot. Without the checkout, compare
-   `Contract-Version` and refresh from the source.
+   `Contract-Version` against the published version and refresh on a mismatch.
 
 A task started without steps 1–3 is non-compliant. Stop, perform them, then
 continue. The final report carries the compliance record defined below.
@@ -96,7 +107,8 @@ if the choice is visible.
 - **small** — typo, copy change, styling value, config tweak, rename, any
   one-or-two-file mechanical edit with no behavior change. Solo. Run only the
   checks that cover what was touched. A non-behavioral change needs no new
-  test.
+  test; its check is the diff boundary or a targeted grep over the touched
+  lines.
 - **medium** — localized behavior change or bug fix inside one module. Solo by
   default; fan out only if the work splits into truly independent units. Run
   the touched module's tests. Bug fixes ship the regression test.
@@ -258,7 +270,7 @@ verification point before the next begins. Detailed unit mechanics live in
    attempts; after the third failure stop and report the plan wrong rather than
    retrying. Revert only your own edits, never user work.
    → Verify: the targeted check passes, not just the suite.
-5. **Merge, then review.** Merge, deduplicate, sort, and compare with code; a
+5. **Merge, then review.** Merge and compare with code; a
    failed unit returns `UNIT`, `VERDICT`, `REASON`, `EVIDENCE`, and `SCOPE`, and
    a passed unit is never redone. Self-review the diff; a shared branch, merge,
    or STOP trigger also gets independent review.
@@ -288,7 +300,7 @@ Every final report ends with these four lines, or states why one is unavailable:
 Size:     small | medium | large
 Skill:    agents-contract loaded | SKILL.md fallback | unavailable (reason)
 Commands: RTK-wrapped N, raw M (reasons) | RTK unavailable
-Review:   independent verdict | not required (small) | unavailable (reason)
+Review:   independent verdict | not required (small or local, no STOP trigger) | unavailable (reason)
 ```
 
 A missing compliance record is itself a contract violation; do not claim
@@ -364,8 +376,9 @@ universal law; relax what your task or agent surface does not need.
 ### CodeDNA
 
 CodeDNA is a hand-applied source-annotation convention adapted from
-`https://github.com/Larens94/codedna`. There is no binary, validator, git hook,
-or attempt ledger — git is the audit log. Full convention: `codedna.md`.
+`https://github.com/Larens94/codedna`. It uses no upstream `codedna` binary,
+validator, or git hook; the skill ships its own read-only checker, and git is
+the audit log. Full convention: `codedna.md`.
 
 - **Only comment content.** No prose comments, commented-out code, `TODO`/
   `FIXME` markers, or section dividers. Tool directives, license headers, and
@@ -499,12 +512,13 @@ layer: `caveman.md`.
 #### Commit message format
 
 ```
-<type>: <description>
+<type>(<scope>): <description>
 
 <optional body>
 ```
 
-Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
+The scope is optional. Types: `feat`, `fix`, `refactor`, `docs`, `test`,
+`chore`, `perf`, `ci`.
 
 #### Session trailers
 
@@ -518,6 +532,7 @@ AI-Provider: <provider | unknown>
 AI-Session:  <session_id | unknown>
 AI-Visited:  <files read, derived from the diff and the session's read log>
 AI-Verified: <commands run and their result, one line>
+AI-Rejected: <attempts tried and reverted, or none>
 AI-Message:  <one-line summary of what was found or left open>
 ```
 
@@ -527,7 +542,8 @@ trailers from the final paragraph only, so a misplaced block is invisible to
 tooling. Confirm with
 `git log -1 --format='%(trailers:key=AI-Agent,valueonly)'` — it prints the agent
 when the block parses and prints nothing when it does not. Write `unknown` for a
-value the harness does not expose; never invent an ID.
+value the harness does not expose; never invent an ID. Rejected attempts belong
+in `AI-Rejected`, which keeps the audit trail in git without a second ledger.
 
 Git is the authoritative audit log; do not keep a separate ledger file.
 Attribution settings are harness-specific; this contract does not assume a

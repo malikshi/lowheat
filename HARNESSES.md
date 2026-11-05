@@ -5,6 +5,10 @@ is advisory; a green row means the installer emitted the paths, not that a live
 session authenticated and loaded them. Installer changes after that date are
 covered by the test suite and CI, not by a live harness session.
 
+On harnesses that scan a rules directory, every companion loads at session start
+and cannot be unloaded; the companion table in `AGENTS.md` routes attention
+there instead of controlling what is loaded.
+
 Node `24.22.1` is installed at `/opt/node-v24.22.1` and linked from
 `/usr/local/bin`; the Debian `/usr/bin/node` `24.21.0` remains as a fallback.
 

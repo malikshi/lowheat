@@ -142,14 +142,18 @@ agent rules in the project's own `RULES.md`, never in the installed `AGENTS.md`
 or a companion. One current line per invariant, with an owning path or test; no
 dates, attempts, or session history. File-local constraints stay in CodeDNA
 `rules:`. `RULES.md` is optional and is never installed by lowheat. It is
-project-specific: it narrows the generic contract, but harness safety and the
-user's current request stay above it.
+project-specific: it narrows the generic contract and never relaxes the approval
+gates (commit and push approval, secrets, destructive operations), while harness
+safety and the user's current request stay above it.
 
 ### Verifying installed surfaces
 
 A user install is a snapshot: editing `contract/` or the skill leaves every
-installed copy stale until the installer runs again. `--check` is read-only and
-exits 1 on any missing, stale, or conflicting selected path:
+installed copy stale until the installer runs again. `Contract-Version` carries
+a date and a revision (`YYYY-MM-DD.N`); bump the revision for every change to
+any installed surface, companions included. `--check` compares bytes, so it
+also catches companion drift that a version comparison misses. `--check` is
+read-only and exits 1 on any missing, stale, or conflicting selected path:
 
 ```bash
 python3 install.py --check --harness fx    # exit 0 = matches, 1 = drift
@@ -319,7 +323,7 @@ python3 bench/discovery_tokens.py /path/to/repo --query "renew user" --query "vp
 | [`jbarbier/CLAUDE.md`](https://github.com/jbarbier/CLAUDE.md) | Operating-contract influence — complete real fixes, search before building, verify before completion |
 | [`multica-ai/andrej-karpathy-skills`](https://github.com/multica-ai/andrej-karpathy-skills) | Karpathy behavioral guidelines — think before coding, simplicity first, surgical changes |
 | [`affaan-m/ECC`](https://github.com/affaan-m/ECC) | Rule packs for coding style, security, testing, git workflow, code review |
-| [`Larens94/codedna`](https://github.com/Larens94/codedna) | CodeDNA source-annotation convention — hand-applied, no binary, validator, or ledger |
+| [`Larens94/codedna`](https://github.com/Larens94/codedna) | CodeDNA source-annotation convention — hand-applied; lowheat ships its own read-only checker |
 
 ## License
 
