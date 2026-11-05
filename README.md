@@ -219,7 +219,7 @@ cargo install --git https://github.com/rtk-ai/rtk
 Confirm the binary:
 
 ```bash
-rtk --version    # should print 1.0.1 or newer — the catalogue is verified against 1.0.1
+rtk --version    # should print 1.1.0 or newer — the catalogue is verified against 1.1.0
 ```
 
 > The crates.io package named `rtk` is a different project (Rust Type Kit) —

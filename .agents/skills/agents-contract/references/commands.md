@@ -2,9 +2,11 @@
 
 Token-optimized CLI proxy. Prefix shell commands with `rtk` to cut the bash
 output your agent reads by 60-90% on dev operations. Full reference:
-`rtk --help`. This catalogue is verified against **rtk 1.0.1** — run
-`rtk --version` for your build, and treat anything missing from `rtk --help` as
-unsupported. lowheat installs no RTK hook: these rules are instruction-only.
+`rtk --help`. This catalogue is verified against **rtk 1.1.0** — run
+`rtk --version` for your build, and treat anything missing from `rtk --help`
+and this catalogue as unsupported. For proxied tools, subcommand help is the
+wrapped tool's help (`rtk ls --help` prints `ls` help); RTK's own commands keep
+theirs. lowheat installs no RTK hook: these rules are instruction-only.
 
 ## The one rule: decide by intent, never by size
 
@@ -35,17 +37,16 @@ Anything not listed under Commands still runs through plain `rtk <cmd>`.
 ### Lossy modes are opt-in
 
 Plain `rtk <cmd>` keeps the signal — errors, diffs, stack traces, exit codes —
-and strips only noise. The lossy switches are **opt-in**: `--ultra-compact`,
-`rtk read -l minimal`, `rtk read -l aggressive`, `rtk read -m` (structure
-only), and `rtk smart` (2-line summary). Reach for them only to skim something
+and strips only noise. The lossy switches are **opt-in**: `rtk read -l minimal`,
+`rtk read -l aggressive`, `rtk read -m <N>` (structural preview capped at N
+lines), and `rtk smart` (2-line summary). Reach for them only to skim something
 huge and unimportant, never as a default. `rtk read` with no `-l` copies the
 file verbatim.
 
-> **`-u` doesn't work.** RTK's own README still lists a `-u` short form for
-> `--ultra-compact`; it was removed upstream and using it fails outright
-> (verified on 1.0.1: `rtk -u ls` errors). Use the long flag. Placed after a
-> subcommand, `-u` goes to the wrapped command instead — `rtk ls -u` runs
-> `ls -u`.
+> **`--ultra-compact` and its `-u` short form are gone.** Both were removed in
+> 1.0.0; on 1.1.0 `rtk --ultra-compact ls` and `rtk -u ls` fail instead of
+> compressing. Placed after a subcommand, `-u` still belongs to the wrapped
+> command — `rtk ls -u` runs `ls -u`.
 
 ### The fallback is one-way
 
@@ -104,16 +105,16 @@ is exact, `tee` logs the full output, `disabled` turns it off);
 `rtk gain --recalls` reports how often elisions were actually recalled.
 
 Three `rtk grep` behaviors to know before trusting its output (verified on
-1.0.1):
+1.1.0):
 
-- **`--max` and `--max-len` must use the `=` form and precede the pattern**
-  (`rtk grep --max=100000 -rn "p" dir`). With a space, or after the pattern,
-  they leak to the wrapped GNU grep and it exits with an error instead of
-  results.
-- **The default output caps at 200 results and truncates lines at 80 chars.**
-  A broad search silently reports a subset; the reported match *count* is
-  accurate, but the file labels are collapsed and elided, so it cannot be used
-  to enumerate files.
+- **`--max` and `--max-len` must precede the pattern.** Both `--max=5` and
+  `--max 5` bind there; placed after the pattern they leak to the wrapped GNU
+  grep and it errors instead of printing results.
+- **The default output caps at 200 results (25 per file) and truncates lines
+  at 80 chars.** A broad search silently reports a subset; the reported match
+  *count* is accurate, but the file labels are collapsed and elided, so it
+  cannot be used to enumerate files. A single-file search can skip the line cap
+  entirely — `--max-len` does not narrow it there.
 - **`rtk find` filters dot-directories and caches** (`.agents`, `.commandcode`,
   `__pycache__`, `.pytest_cache`, …) and elides them behind `[+N hidden]`.
   Use it to skim, or native `find`/Glob when you must enumerate every match.
@@ -187,7 +188,7 @@ rtk golangci-lint run          # Go linting with compact output
 ```bash
 rtk npm test                   # npm run with filtered output
 rtk npx tsc --noEmit           # npx routes known tools to compact filters
-rtk pnpm test                  # pnpm with ultra-compact output
+rtk pnpm test                  # pnpm with compact output
 rtk pnpm list                  # Dependency tree (ultra-dense)
 rtk pnpm outdated              # Outdated packages: "pkg: old → new"
 rtk pnpm typecheck             # Typecheck via the tsc filter
@@ -198,6 +199,7 @@ rtk jest                       # Jest with compact output
 rtk vitest                     # Vitest with compact output
 rtk tsc --noEmit               # TypeScript compiler with grouped errors
 rtk next build                 # Next.js build with compact output
+rtk ng build                   # Angular build with compact tables; other ng commands pass through
 rtk lint .                     # ESLint with grouped rule violations
 rtk prettier --check .         # Prettier format checker
 rtk format .                   # Universal format checker
@@ -311,8 +313,12 @@ rtk gain                       # Token savings summary
 rtk gain --graph               # ASCII graph of daily savings
 rtk gain --history             # Command-level savings history
 rtk gain --daily               # Day-by-day breakdown
+rtk gain --weekly / --monthly  # Weekly or monthly breakdown
 rtk gain --quota               # Monthly quota savings estimate
 rtk gain --recalls             # Recall efficiency per filter (elisions vs recalls)
+rtk gain --project             # Restrict to the current project
+rtk gain --watch               # Live dashboard (--text forces the static view)
+rtk gain --by-method           # Per-method savings (also --by-rule / --by-layer)
 rtk gain --all --format json   # All-time breakdowns, machine-readable (run raw to parse)
 rtk cc-economics               # Claude Code spending vs RTK savings analysis
 rtk config                     # Show or create RTK configuration
@@ -440,6 +446,9 @@ rtk ruff check .
 
 ```bash
 -v, --verbose        # Verbosity level (-v, -vv, -vvv) — only before the subcommand
---ultra-compact      # Ultra-compact mode: ASCII icons, inline format (lossy — opt-in)
 --skip-env           # Set SKIP_ENV_VALIDATION=1 for child processes
+-h, --help           # RTK's own surface; proxied subcommands hand -h to the wrapped tool
 ```
+
+`--ultra-compact` is not an option on 1.1.0 — the 1.0.0 breaking change removed
+it, and passing it fails.
