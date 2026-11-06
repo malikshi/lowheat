@@ -1,16 +1,18 @@
 """codedna_spec.py — Shared contract constants, regexes, and per-language comment profiles.
 
-exports: SOURCE_SUFFIXES | EXPLICIT_SUFFIXES | TOOL_OWNED_DIRS | DEFAULT_IGNORED_DIRS | L1_FIELDS | L2_FIELDS | REQUIRED_L1 | AGENT_HISTORY_LIMIT | SUMMARY_WORD_LIMIT | ARROW | EM_DASH | BlockMarker | LanguageProfile | profile_for
+exports: SOURCE_SUFFIXES | COMPOUND_SUFFIXES | EXPLICIT_SUFFIXES | TOOL_OWNED_DIRS | DEFAULT_IGNORED_DIRS | L1_FIELDS | L2_FIELDS | REQUIRED_L1 | AGENT_HISTORY_LIMIT | SUMMARY_WORD_LIMIT | ARROW | EM_DASH | BlockMarker | LanguageProfile | profile_for | suffix_for
 used_by: .agents/skills/agents-contract/scripts/codedna_masking.py → LanguageProfile and masking regexes [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_headers.py → profiles and L1 constants [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → limits and label regexes [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → re-exports for tests and main [cascade]
-rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix. Suffix matching is case-insensitive. A suffix with two real languages takes one superset profile that never reports inside valid code. `->` and `→` are the same arrow: drop the return type before naming an export, and cut the symbol after it when resolving a used_by consumer.
-agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py verbatim: constants, regexes, and the 15 suffix profiles unchanged, and the _proflies typo is gone.
+used_by: .agents/skills/agents-contract/scripts/codedna_python.py → arrow and export regexes [cascade]
+used_by: tests/test_codedna_check.py → profile_for, suffix_for [cascade]
+rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix. Suffix matching is case-insensitive. A suffix with two real languages takes one superset profile that never reports inside valid code. `->` and `→` are the same arrow: drop the return type before naming an export, and cut the symbol after it when resolving a used_by consumer. A compound suffix wins over its last component: `.blade.php` is Blade, never PHP.
 agent:   fx | unknown | 2026-10-31 | unknown | tightened the agent-history regex to require session and note, and allowed raw/unicode Python docstring prefixes
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | replaced the suffix switch tables with explicit per-language profiles (line, word, and block markers) covering the declared language set
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: `#` after `{`/`$` and PHP `#[` stay code, Clojure character literals stay code, functional profiles drop the single-quote string form
 agent:   fx | unknown | 2026-11-06 | unknown | added _ARROW_SPLIT so upstream's `sym(sig) → type` exports and its `|`-separated used_by consumers parse; the consumed-suffix note lives in the message below
+agent:   fx | unknown | 2026-11-06 | unknown | registered the Blade, Jinja/Twig/Volt, ERB/EJS, Handlebars/Mustache, and Razor families plus compound suffix resolution, so template headers parse instead of failing as PHP or going unscanned
 message: The 87 suffix profiles are data, not branches. Keeping them in one module avoids import cycles between the masker, header parser, and content scanner; the file exceeds the 800-line soft ceiling by accepted data volume, not by unreviewed logic.
 """
 from __future__ import annotations
@@ -108,6 +110,17 @@ SOURCE_SUFFIXES = (
     ".vue",
     ".svelte",
     ".astro",
+    ".blade.php",
+    ".j2",
+    ".jinja2",
+    ".twig",
+    ".volt",
+    ".erb",
+    ".ejs",
+    ".hbs",
+    ".mustache",
+    ".cshtml",
+    ".razor",
 )
 AGENT_HISTORY_LIMIT = 5
 L1_FIELDS = ("exports", "used_by", "related", "rules", "agent", "message")
@@ -215,6 +228,8 @@ _GROUP_DECL = re.compile(r"^\s*(func|type|var|const|class|def|fn|let|export|pub)
 _STRUCT_MEMBER = re.compile(r"^\s+[A-Za-z_*\[\]<>\"']\w*\s*(=|:|\[|\(|$)")
 _TYPE_DECL = re.compile(r"\s*type\s+\w+\s+(struct|interface)\b")
 _TODO_MARKER = re.compile(r"\b(TODO|FIXME|XXX|HACK|WIP)\b")
+# Rules: only the declarations a language requires above the module header are skipped; imports, attributes, and annotations stay code, so a header written after them is still reported.
+_DECLARATION_LINE = re.compile(r"^\s*(?:package|namespace|using)\b")
 _CODEISH_LINE = re.compile(
     r"(\{\s*$|;\s*$|:=|\breturn\b|\bif\b|\bfor\b|\bwhile\b|\bdefer\b|\bselect\b|\bswitch\b|\bcase\b|\berr\s*!=\s*nil\b|\bfunction\b|=>)"
 )
@@ -857,14 +872,51 @@ _register(
 )
 
 
+COMPOUND_SUFFIXES = (".blade.php",)
+
+
+def suffix_for(name: str) -> str:
+    """Return the scanned suffix for one file name.
+
+    Rules:   A compound suffix wins over its last component (`x.blade.php` is a Blade template, never PHP); matching is case-insensitive.
+    """
+    lowered = name.lower()
+    for suffix in COMPOUND_SUFFIXES:
+        if lowered.endswith(suffix):
+            return suffix
+    return Path(lowered).suffix
+
+
+_register(
+    (".blade.php",),
+    _profile("blade", (), (BlockMarker("{{--", "--}}"),), prefixes=("{{--", "--}}")),
+)
+_register(
+    (".j2", ".jinja2", ".twig", ".volt"),
+    _profile("jinja", (), (BlockMarker("{#", "#}"),), prefixes=("{#", "#}")),
+)
+_register(
+    (".erb", ".ejs"),
+    _profile("erb", (), (BlockMarker("<%#", "%>"),), prefixes=("<%#", "%>")),
+)
+_register(
+    (".hbs", ".mustache"),
+    _profile("handlebars", (), (BlockMarker("{{!", "}}"),), prefixes=("{{!", "}}")),
+)
+_register(
+    (".cshtml", ".razor"),
+    _profile("razor", (), (BlockMarker("@*", "*@"),), prefixes=("@*", "*@")),
+)
+
 EXPLICIT_SUFFIXES = frozenset(_profiles)
 
 
 def profile_for(path: Path) -> LanguageProfile:
     """Return the language profile for one scanned suffix.
 
-    Rules:   Suffix matching is case-insensitive (`.R`, `.C`); unknown suffixes get a generic profile so they never bypass the header check.
+    Rules:   Suffix matching is case-insensitive (`.R`, `.C`) and compound-aware (`.blade.php`); unknown suffixes get a generic profile so they never bypass the header check.
     """
-    return _profiles.get(path.suffix.lower()) or _profile(
-        path.suffix.lower().lstrip("."), ("#", "//"), (_C_BLOCK,)
+    suffix = suffix_for(path.name)
+    return _profiles.get(suffix) or _profile(
+        suffix.lstrip("."), ("#", "//"), (_C_BLOCK,)
     )

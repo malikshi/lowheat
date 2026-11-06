@@ -3,11 +3,10 @@
 exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase | class EverySuffixTestCase | class DialectContentTestCase | class CliEntryPointTestCase | language_header | language_fixture | prose_body
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   fx | unknown | 2026-10-31 | unknown | added regression tests for multiline block comments, trailing comments, incomplete agent entries, raw docstrings, unquoted CSS URLs, and example directives
-agent:   grok-4.6 | xai | 2026-10-31 | unknown | added HTML regressions for `/*` in markup and a header closing line with an agent entry, plus shebang coverage across Python, the JS family, and shell
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | added the every-suffix matrix, per-family directive exemption, lookalike corpus, and a subprocess CLI determinism test
 agent:   fx | unknown | 2026-11-05 | unknown | added the documented-CLI contract scan regression
 agent:   fx | unknown | 2026-11-06 | unknown | added regressions for upstream exports/used_by forms: a return type is not a symbol, every `|`-joined consumer is checked, an ASCII `->` is accepted
+agent:   fx | unknown | 2026-11-06 | unknown | added fixture rows for the template families and regressions for banner/declaration placement, AST exports, and the used_by import proof
 """
 
 from __future__ import annotations
@@ -90,6 +89,13 @@ class CodednaCheckTestCase(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             return self.checker.main(["--root", str(self.root), str(self.root)])
 
+    def run_main_output(self) -> str:
+        """Run the checker over the temporary root and return its printed findings."""
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            self.checker.main(["--root", str(self.root), str(self.root)])
+        return buffer.getvalue()
+
     def test_clean_module_reports_no_findings(self) -> None:
         self.assertEqual([], self.findings_for(CLEAN_MODULE))
 
@@ -133,6 +139,67 @@ class CodednaCheckTestCase(unittest.TestCase):
         self.write("src/kept.py", CLEAN_MODULE)
         text = CLEAN_MODULE.replace("used_by: none", "used_by: src/kept.py -> helper")
         self.assertEqual([], self.findings_for(text))
+
+    def test_export_name_only_in_a_string_is_reported(self) -> None:
+        text = CLEAN_MODULE.replace("exports: helper", "exports: ghost") + '\nMESSAGE = "ghost"\n'
+        findings = self.findings_for(text)
+        self.assertTrue(any("ghost" in finding for finding in findings), findings)
+
+    def test_license_banner_above_the_header_is_skipped(self) -> None:
+        banner = "// Copyright 2026 Acme. All rights reserved.\n// Use of this source code is governed by the MIT license.\n\n"
+        path = self.write("src/sample.go", banner + GO_CLEAN)
+        self.assertEqual([], self.checker.check_file(path, self.root))
+
+    def test_required_declaration_above_the_header_is_skipped(self) -> None:
+        cases = {
+            "src/sample.java": (
+                "package com.acme;\n\n" + language_header(".java", "//"),
+                "//",
+            ),
+            "src/sample.go": ("package main\n\n" + language_header(".go", "//"), "//"),
+            "src/sample.php": (
+                "<?php\nnamespace App;\n\n" + language_header(".php", "//"),
+                "//",
+            ),
+        }
+        for relative, (text, _marker) in cases.items():
+            with self.subTest(relative=relative):
+                self.assertEqual([], self.checker.check_file(self.write(relative, text), self.root))
+
+    def test_blade_compound_suffix_uses_the_template_profile(self) -> None:
+        text = language_header("x.blade.php", "{{--") + "\n<div>{{ $slot }}</div>\n"
+        path = self.write("src/sample.blade.php", text)
+        self.assertEqual([], self.checker.check_file(path, self.root))
+        self.assertEqual([], self.checker.check_comment_content(path))
+
+    def test_template_suffixes_are_scanned_in_a_directory(self) -> None:
+        for suffix, marker in ((".jinja2", "{#"), (".erb", "<%#"), (".hbs", "{{!"), (".razor", "@*")):
+            self.write(
+                "src/sample" + suffix,
+                language_header(suffix, marker) + "\n<p>{{ name }}</p>\n",
+            )
+        found = {path.name for path in self.checker.collect_source_files([self.root])}
+        self.assertEqual(
+            {"sample.jinja2", "sample.erb", "sample.hbs", "sample.razor"}, found
+        )
+
+    def test_used_by_consumer_must_import_the_module(self) -> None:
+        self.write("src/a.py", CLEAN_MODULE.replace("exports: helper", "exports: none"))
+        self.write(
+            "src/b.py", CLEAN_MODULE.replace("used_by: none", "used_by: src/a.py → helper")
+        )
+        output = self.run_main_output()
+        self.assertIn("used_by consumer does not import this module: src/a.py", output)
+
+    def test_used_by_omitted_importer_is_reported(self) -> None:
+        self.write("src/b.py", CLEAN_MODULE)
+        self.write(
+            "src/a.py",
+            CLEAN_MODULE.replace("exports: helper", "exports: none")
+            + "\n\nfrom src.b import helper\n",
+        )
+        output = self.run_main_output()
+        self.assertIn("used_by omits an importer: src/a.py", output)
 
     def test_agent_history_over_five_entries_is_reported(self) -> None:
         entries = "\n".join(
@@ -1264,15 +1331,38 @@ LANGUAGE_CASES = {
     ".vue": ("<!--", "<template><div></div></template>"),
     ".svelte": ("<!--", "<div></div>"),
     ".astro": ("<!--", "<div></div>"),
+    ".blade.php": ("{{--", "<div>{{ $slot }}</div>"),
+    ".j2": ("{#", "<p>{{ name }}</p>"),
+    ".jinja2": ("{#", "<p>{{ name }}</p>"),
+    ".twig": ("{#", "<p>{{ name }}</p>"),
+    ".volt": ("{#", "<p>{{ name }}</p>"),
+    ".erb": ("<%#", "<p><%= name %></p>"),
+    ".ejs": ("<%#", "<p><%= name %></p>"),
+    ".hbs": ("{{!", "<p>{{name}}</p>"),
+    ".mustache": ("{{!", "<p>{{name}}</p>"),
+    ".cshtml": ("@*", "<p>@Model.Name</p>"),
+    ".razor": ("@*", "<p>@Model.Name</p>"),
 }
 PHP_PROLOGUE = "<?php\n"
 PROSE_BODY = "helper keeps the ledger warm."
 
 
+BLOCK_CLOSERS = {
+    "(*": "*)",
+    "/*": "*/",
+    "<!--": "-->",
+    "{{--": "--}}",
+    "{#": "#}",
+    "<%#": "%>",
+    "{{!": "}}",
+    "@*": "*@",
+}
+
+
 def language_header(suffix: str, marker: str) -> str:
     """Return a well-formed L1 header in one dialect.
 
-    Rules:   Field order follows the contract; every fixture name matches its suffix so the header title is realistic.
+    Rules:   Field order follows the contract; every fixture name matches its suffix so the header title is realistic. A block-comment dialect opens and closes its own markers, and a template dialect keeps its fields inside the block.
     """
     name = "sample" + suffix
     fields = (
@@ -1281,13 +1371,15 @@ def language_header(suffix: str, marker: str) -> str:
         "rules:   none",
         "agent:   test-agent | 9router | 2026-10-08 | s_test | added sample",
     )
-    if marker == "(*":
-        return f"(* {name} — Example module used by the checker tests.\n" + "\n".join(fields) + "\n*)\n"
-    if marker == "/*":
-        return f"/* {name} — Example module used by the checker tests.\n" + "\n".join(fields) + "\n*/\n"
+    closer = BLOCK_CLOSERS.get(marker)
     if marker == "<!--":
         indented = "\n".join("     " + field for field in fields)
         return f"<!-- {name} — Example module used by the checker tests.\n{indented}\n-->\n"
+    if marker in ("{{--", "{#", "<%#", "{{!"):
+        indented = "\n".join("     " + field for field in fields)
+        return f"{marker} {name} — Example module used by the checker tests.\n{indented}\n{closer}\n"
+    if closer is not None:
+        return f"{marker} {name} — Example module used by the checker tests.\n" + "\n".join(fields) + f"\n{closer}\n"
     lines = [f"{marker} {name} — Example module used by the checker tests.", marker]
     return "\n".join(lines + [f"{marker} {field}" for field in fields]) + "\n\n"
 

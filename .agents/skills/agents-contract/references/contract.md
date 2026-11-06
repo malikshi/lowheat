@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-06.2
+Contract-Version: 2026-11-06.3
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.

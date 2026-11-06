@@ -2,6 +2,7 @@
 
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
+used_by: tests/test_codedna_check.py → mask_code [cascade]
 rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc, percent, or sigil literal never silences the rest of the file — a false opener must fail open. Block and line markers come from the language profile, never from a suffix test: a marker inside a literal is consumed by the literal first, and a line marker needs a code position so `https://` and `a//b` stay code.
 agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | restricted `/* */` to C-style profiles after an HTML page with `<b>provider/*</b>` masked the rest of the file as one block comment

@@ -1,15 +1,15 @@
 """codedna_headers.py — Parse module headers and report L1 drift with line numbers.
 
-exports: check_file
+exports: check_file | header_text | header_fields
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_file [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → header line zones [cascade]
 related: codedna_spec.py hosts the field tuples and regexes every check here reads.
-rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone; an `exports:` entry and a `used_by:` consumer are cut at the arrow before a name or a path is read, so `sym(sig) → type` yields the symbol.
-agent:   grok-4.6 | xai | 2026-10-31 | unknown | kept the closing line of a multi-line css/html header and skipped a leading `#!` in every dialect, so Python and Node shebangs never become the title line
+rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone; an `exports:` entry and a `used_by:` consumer are cut at the arrow before a name or a path is read, so `sym(sig) → type` yields the symbol; the header may sit below a license banner or a required declaration, but only a line carrying the em dash moves the start.
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | header collection now reads the profile's block markers and prologue, so block-only dialects (OCaml, F#, Lua) and `<?php` files parse; suffix checks are case-insensitive
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: directive banners below the title are skipped, doc-marker headers keep their fields, directive-only leading blocks no longer end the search
 agent:   fx | unknown | 2026-11-05 | unknown | split header start and collection helpers out of _header_entries
 agent:   fx | unknown | 2026-11-06 | unknown | exports and used_by now cut the arrow themselves, so an upstream `sym(sig) → type` export names the symbol and a `|`-joined used_by line loses no consumer
+agent:   fx | unknown | 2026-11-06 | unknown | skipped license banners and package/namespace prologues, and judged Python exports against the AST symbol set; added header_fields for the import proof
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import NamedTuple
 
+from codedna_python import module_symbols
 from codedna_spec import (
     AGENT_HISTORY_LIMIT,
     EM_DASH,
@@ -28,6 +29,7 @@ from codedna_spec import (
     _AGENT_SHAPE,
     _ARG_LIST,
     _ARROW_SPLIT,
+    _DECLARATION_LINE,
     _EXPORT_SPLIT,
     _FIELD_LINE,
     _LOOSE_DATE,
@@ -57,7 +59,7 @@ def check_file(path: Path, root: Path) -> list[str]:
     view = _header_view(path, text)
     if view is None:
         return ["missing L1 header"]
-    return _header_findings(view, root)
+    return _header_findings(view, root, path)
 
 
 def _header_view(path: Path, text: str) -> _HeaderView | None:
@@ -86,10 +88,10 @@ def _header_view(path: Path, text: str) -> _HeaderView | None:
     return _HeaderView(first_no, first_text, fields, labels, "\n".join(lines[header_last:]))
 
 
-def _header_findings(view: _HeaderView, root: Path) -> list[str]:
+def _header_findings(view: _HeaderView, root: Path, path: Path | None = None) -> list[str]:
     """Check one collected header against the L1 contract.
 
-    Rules:   A first line without the em dash stops the run — field drift below it cannot be trusted.
+    Rules:   A first line without the em dash stops the run — field drift below it cannot be trusted. The path lets a Python file judge exports against its real symbols instead of the body text.
     """
     if EM_DASH not in view.first_text:
         return [
@@ -109,7 +111,7 @@ def _header_findings(view: _HeaderView, root: Path) -> list[str]:
             findings.append(f"{view.first_no}: missing L1 field: {label}")
     findings.extend(
         f"{labels.get('exports', view.first_no)}: {finding}"
-        for finding in _exports_findings(view.fields.get("exports", []), view.exports_body)
+        for finding in _exports_findings(view.fields.get("exports", []), view.exports_body, path)
     )
     findings.extend(
         f"{labels.get('used_by', view.first_no)}: {finding}"
@@ -120,6 +122,19 @@ def _header_findings(view: _HeaderView, root: Path) -> list[str]:
         for finding in _agent_findings(view.fields.get("agent", []))
     )
     return findings
+
+
+def header_fields(path: Path) -> dict[str, list[str]]:
+    """Return the L1 field values of one file, empty when it carries no header.
+
+    Rules:   Empty also covers an unreadable file — the header check already reports that, and this reader adds evidence, never a second finding.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    view = _header_view(path, text)
+    return view.fields if view is not None else {}
 
 
 def header_text(path: Path, text: str) -> str:
@@ -138,18 +153,59 @@ def header_text(path: Path, text: str) -> str:
 def _header_start(profile: LanguageProfile, lines: list[str]) -> int:
     """Return the index where a leading header may begin.
 
-    Rules:   Skip a leading `#!` and the profile's prologue (`<?php`); blank lines before the title are skipped too. Stop at the first content line.
+    Rules:   Skip a leading `#!`, the profile's prologue (`<?php`), blank lines, a required declaration (`package`, `namespace`, `using`), and a license banner that carries no em dash. A banner is skipped only when a real header follows it; otherwise the first comment stays the start so the finding points at it.
     """
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("#!") or any(
+    total = len(lines)
+    index = 0
+    while index < total:
+        stripped = lines[index].strip()
+        if not stripped or stripped.startswith("#!") or any(
             stripped.startswith(item) for item in profile.prologue
         ):
+            index += 1
             continue
-        return index
-    return len(lines)
+        if _DECLARATION_LINE.match(stripped) and not profile.is_comment(stripped):
+            index += 1
+            continue
+        break
+    if index >= total:
+        return total
+    if profile.is_comment(lines[index].strip()):
+        banner_end = _banner_skip(profile, lines, index)
+        if banner_end is not None:
+            return banner_end
+    return index
+
+
+def _banner_skip(profile: LanguageProfile, lines: list[str], start: int) -> int | None:
+    """Return the first header line after a license banner, or None when there is none.
+
+    Rules:   Blank lines and declarations do not end a banner; a line carrying an em dash is the header; the first real code line ends the search with no candidate, and the scan stops after 40 lines. Only the title moves the start, so a header missing its em dash still reports at its own first line.
+    """
+    in_block = False
+    block_start = start
+    for index in range(start, min(len(lines), start + 40)):
+        stripped = lines[index].strip()
+        if not stripped:
+            continue
+        opened = _line_block_open(profile, lines[index], stripped)
+        line_in_block = in_block or opened is not None
+        is_comment = line_in_block or profile.is_comment(stripped)
+        closes = any(stripped.endswith(marker.close) for marker in profile.block_markers)
+        if opened is not None:
+            block_start = index
+            in_block = not opened[2]
+        elif in_block and closes:
+            in_block = False
+        if not is_comment:
+            if _DECLARATION_LINE.match(stripped):
+                continue
+            return None
+        if EM_DASH in stripped:
+            if index == start:
+                return None
+            return block_start if line_in_block else index
+    return None
 
 
 def _collect_header(
@@ -340,10 +396,10 @@ def _docstring_fields(doc: str, base: int):
     return fields, labels
 
 
-def _exports_findings(values: list[str], body: str) -> list[str]:
+def _exports_findings(values: list[str], body: str, path: Path | None = None) -> list[str]:
     """Check every named export appears in the file body.
 
-    Rules:   The body excludes the header/docstring itself — a symbol that only exists in exports: is absent. Drop the argument list and the return type after `->`/`→` per entry, so upstream's `sym(a, b) → type` form names the symbol instead of its type or its second argument.
+    Rules:   The body excludes the header/docstring itself — a symbol that only exists in exports: is absent. Drop the argument list and the return type after `->`/`→` per entry, so upstream's `sym(a, b) → type` form names the symbol instead of its type or its second argument. A parseable Python body is judged against its real public symbols, so a name that only appears in a string never satisfies exports:; an unparseable body falls back to the text probe.
     """
     findings: list[str] = []
     names: list[str] = []
@@ -355,6 +411,14 @@ def _exports_findings(values: list[str], body: str) -> list[str]:
             token = chunk.split()[-1].strip("(){}[];:,")
             if token and token not in _TYPE_WORDS:
                 names.append(token)
+    if path is not None and path.suffix.lower() == ".py":
+        symbols = module_symbols(body)
+        if symbols is not None:
+            return [
+                f"exports symbol absent from the file: {name}"
+                for name in names
+                if name not in symbols
+            ]
     for name in names:
         if not re.search(rf"\b{re.escape(name)}\b", body):
             findings.append(f"exports symbol absent from the file: {name}")

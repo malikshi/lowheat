@@ -31,15 +31,20 @@ supports comments. The checker covers Python, Go, JavaScript/JSX/mjs/cjs,
 TypeScript/TSX, Rust, shell (sh/bash/zsh), CSS, HTML/htm, C, C++, Objective-C,
 Objective-C++, C#, Java, Kotlin, Scala, Groovy, Swift, Ruby, PHP, Perl, Lua,
 Haskell, Elixir, Erlang, Clojure, Dart, SQL, PowerShell, batch, VB, F#, OCaml,
-R, Julia, Zig, Nim, Crystal, D, Solidity, HCL/Terraform, Fortran, Elm, and
-Vue/Svelte/Astro, with a safe generic fallback for any other commented source
-language. Do not annotate documentation, plain text, or commentless data
-formats: `.md`, `.tex`, `.rst`, `.txt`, `.json`, and similar.
+R, Julia, Zig, Nim, Crystal, D, Solidity, HCL/Terraform, Fortran, Elm,
+Vue/Svelte/Astro, and the template families Blade, Jinja2/Twig/Volt, ERB/EJS,
+Handlebars/Mustache, and Razor, with a safe generic fallback for any other
+commented source language. A compound suffix wins over its last component, so
+`page.blade.php` is scanned as Blade, not PHP. Do not annotate documentation,
+plain text, or commentless data formats: `.md`, `.tex`, `.rst`, `.txt`,
+`.json`, and similar.
 
 ## Module header (L1)
 
 Every source file begins with a module header written in the file's native
-comment syntax. Python uses the module docstring; Go, JavaScript, TypeScript,
+comment syntax, after any mandatory declaration the language requires above it
+(`package`, `namespace`, `using`, `<?php`) and after a license banner. Python
+uses the module docstring; Go, JavaScript, TypeScript,
 and Rust use leading `//` lines; shell uses leading `#` lines. Fields appear in
 this order:
 
@@ -153,17 +158,23 @@ lowheat checkout it is `.agents/skills/agents-contract/scripts/codedna_check.py`
 Skip the run when an install ships no script. With no flags it
 checks L1 headers (missing
 files/fields, `filename — description` form, field order, `used_by:` targets
-that do not exist, `exports:` names absent from the file body, agent-entry
-shape and the 5-entry cap) AND comment content (prose, commented-out code, TODO
+that do not exist, `exports:` names absent from the file body — judged against
+the Python AST when the file parses — agent-entry shape and the 5-entry cap)
+AND comment content (prose, commented-out code, TODO
 markers outside `Rules:`/`message:`), across the language set above (C, C++,
 Objective-C, C#, Java, Kotlin, Scala, Groovy, Swift, Ruby, PHP, Perl, Lua,
 Haskell, Elixir, Erlang, Clojure, Dart, SQL, PowerShell, batch, VB, F#, OCaml,
 R, Julia, Zig, Nim, Crystal, D, Solidity, HCL/Terraform, Fortran, Elm,
-Vue/Svelte/Astro, and the earlier suffix set), with line numbers on every
+Vue/Svelte/Astro, the template families above, and the earlier suffix set), with
+line numbers on every
 finding.
 `--skip-content` limits it to the header checks. It is line-based and errs toward
 reporting; a false positive is a signal that the comment belongs under
-`Rules:`/`message:`. When the scanned paths hold an `AGENTS.md`, it also lints
+`Rules:`/`message:`. A Python `used_by:` consumer is also proven against the
+import graph: a consumer that never imports the module is reported, and so is an
+importer the header omits — a consumer that loads the module by path with
+`importlib` is exempt from the proof. When the scanned paths hold an `AGENTS.md`,
+it also lints
 that document's Python examples against these rules.
 
 **Session end protocol.** At the end of every session that modifies files,
