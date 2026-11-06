@@ -3,11 +3,11 @@
 exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase | class EverySuffixTestCase | class DialectContentTestCase | class CliEntryPointTestCase | language_header | language_fixture | prose_body
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   unknown | unknown | 2026-10-16 | s_gapfix | added prose-above-Python-docstring regression test after fixing the header-zone gap in codedna_content.py
 agent:   fx | unknown | 2026-10-31 | unknown | added regression tests for multiline block comments, trailing comments, incomplete agent entries, raw docstrings, unquoted CSS URLs, and example directives
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | added HTML regressions for `/*` in markup and a header closing line with an agent entry, plus shebang coverage across Python, the JS family, and shell
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | added the every-suffix matrix, per-family directive exemption, lookalike corpus, and a subprocess CLI determinism test
 agent:   fx | unknown | 2026-11-05 | unknown | added the documented-CLI contract scan regression
+agent:   fx | unknown | 2026-11-06 | unknown | added regressions for upstream exports/used_by forms: a return type is not a symbol, every `|`-joined consumer is checked, an ASCII `->` is accepted
 """
 
 from __future__ import annotations
@@ -106,6 +106,33 @@ class CodednaCheckTestCase(unittest.TestCase):
         text = CLEAN_MODULE.replace("exports: helper", "exports: helper | vanished")
         findings = self.findings_for(text)
         self.assertTrue(any("vanished" in finding for finding in findings), findings)
+
+    def test_upstream_exports_form_names_symbols_not_return_types(self) -> None:
+        text = CLEAN_MODULE.replace(
+            "exports: helper", "exports: helper(flag) → int | other(flag) -> bool"
+        )
+        self.assertEqual([], self.findings_for(text + "\n\ndef other(flag) -> bool:\n    return True\n"))
+
+    def test_export_arguments_are_not_read_as_symbols(self) -> None:
+        text = CLEAN_MODULE.replace(
+            "exports: helper", "exports: helper(left, right) → int | vanish(left, right) → int"
+        )
+        findings = self.findings_for(text)
+        self.assertTrue(any("vanish" in finding for finding in findings), findings)
+        self.assertFalse(any("left" in finding or "right" in finding for finding in findings), findings)
+
+    def test_every_used_by_consumer_on_one_line_is_checked(self) -> None:
+        self.write("src/kept.py", CLEAN_MODULE)
+        text = CLEAN_MODULE.replace(
+            "used_by: none", "used_by: src/kept.py → helper | src/gone.py → helper"
+        )
+        findings = self.findings_for(text)
+        self.assertTrue(any("src/gone.py" in finding for finding in findings), findings)
+
+    def test_ascii_arrow_in_used_by_is_accepted(self) -> None:
+        self.write("src/kept.py", CLEAN_MODULE)
+        text = CLEAN_MODULE.replace("used_by: none", "used_by: src/kept.py -> helper")
+        self.assertEqual([], self.findings_for(text))
 
     def test_agent_history_over_five_entries_is_reported(self) -> None:
         entries = "\n".join(

@@ -5,12 +5,12 @@ used_by: .agents/skills/agents-contract/scripts/codedna_masking.py → LanguageP
 used_by: .agents/skills/agents-contract/scripts/codedna_headers.py → profiles and L1 constants [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → limits and label regexes [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → re-exports for tests and main [cascade]
-rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix. Suffix matching is case-insensitive. A suffix with two real languages takes one superset profile that never reports inside valid code.
+rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix. Suffix matching is case-insensitive. A suffix with two real languages takes one superset profile that never reports inside valid code. `->` and `→` are the same arrow: drop the return type before naming an export, and cut the symbol after it when resolving a used_by consumer.
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py verbatim: constants, regexes, and the 15 suffix profiles unchanged, and the _proflies typo is gone.
 agent:   fx | unknown | 2026-10-31 | unknown | tightened the agent-history regex to require session and note, and allowed raw/unicode Python docstring prefixes
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | replaced the suffix switch tables with explicit per-language profiles (line, word, and block markers) covering the declared language set
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: `#` after `{`/`$` and PHP `#[` stay code, Clojure character literals stay code, functional profiles drop the single-quote string form
-agent:   fx | unknown | 2026-11-05 | unknown | recorded why the 87-profile data module exceeds the soft size ceiling
+agent:   fx | unknown | 2026-11-06 | unknown | added _ARROW_SPLIT so upstream's `sym(sig) → type` exports and its `|`-separated used_by consumers parse; the consumed-suffix note lives in the message below
 message: The 87 suffix profiles are data, not branches. Keeping them in one module avoids import cycles between the masker, header parser, and content scanner; the file exceeds the 800-line soft ceiling by accepted data volume, not by unreviewed logic.
 """
 from __future__ import annotations
@@ -209,6 +209,8 @@ _PATH_LOOKING = re.compile(r"[/\\]|\.[A-Za-z0-9]{1,5}$")
 _PY_DOCSTRING = re.compile(r'^\s*(?:#[^\n]*\n)*\s*[rRuU]?("""|\'\'\')(.*?)\1', re.DOTALL)
 _PY_FENCE = re.compile(r"```python[ \t]*\n(.*?)```", re.DOTALL)
 _EXPORT_SPLIT = re.compile(r"[|,]")
+_ARROW_SPLIT = re.compile(r"→|->")
+_ARG_LIST = re.compile(r"\([^)]*\)")
 _GROUP_DECL = re.compile(r"^\s*(func|type|var|const|class|def|fn|let|export|pub)\b")
 _STRUCT_MEMBER = re.compile(r"^\s+[A-Za-z_*\[\]<>\"']\w*\s*(=|:|\[|\(|$)")
 _TYPE_DECL = re.compile(r"\s*type\s+\w+\s+(struct|interface)\b")

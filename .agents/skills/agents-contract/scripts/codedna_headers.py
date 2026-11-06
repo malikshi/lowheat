@@ -4,12 +4,12 @@ exports: check_file
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_file [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → header line zones [cascade]
 related: codedna_spec.py hosts the field tuples and regexes every check here reads.
-rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone.
-agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split out of codedna_check.py; check_file became view collection plus finding assembly, both under the 50-line rule.
+rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone; an `exports:` entry and a `used_by:` consumer are cut at the arrow before a name or a path is read, so `sym(sig) → type` yields the symbol.
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | kept the closing line of a multi-line css/html header and skipped a leading `#!` in every dialect, so Python and Node shebangs never become the title line
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | header collection now reads the profile's block markers and prologue, so block-only dialects (OCaml, F#, Lua) and `<?php` files parse; suffix checks are case-insensitive
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: directive banners below the title are skipped, doc-marker headers keep their fields, directive-only leading blocks no longer end the search
 agent:   fx | unknown | 2026-11-05 | unknown | split header start and collection helpers out of _header_entries
+agent:   fx | unknown | 2026-11-06 | unknown | exports and used_by now cut the arrow themselves, so an upstream `sym(sig) → type` export names the symbol and a `|`-joined used_by line loses no consumer
 """
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from typing import NamedTuple
 
 from codedna_spec import (
     AGENT_HISTORY_LIMIT,
-    ARROW,
     EM_DASH,
     L1_FIELDS,
     REQUIRED_L1,
@@ -27,6 +26,8 @@ from codedna_spec import (
     LanguageProfile,
     profile_for,
     _AGENT_SHAPE,
+    _ARG_LIST,
+    _ARROW_SPLIT,
     _EXPORT_SPLIT,
     _FIELD_LINE,
     _LOOSE_DATE,
@@ -342,13 +343,13 @@ def _docstring_fields(doc: str, base: int):
 def _exports_findings(values: list[str], body: str) -> list[str]:
     """Check every named export appears in the file body.
 
-    Rules:   The body excludes the header/docstring itself — a symbol that only exists in exports: is absent.
+    Rules:   The body excludes the header/docstring itself — a symbol that only exists in exports: is absent. Drop the argument list and the return type after `->`/`→` per entry, so upstream's `sym(a, b) → type` form names the symbol instead of its type or its second argument.
     """
     findings: list[str] = []
     names: list[str] = []
     for value in values:
-        for chunk in _EXPORT_SPLIT.split(value.split("->")[0]):
-            chunk = chunk.strip().strip("`")
+        for chunk in _EXPORT_SPLIT.split(_ARG_LIST.sub(" ", value)):
+            chunk = _ARROW_SPLIT.split(chunk, maxsplit=1)[0].strip().strip("`")
             if not chunk or chunk.lower() == "none":
                 continue
             token = chunk.split()[-1].strip("(){}[];:,")
@@ -363,11 +364,11 @@ def _exports_findings(values: list[str], body: str) -> list[str]:
 def _used_by_findings(values: list[str], root: Path) -> list[str]:
     """Check each used_by consumer path exists under root.
 
-    Rules:   Glob and template entries are out of scope; entry format is consumer_file → symbol(s).
+    Rules:   Glob and template entries are out of scope; entry format is consumer_file → symbol(s); `|` or `,` separates several consumers on one line, and every one of them is checked; an ASCII `->` marks the symbol boundary too.
     """
     findings: list[str] = []
-    for entry in [part for value in values for part in value.split(",")]:
-        target = entry.split(ARROW)[0].replace("[cascade]", "").strip()
+    for entry in [part for value in values for part in _EXPORT_SPLIT.split(value)]:
+        target = _ARROW_SPLIT.split(entry, maxsplit=1)[0].replace("[cascade]", "").strip()
         if not target or target.lower() == "none":
             continue
         if "*" in target or "<" in target:
