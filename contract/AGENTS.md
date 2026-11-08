@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-06.3
+Contract-Version: 2026-11-07.1
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -92,11 +92,9 @@ continue. The final report carries the compliance record defined below.
 
 ## Operating Principles
 
-This contract adapts guidance from `https://github.com/jbarbier/CLAUDE.md` (an
-influence, not a live bootstrap dependency), Karpathy behavioral guidelines
-from `https://github.com/multica-ai/andrej-karpathy-skills`, and ECC rule packs
-from `https://github.com/affaan-m/ECC`. Bias toward caution; use judgment on
-trivial tasks.
+This contract adapts guidance from CLAUDE.md (an influence, not a live
+dependency), Karpathy behavioral guidelines, and ECC rule packs (see Source
+Repositories). Bias toward caution; use judgment on trivial tasks.
 
 ### Task sizing
 
@@ -335,7 +333,7 @@ Run the smallest check that proves the change before claiming completion:
   `python3 install.py --check --harness <name>` is read-only and exits 1 on
   drift; refresh with `--force` only after reviewing what it will replace.
 - For Python source edits: the relevant `rtk pytest` targets, or
-  `python3 -m pytest` when RTK is unavailable.
+  `python3 -m pytest` (or `python3 -m unittest`) when RTK or pytest is unavailable.
 - For Go source edits: `rtk go build ./...` and `rtk go vet ./...`.
 - For browser-facing or user-facing work: test observable behavior and verify
   with the real interface when possible.
@@ -344,9 +342,9 @@ Run the smallest check that proves the change before claiming completion:
 
 ### Coding Style
 
-Core principles, adapted from the **Everything Claude Code** rule packs
-(`https://github.com/affaan-m/ECC`). Read them as starting posture, not
-universal law; relax what your task or agent surface does not need.
+Core principles, adapted from the **Everything Claude Code** rule packs (ECC).
+Read them as starting posture, not universal law; relax what your task or agent
+surface does not need.
 
 - **KISS** — simplest solution that works; clarity over cleverness.
 - **DRY** — extract repeated logic; introduce abstractions only when repetition

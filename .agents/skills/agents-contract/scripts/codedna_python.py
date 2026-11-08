@@ -6,13 +6,14 @@ used_by: .agents/skills/agents-contract/scripts/codedna_check.py → imports_of,
 related: codedna_headers.py owns the used_by path check; this module supplies the import graph behind it.
 rules:   Parse, never execute. An unparseable file yields None from module_symbols and no imports, so the caller falls back to text scanning instead of reporting drift it cannot prove. Only the declared direction is judged — a header never has to enumerate every public name. A used_by consumer is proven by a matching module import; a relative import resolves against the consumer's own package, and no symbol-level match is attempted.
 agent:   fx | unknown | 2026-11-06 | unknown | extracted the Python facts the checker was doing with regexes: ast symbol set and reverse-import graph
+agent:   antigravity | google | 2026-11-07 | 36039219-77f4-44e2-9830-d1fb34127935 | scoped bare import match to siblings and case-insensitive .py check via suffix_for
 """
 from __future__ import annotations
 
 import ast
 from pathlib import Path
 
-from codedna_spec import _ARROW_SPLIT, _EXPORT_SPLIT
+from codedna_spec import _ARROW_SPLIT, _EXPORT_SPLIT, suffix_for
 
 
 def _statements(nodes: list[ast.stmt]):
@@ -126,24 +127,28 @@ def importer_index(imports: dict[Path, set[str]]) -> dict[str, set[Path]]:
     return index
 
 
-def _matches(module: str, imported: str) -> bool:
-    """Judge one imported name as the target module or one of its submodules.
+def _matches(module: str, imported: str, target_path: Path, importer_path: Path) -> bool:
+    """Judge whether importer_path importing `imported` targets `module`.
 
-    Rules:   The scanned root may sit above the importing package, so a dotted-tail match counts; importing a submodule proves use of the module, but importing a parent package proves nothing about a child.
+    Rules:   Exact match or submodule import always matches; a dotted-tail match (`module.endswith("." + imported)`) matches if importer is a sibling in the same directory, or if `imported` has package depth matching under a top-level source directory. A bare name imported from a different directory never matches.
     """
-    return (
-        imported == module
-        or module.endswith("." + imported)
-        or imported.startswith(module + ".")
-    )
+    if imported == module or imported.startswith(module + "."):
+        return True
+    if module.endswith("." + imported):
+        if importer_path.parent == target_path.parent:
+            return True
+        if "." in imported:
+            return True
+    return False
 
 
-def _importers_of(module: str, index: dict[str, set[Path]]) -> set[Path]:
+def _importers_of(module: str, target_path: Path, index: dict[str, set[Path]]) -> set[Path]:
     """Return every file importing a module or one of its submodules."""
     found: set[Path] = set()
     for imported, paths in index.items():
-        if _matches(module, imported):
-            found |= paths
+        for importer in paths:
+            if _matches(module, imported, target_path, importer):
+                found.add(importer)
     return found
 
 
@@ -170,14 +175,14 @@ def used_by_findings(
         return []
     findings: list[str] = []
     declared_paths: set[Path] = set()
-    importers = _importers_of(module, index)
+    importers = _importers_of(module, path.resolve(), index)
     for entry in declared:
         for part in _EXPORT_SPLIT.split(entry):
             target = _ARROW_SPLIT.split(part, maxsplit=1)[0].replace("[cascade]", "").strip()
             if not target or target.lower() == "none":
                 continue
             consumer = (root / target).resolve()
-            if consumer.suffix != ".py" or not consumer.is_file():
+            if suffix_for(consumer.name) != ".py" or not consumer.is_file():
                 continue
             declared_paths.add(consumer)
             if consumer == path.resolve() or consumer in importers:

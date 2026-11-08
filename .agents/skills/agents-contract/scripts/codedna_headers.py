@@ -1,15 +1,16 @@
 """codedna_headers.py — Parse module headers and report L1 drift with line numbers.
 
 exports: check_file | header_text | header_fields
-used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_file [cascade]
-used_by: .agents/skills/agents-contract/scripts/codedna_content.py → header line zones [cascade]
+used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_file, header_fields [cascade]
+used_by: .agents/skills/agents-contract/scripts/codedna_content.py → _header_entries [cascade]
+used_by: tests/test_codedna_check.py → check_file, header_text, header_fields [cascade]
 related: codedna_spec.py hosts the field tuples and regexes every check here reads.
 rules:   Report-only — findings carry the line an agent edits; Python reads the module docstring, other languages the leading comment block; a missing L1 and a first line without the em dash stop the run instead of guessing below them; a leading `#!` is never the header title in any dialect; a css/html header keeps the line that carries its closing marker, so a field or agent entry written there stays in the header zone; an `exports:` entry and a `used_by:` consumer are cut at the arrow before a name or a path is read, so `sym(sig) → type` yields the symbol; the header may sit below a license banner or a required declaration, but only a line carrying the em dash moves the start.
-agent:   grok-4.6 | xai | 2026-10-31 | unknown | header collection now reads the profile's block markers and prologue, so block-only dialects (OCaml, F#, Lua) and `<?php` files parse; suffix checks are case-insensitive
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: directive banners below the title are skipped, doc-marker headers keep their fields, directive-only leading blocks no longer end the search
 agent:   fx | unknown | 2026-11-05 | unknown | split header start and collection helpers out of _header_entries
 agent:   fx | unknown | 2026-11-06 | unknown | exports and used_by now cut the arrow themselves, so an upstream `sym(sig) → type` export names the symbol and a `|`-joined used_by line loses no consumer
 agent:   fx | unknown | 2026-11-06 | unknown | skipped license banners and package/namespace prologues, and judged Python exports against the AST symbol set; added header_fields for the import proof
+agent:   antigravity | google | 2026-11-07 | 36039219-77f4-44e2-9830-d1fb34127935 | updated used_by consumers for check_file, header_fields, and _header_entries
 """
 from __future__ import annotations
 

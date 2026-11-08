@@ -5,11 +5,11 @@ used_by: tests/test_codedna_check.py → main, check_file, check_comment_content
 used_by: contract/AGENTS.md → CodeDNA editing protocol (checker mentions)
 related: codedna_spec.py, codedna_masking.py, codedna_headers.py, codedna_content.py hold the split implementation.
 rules:   Read-only — report findings carrying line numbers; never rewrite a file. The sibling imports need this directory on sys.path first — the bootstrap below stays above them for direct execution and for importlib path loading. Re-export every name the tests load; the split must stay invisible from the command line. A Python `used_by:` claim is proven against the import graph built over the scanned files, so a bare path that no import backs is reported; a consumer that loads the module by path with `importlib` is exempt from that proof.
-agent:   grok-build | xai | 2026-10-09 | 01a120bc-e75a-79c3-8ab4-e055948b9a83 | skipped tool-owned dirs below the scanned root, added --exclude, scanned Python # comments via tokenize, made Python finding lines absolute, exempted shell heredoc bodies, survived binary input, and after review made a false heredoc opener fail open and the terminator match bash exactly
 agent:   unknown | xai | 2026-10-14 | 01a1373b-7fa0-7851-ae9d-4cd27c951a27 | split the 1135-line scanner into codedna_spec, codedna_masking, codedna_headers, and codedna_content; this file is now the entry with the public surface unchanged
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | collect_source_files now lowercases the suffix so `.R`/`.C` files reach the profile map
 agent:   fx | unknown | 2026-11-05 | unknown | split contract-document linting out of main; exported surface unchanged
 agent:   fx | unknown | 2026-11-06 | unknown | main builds the Python import index once and reports used_by entries no import backs; source collection asks the profile map for a compound-aware suffix
+agent:   antigravity | google | 2026-11-07 | 36039219-77f4-44e2-9830-d1fb34127935 | linted AGENTS.md contract examples deduplicating duplicate root paths
 message: Keep this file thin — new scan logic belongs in the module named for its job, and tests load the entry by path, so re-check the sys.path bootstrap after any import edit.
 """
 from __future__ import annotations
@@ -63,13 +63,16 @@ def _check_contract_documents(
 ) -> tuple[int, int]:
     """Lint the Python examples in each scanned root's `AGENTS.md`.
 
-    Rules:   Only a root that directly holds `AGENTS.md` counts; a file already scanned as source is skipped; `--skip-content` skips contracts too. Return findings and document count for the summary line.
+    Rules:   Only a root that directly holds `AGENTS.md` counts; duplicate roots scan once; a file already scanned as source is skipped; `--skip-content` skips contracts too. Return findings and document count for the summary line.
     """
-    documents = [
-        item / "AGENTS.md"
-        for item in roots
-        if (item / "AGENTS.md").is_file()
-    ]
+    seen: set[Path] = set()
+    documents: list[Path] = []
+    for item in roots:
+        doc = item / "AGENTS.md"
+        resolved = doc.resolve()
+        if doc.is_file() and resolved not in seen:
+            seen.add(resolved)
+            documents.append(doc)
     total = 0
     for document in documents:
         if document in files or skip_content:

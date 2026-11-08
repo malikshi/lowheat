@@ -5,15 +5,15 @@ used_by: .agents/skills/agents-contract/scripts/codedna_masking.py → LanguageP
 used_by: .agents/skills/agents-contract/scripts/codedna_headers.py → profiles and L1 constants [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → limits and label regexes [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → re-exports for tests and main [cascade]
-used_by: .agents/skills/agents-contract/scripts/codedna_python.py → arrow and export regexes [cascade]
+used_by: .agents/skills/agents-contract/scripts/codedna_python.py → arrow, export regexes, and suffix_for [cascade]
 used_by: tests/test_codedna_check.py → profile_for, suffix_for [cascade]
 rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix. Suffix matching is case-insensitive. A suffix with two real languages takes one superset profile that never reports inside valid code. `->` and `→` are the same arrow: drop the return type before naming an export, and cut the symbol after it when resolving a used_by consumer. A compound suffix wins over its last component: `.blade.php` is Blade, never PHP.
-agent:   fx | unknown | 2026-10-31 | unknown | tightened the agent-history regex to require session and note, and allowed raw/unicode Python docstring prefixes
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | replaced the suffix switch tables with explicit per-language profiles (line, word, and block markers) covering the declared language set
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: `#` after `{`/`$` and PHP `#[` stay code, Clojure character literals stay code, functional profiles drop the single-quote string form
 agent:   fx | unknown | 2026-11-06 | unknown | added _ARROW_SPLIT so upstream's `sym(sig) → type` exports and its `|`-separated used_by consumers parse; the consumed-suffix note lives in the message below
 agent:   fx | unknown | 2026-11-06 | unknown | registered the Blade, Jinja/Twig/Volt, ERB/EJS, Handlebars/Mustache, and Razor families plus compound suffix resolution, so template headers parse instead of failing as PHP or going unscanned
-message: The 87 suffix profiles are data, not branches. Keeping them in one module avoids import cycles between the masker, header parser, and content scanner; the file exceeds the 800-line soft ceiling by accepted data volume, not by unreviewed logic.
+agent:   antigravity | google | 2026-11-07 | 36039219-77f4-44e2-9830-d1fb34127935 | updated suffix message count to 98
+message: The 98 suffix profiles are data, not branches. Keeping them in one module avoids import cycles between the masker, header parser, and content scanner; the file exceeds the 800-line soft ceiling by accepted data volume, not by unreviewed logic.
 """
 from __future__ import annotations
 

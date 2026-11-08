@@ -21,7 +21,7 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | `.agents/skills/agents-contract/references/contract.md` | Byte-identical mirror of `contract/AGENTS.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/codedna.md` | Byte-identical mirror of `contract/codedna.md`, written by `install.py` (do not edit directly) |
 | `.agents/skills/agents-contract/references/commands.md` | Byte-identical mirror of `contract/RTK.md`, written by `install.py` (do not edit directly) |
-| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 87 file suffixes, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
+| `.agents/skills/agents-contract/scripts/codedna_check.py` | CodeDNA checker — L1 header drift + out-of-contract comment content, 98 file suffixes, line-numbered (read-only). Skips tool-owned directories (`.claude`, `.codex`, `.commandcode`, editors) at any depth below the scanned path; `--exclude NAME` skips one more |
 | `tests/test_codedna_check.py` | Tests for the checker (`python3 -m pytest tests`) |
 | `tests/test_install.py` | Tests for the adapter registry, per-harness install shapes, Grok rules rendering, skill links, and all three mirrors |
 | `tests/test_docs.py` | Tests for contract thinness, version line, named companions, skill mirrors, and reference paths |

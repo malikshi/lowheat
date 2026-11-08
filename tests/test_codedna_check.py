@@ -3,10 +3,10 @@
 exports: class CodednaCheckTestCase | class ToolDirectoryTestCase | class LanguageHeaderTestCase | class FindingLineNumbersTestCase | class CommentContentTestCase | class ShellHeredocTestCase | class HeaderShapeTestCase | class MaskCodeEdgeTestCase | class EverySuffixTestCase | class DialectContentTestCase | class CliEntryPointTestCase | language_header | language_fixture | prose_body
 used_by: none
 rules:   Load the checker by file path — the skill directory name is not a Python package.
-agent:   grok-4.6 | xai | 2026-10-31 | unknown | added the every-suffix matrix, per-family directive exemption, lookalike corpus, and a subprocess CLI determinism test
 agent:   fx | unknown | 2026-11-05 | unknown | added the documented-CLI contract scan regression
 agent:   fx | unknown | 2026-11-06 | unknown | added regressions for upstream exports/used_by forms: a return type is not a symbol, every `|`-joined consumer is checked, an ASCII `->` is accepted
 agent:   fx | unknown | 2026-11-06 | unknown | added fixture rows for the template families and regressions for banner/declaration placement, AST exports, and the used_by import proof
+agent:   antigravity | google | 2026-11-07 | 36039219-77f4-44e2-9830-d1fb34127935 | tested AGENTS.md contract examples, header_text, and bare import isolation
 """
 
 from __future__ import annotations
@@ -201,6 +201,16 @@ class CodednaCheckTestCase(unittest.TestCase):
         output = self.run_main_output()
         self.assertIn("used_by omits an importer: src/a.py", output)
 
+    def test_bare_import_in_other_package_is_not_omitted_importer(self) -> None:
+        self.write("pkg_b/helper.py", CLEAN_MODULE)
+        self.write(
+            "pkg_a/app.py",
+            CLEAN_MODULE.replace("exports: helper", "exports: none")
+            + "\n\nimport helper\n",
+        )
+        output = self.run_main_output()
+        self.assertNotIn("used_by omits an importer: pkg_a/app.py", output)
+
     def test_agent_history_over_five_entries_is_reported(self) -> None:
         entries = "\n".join(
             f"agent:   test-agent | 9router | 2026-10-0{index} | s{index} | change {index}"
@@ -256,6 +266,17 @@ class CodednaCheckTestCase(unittest.TestCase):
         contract = Path(__file__).resolve().parents[1] / "contract" / "AGENTS.md"
         text = contract.read_text(encoding="utf-8")
         self.assertEqual([], self.checker.check_examples(text, "AGENTS.md"))
+
+    def test_exported_constants_and_header_text(self) -> None:
+        import codedna_spec
+        import codedna_headers
+
+        self.assertEqual("→", codedna_spec.ARROW)
+        self.assertEqual((".blade.php",), codedna_spec.COMPOUND_SUFFIXES)
+        py_text = codedna_headers.header_text(Path("sample.py"), CLEAN_MODULE)
+        self.assertIn("sample.py — Example module", py_text)
+        go_text = codedna_headers.header_text(Path("sample.go"), GO_CLEAN)
+        self.assertIn("sample.go — Example Go module", go_text)
 
     def test_comment_outside_the_permitted_content_is_reported(self) -> None:
         findings = self.checker.check_examples("```python\n# just a note\nvalue = 1\n```\n", "AGENTS.md")

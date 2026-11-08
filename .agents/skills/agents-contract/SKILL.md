@@ -103,7 +103,7 @@ Run the smallest check that proves the change:
 
 - docs/config: syntax check or targeted grep;
 - installed contract surface when the lowheat checkout is available: `python3 install.py --check --harness <name>` (read-only; `--force` refresh only after reviewing replacements);
-- Python: the relevant `rtk pytest` target, or `python3 -m pytest` without RTK;
+- Python: the relevant `rtk pytest` target, or `python3 -m pytest` (or `python3 -m unittest`) without RTK;
 - Go: `rtk go build ./...` and `rtk go vet ./...`;
 - browser/user-facing: exercise observable behavior.
 
