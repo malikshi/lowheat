@@ -1,6 +1,6 @@
 ---
 name: agents-contract
-description: MANDATORY bootstrap for every task under the repository's AGENTS.md operating contract — load before the first tool call; covers the 7-step Work Loop, task sizing, CodeDNA annotations, testing and security gates, code review, and git session trailers.
+description: MANDATORY bootstrap for every task under the repository's AGENTS.md operating contract — load before any task tool call; covers the 7-step Work Loop, task sizing, CodeDNA annotations, testing and security gates, code review, and git session trailers.
 ---
 
 # Agents Contract — execution checklist
@@ -12,14 +12,14 @@ Load the reference section when a step needs detail.
 - `references/commands.md` — RTK catalogue, byte-identical to `RTK.md`.
 - Companions `caveman.md`, `ponytail.md`, `semble.md`, `loop.md` sit beside `AGENTS.md`; this skill does not duplicate them.
 
-## 0. Startup gate (before any tool call)
+## 0. Startup gate (before any task tool call)
 
-1. **Load this skill.** If acting without it, load it now. If the harness cannot load it, read `.agents/skills/agents-contract/SKILL.md` when present; otherwise state `skill unavailable` in the compliance record and follow the contract.
+1. **Load this skill.** If acting without it, load it now. If the harness cannot load it, read `.agents/skills/agents-contract/SKILL.md` when present; otherwise state `skill unavailable` in the compliance record and follow the contract. Loading this skill or reading its tracked `SKILL.md` may be the first tool call; do not run any task tool call before it.
 2. **State the task size**: `small`, `medium`, or `large`, with the one-line reason when the call is not obvious.
 3. **State the command lane**: RTK-wrapped by default; raw only for exact bytes, parseable output, streaming, or secrets, with the reason.
 4. **Check installed surfaces** after any contract/skill edit when the lowheat checkout is available: `python3 install.py --check --harness <name>` (read-only; exit 1 on drift). After a refresh, restart the harness or session so it reloads instruction and skill metadata.
 
-Starting with a tool call before steps 1–3 is non-compliant. Stop, perform them, then continue.
+Starting task work before steps 1–3 is non-compliant. Stop, perform them, then continue.
 
 ## 1. Work Loop
 
@@ -63,14 +63,14 @@ Apply to every source file whose language supports comments; do not annotate `.m
 - **L2 function** — every public function carries a `Rules:` block unless trivial with no domain constraint. Auth, data, money, and external boundaries list every invariant and edge case.
 - **Inline** — `# Rules:` / `# message:` only above non-obvious business rules, step-order dependencies, or edge cases. Skip simple getters and obvious code.
 
-Read headers first: `exports:` as rename/removal guards, `used_by:`/`related:` for scope, `rules:` as constraints, `agent:` as history. On edit, keep `exports:` accurate, append one `agent:` line, drop the oldest beyond five, and run this skill's `scripts/codedna_check.py` after annotation changes. Resolve the path from the skill directory the harness reports; never `find /` for it. Skip the run when the install ships no script.
+Read headers first: `exports:` as rename/removal guards, `used_by:`/`related:` for scope, `rules:` as constraints, `agent:` as history. On edit, keep `exports:` accurate, delete non-CodeDNA comments in functions or blocks you edit, append one `agent:` line, drop the oldest beyond five, and run this skill's `scripts/codedna_check.py` after annotation changes. Resolve the path from the skill directory the harness reports; never `find /` for it. Skip the run when the install ships no script.
 
 ## 5. Engineering standards
 
 - **Definition of Done.** Named identifiers, no magic numbers; functions <50 lines; cohesive files within the 800-line soft ceiling; nesting <4 levels; explicit error handling; no secrets; boundary validation; no debug or dead code; no non-CodeDNA comments; tests for new behavior and the project's coverage threshold; smallest change; evidence per §8.
 - **Coding style.** KISS, DRY, YAGNI. Prefer new objects for shared state, domain models, and concurrent code; local accumulators are fine. Organize by feature/domain (200–400 lines typical, 800 soft ceiling; test/generated/vendored files may exceed it). Handle errors at every level, never swallow. Validate external input at boundaries, schema-based where available, fast fail with clear messages. Names describe the thing; language idiom wins over defaults (variables `camelCase`, booleans `is/has/should/can`, types `PascalCase`, constants `UPPER_SNAKE_CASE`, tests `snake_case`).
 - **Testing.** Task sizing decides whether tests exist; the suite-wide coverage floor uses the project's threshold, defaulting to 80% only when none exists. Unit, integration, and E2E apply where relevant; E2E only for critical user-facing flows. Gate tests are fast, local, every change, never flaky; periodic evals are paid/slow, before ship, with a pass threshold. TDD where a test is written; AAA structure; descriptive names. On failure: isolation → mocks → implementation, not the test unless the test is wrong.
-- **Security.** Before commit: no hardcoded secrets; validate input; prevent SQLi (parameterized queries) and XSS (sanitize HTML); enable CSRF; verify authn/authz; rate-limit appropriate surfaces; never leak sensitive data in errors. On exposure: stop, identify, fix, rotate, review. STOP triggers require an independent security-scoped review before proceeding: auth, user input, database queries, file operations, external APIs, crypto, payments. A CRITICAL or HIGH finding blocks the commit.
+- **Security.** Before commit: no hardcoded secrets; validate input; prevent SQLi (parameterized queries) and XSS (sanitize HTML); enable CSRF; verify authn/authz; rate-limit appropriate surfaces; never leak sensitive data in errors. On exposure: stop, identify, fix, rotate, review. STOP triggers require an independent security-scoped review before proceeding when a code or config change touches: auth, untrusted user input, database queries, path-dynamic or privileged file system operations, external APIs, crypto, payments. A CRITICAL or HIGH finding blocks the commit.
 
 ## 6. Code review
 

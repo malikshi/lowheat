@@ -3,11 +3,11 @@
 exports: class DocsTestCase
 used_by: none
 rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and reference companions by name rather than importing them; every reference path the skill names must exist, and the skill and contract must agree on precedence, gates, trailers, and the compliance record.
-agent:   fx | unknown | 2026-10-31 | unknown | added after the thin-contract restructure to catch missing companions, stale mirrors, and the return of @ imports
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the session-bootstrap, RTK, and compliance-record gates in contract and skill
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the loop companion gates and six-companion contract
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the project rulebook boundary and its exclusion from installed companions
 agent:   grok-4.5 | xai | 2026-11-06 | 01a1add5-9f8f-7f01-ac4b-21d24f6dceaa | pinned skill precedence, rulebook gates, rejected-attempt trailer, and local review enum
+agent:   gemini-4-argon | google | 2026-11-08 | d7c52693-a719-48d1-a0fd-1ef0caadf691 | pinned bootstrap tool-call ordering, loop Work Loop mapping and revert/retry rules, and scoped comment/STOP gates
 """
 
 from __future__ import annotations
@@ -68,7 +68,13 @@ class DocsTestCase(unittest.TestCase):
 
         for marker in (
             "Step 0",
+            "Work Loop 1",
+            "Work Loop 2–3",
+            "CodeDNA headers",
             "Three attempts maximum",
+            "pre-unit state",
+            "fresh three-attempt budget",
+            "5 Merge, then review",
             "UNIT:",
             "cost to undo",
             "project-owned `RULES.md`",
@@ -77,6 +83,7 @@ class DocsTestCase(unittest.TestCase):
         ):
             self.assertIn(marker, loop)
         self.assertNotIn("drops the gist's `RULES.md`", loop)
+        self.assertNotIn("5 Self-review", loop)
 
     def test_project_rulebook_is_documented_but_not_installed(self) -> None:
         contract = AGENTS.read_text(encoding="utf-8")
@@ -157,6 +164,10 @@ class DocsTestCase(unittest.TestCase):
             self.assertIn(marker, contract)
         for marker in ("Startup gate", "RTK gate", "Compliance record"):
             self.assertIn(marker, skill)
+        self.assertIn("before any task tool call", contract)
+        self.assertIn("before any task tool call", skill)
+        self.assertIn("functions or blocks you edit", contract)
+        self.assertIn("path-dynamic or privileged file system operations", contract)
         self.assertIn("MANDATORY", skill.split("---", 2)[1])
 
     def test_skill_reference_paths_exist(self) -> None:

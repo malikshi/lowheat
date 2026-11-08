@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-08.1
+Contract-Version: 2026-11-08.3
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -69,13 +69,14 @@ identical bytes needs `python3 install.py --check` against the checkout, with
 ### Session bootstrap (mandatory)
 
 This gate sits below the harness system prompt and the user's current request in
-Precedence. Within those limits, before the first tool call of any task:
+Precedence. Within those limits, at task start and before any task tool call:
 
 1. **Load the `agents-contract` skill.** Its checklist is the executable form of
    this file. If the harness cannot load it, read the tracked
    `.agents/skills/agents-contract/SKILL.md` when present; otherwise state
-   `skill unavailable` and follow this file. Do not begin with a tool call and
-   load it later.
+   `skill unavailable` and follow this file. Loading this skill or reading its
+   tracked `SKILL.md` may be the first tool call; do not run any task tool call
+   before it.
 2. **State the task size** in one line: `small`, `medium`, or `large`.
 3. **State the command lane.** RTK-wrapped is the default; raw is allowed only
    for exact bytes, parseable output, streaming, or secrets, and the reason must
@@ -392,8 +393,8 @@ the audit log. Full convention: `codedna.md`.
   business rules, step-order dependencies, and edge cases. Skip obvious code.
 - **Maintain as you edit.** Update `rules:` when you learn a constraint, append
   one `agent:` line per session, and run the skill's `codedna_check.py` after
-  annotation edits. Delete non-CodeDNA comments in code you touch; this is the
-  one exception to Surgical changes.
+  annotation edits. Delete non-CodeDNA comments in functions or blocks you edit;
+  this is the one exception to Surgical changes.
 
 ### Testing Requirements
 
@@ -442,8 +443,9 @@ exposed secret, credential, or entry point. Fix the vulnerability before
 continuing. Rotate any exposed secrets. Review the codebase for similar issues.
 
 **STOP triggers — an independent review, security-scoped, runs before
-proceeding** when the change touches: authentication or authorization, user
-input handling, database queries, file system operations, external API calls,
+proceeding** when a code or config change touches: authentication or
+authorization, untrusted user input handling, database queries,
+path-dynamic or privileged file system operations, external API calls,
 cryptographic operations, or payment/financial code. Scope it with the mandatory
 checks above and the touched surface; a CRITICAL or HIGH finding blocks the
 commit. Code Review Standards defines the reviewer and the recording rule.
@@ -499,11 +501,13 @@ next; discovery is never blocked on an install. Full detail: `semble.md` and
 Replies default to terse caveman mode: answer first (`[thing] [action] [reason].
 [next step].`), no greeting or recap, fragments fine. Meaning never drops —
 *not*, *never*, *only*, numbers, and units stay exact; code, commands, paths,
-and error text stay verbatim. Use full sentences for security warnings,
-irreversible actions, order-sensitive steps, and confused users. Anything
-persisted outside chat keeps normal prose. Commit messages and review findings
-have their own formats. Full rules, modes, and the optional read-compression
-layer: `caveman.md`.
+and error text stay verbatim. Tables, diagrams, and code blocks carry dense
+technical payload where they explain faster than prose — for example, a
+per-item comparison table rather than a sentence per item; keep surrounding
+text terse. Use full sentences for security warnings, irreversible actions,
+order-sensitive steps, and confused users. Anything persisted outside chat
+keeps normal prose. Commit messages and review findings have their own formats.
+Full rules, modes, and the optional read-compression layer: `caveman.md`.
 
 ### Git Workflow
 

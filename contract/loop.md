@@ -24,7 +24,7 @@ not kept as a second ledger.
   checkout over, or delete unrelated changes. Use an isolated worktree or branch
   for an experiment that may need to be discarded.
 
-## Step 0 — Write the check first
+## Step 0 — Write the check first (Work Loop 1)
 
 Before changing code, write the pass condition as something a program can
 evaluate:
@@ -41,9 +41,11 @@ report `NEEDS_CONTEXT` or name the manual evidence that will settle it.
 
 Record the check in the plan. A check that cannot fail is not a check.
 
-## Step 1 — Split into units
+## Step 1 — Read and split into units (Work Loop 2–3)
 
-Cut the task into the smallest independent units. Every unit carries one card:
+Read the files you will touch, their CodeDNA headers, and their tests first,
+then cut the task into the smallest independent units. Every unit carries one
+card:
 
 ```text
 UNIT:    what this unit delivers
@@ -64,14 +66,17 @@ WRITES:  the paths this unit may change
 - Use an isolated context or worktree only for a unit that is independent and
   has a disjoint write set; never isolate a unit that shares files or state.
 
-## Step 2 — Run one unit
+## Step 2 — Run one unit (Work Loop 4)
 
 For each unit: make one change, run its fixed check, keep it if it passes, revert
 it if it does not.
 
 - Keep the change inside the unit's write set. If it reaches another unit, stop
   and fix the split.
-- Revert only this unit's change; preserve user work and other units.
+- Revert only this unit's change; preserve user work and other units. When a
+  file in `WRITES` already holds user edits, snapshot or diff its pre-unit state
+  before editing so a revert restores that exact pre-unit state instead of
+  discarding user work.
 - **Three attempts maximum per behavior unit.** Count one attempt each time a
   newly changed hypothesis fails the same check. After the third failure, stop:
   report `UNIT`, `VERDICT`, `REASON`, `EVIDENCE`, and the proposed new plan. Do
@@ -81,7 +86,7 @@ it if it does not.
 - Record rejected attempts in the final report and in the `AI-Rejected:` commit
   trailer. Do not create a separate attempt ledger.
 
-## Step 3 — Merge with code
+## Step 3 — Merge with code (Work Loop 5)
 
 Merge and compare with scripts, not with model judgment. Spend reasoning only on
 steps that judge or decide.
@@ -103,15 +108,16 @@ NEXT:    one concrete changed hypothesis, or a plan change
   edge and a unit; do not silently widen an old one. A passed unit whose inputs
   an edge changes is not redone: its output no longer satisfies the new input,
   so that unit's check is re-run against the new input; if it now fails, it
-  returns through the failure shape above.
+  returns through the failure shape above with a fresh three-attempt budget
+  for that new input, once per input change.
 
-## Step 4 — Review the merged result
+## Step 4 — Review the merged result (Work Loop 5)
 
 Run the self-review in `AGENTS.md` → Definition of Done. A shared branch, a
 merge, or a STOP trigger also gets the independent review. Review against the
 unit cards and the check, not against the model's confidence.
 
-## Step 5 — Gate by cost to undo
+## Step 5 — Gate by cost to undo (Work Loop 6)
 
 Sort every remaining change by what it costs to undo:
 
@@ -125,7 +131,7 @@ Sort every remaining change by what it costs to undo:
 push. Commit and push need the approval `AGENTS.md` already requires. Confidence
 never overrides an irreversible gate.
 
-## Step 6 — Learn one rule
+## Step 6 — Learn one rule (Work Loop 7)
 
 When a fix passes, write its cause in the right home:
 
@@ -146,7 +152,7 @@ is a local consequence, not a copy. Remove a line in the same commit that makes
 it false. Git remains the audit log; rejected attempts go in the final report and
 the `AI-Rejected:` trailer.
 
-## Step 7 — Stop and report
+## Step 7 — Stop and report (Work Loop 7)
 
 Stop when the check passes, after two consecutive rounds with no new evidence,
 or when the agreed time, token, or tool-call budget runs out. A round is one full
@@ -169,10 +175,10 @@ compliance record from `AGENTS.md` in the same report.
 | Work Loop step | This companion |
 |---|---|
 | 1 Understand | Step 0: machine-evaluable pass condition |
-| 2 Read first | Step 1: INPUT and WRITES cards require reading the touched files first |
+| 2 Read first | Step 1: read touched files, CodeDNA headers, and tests before carding |
 | 3 Plan | Step 1: unit cards, edges, parallel boundaries |
 | 4 Implement with TDD | Step 2: change → check → keep/revert, three attempts |
-| 5 Self-review | Steps 3–4: deterministic merge, failure return, review |
+| 5 Merge, then review | Steps 3–4: deterministic merge, failure return, review |
 | 6 Prove it | Step 5: check plus undo-cost gate |
 | 7 Report and record | Steps 6–7: learned rule, stop conditions, final report |
 

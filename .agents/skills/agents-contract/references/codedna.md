@@ -15,9 +15,9 @@ exist in source files — no explanatory prose, no commented-out code, no
 single-line summary of what the file or function does, the L1 fields, L2
 `Rules:` blocks, and inline `Rules:`/`message:`; in Python the summary line and
 the `Rules:` block live in the docstring. Constraints go in `rules:`/`Rules:`;
-open items go in `message:`. Delete every non-CodeDNA comment in the code you
-touch — this is the one exception to the Surgical-changes rule and the
-trace-back requirement.
+open items go in `message:`. Delete every non-CodeDNA comment in the functions
+or blocks you edit — this is the one exception to the Surgical-changes rule and
+the trace-back requirement.
 Tool directives and license headers (`//go:build`, linter pragmas, type-ignore
 comments, SPDX lines) are exempt — they are code, not comments. User-visible
 documentation strings are exempt on the same footing: CLI help text, API and
