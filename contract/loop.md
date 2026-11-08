@@ -100,7 +100,10 @@ NEXT:    one concrete changed hypothesis, or a plan change
 ```
 
 - Keep passed units untouched. If the merge exposes a new dependency, add an
-  edge and a unit; do not silently widen an old one.
+  edge and a unit; do not silently widen an old one. A passed unit whose inputs
+  an edge changes is not redone: its output no longer satisfies the new input,
+  so that unit's check is re-run against the new input; if it now fails, it
+  returns through the failure shape above.
 
 ## Step 4 — Review the merged result
 
