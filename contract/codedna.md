@@ -222,9 +222,13 @@ python3 .agents/skills/agents-contract/scripts/comment_budget.py . --update
 ```
 
 `comments` counts permitted annotation lines; `open_notes` counts `message:` lines,
-the genuinely unresolved items. `--update` writes the observed numbers and refuses
-to raise either one without `--force`, and it refuses a baseline it cannot read
-rather than creating one — an unreadable file must never become a free reset. CI
+the genuinely unresolved items. In a project with no baseline yet,
+`--bootstrap --template-dir <lowheat-checkout>/docs` creates one seeded with the
+current counts plus the ADR and debt templates. It never overwrites an existing
+file; `--update` still never creates one, so creating a baseline stays a separate,
+visible action and the ratchet is unchanged. `--update` refuses to raise either
+number without `--force`, and it refuses a baseline it cannot read rather than
+creating one — an unreadable file must never become a free reset. CI
 also compares the checked-in baseline against the base commit with `--against`,
 so editing the JSON upward fails the run even without `--update`. `--force` is a
 deliberate, reviewed exception and belongs in the pull request body. The

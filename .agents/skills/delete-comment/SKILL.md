@@ -1,6 +1,6 @@
 ---
 name: delete-comment
-description: Repeatable comment audit for this repository — inventory every comment, grade it Tautology / Excuse / Stale / Decision Record, delete or relocate it, then lower the annotation budget. Use when asked to audit comments, delete comments, clean up comment debris, or shrink the comment budget.
+description: Repeatable comment audit for any project — inventory every comment, grade it Tautology / Excuse / Stale / Decision Record, delete or relocate it, then lower the annotation budget. Use when asked to audit comments, delete comments, clean up comment debris, or shrink the comment budget.
 ---
 
 # Delete Comment
@@ -8,19 +8,44 @@ description: Repeatable comment audit for this repository — inventory every co
 Run this pass over a path. It is idempotent: running it on a clean tree changes
 nothing and reports `0`.
 
-Read `contract/codedna.md` → **Comment audit** first. This skill is the executable
-form of that section.
+Resolve the checker path from the harness skill directory the agent was given —
+do not guess a repo-relative path and never search the filesystem for it. Call it
+`CHECKER` below, e.g.
+`~/.claude/skills/agents-contract/scripts/comment_budget.py` for Claude Code or
+`.agents/skills/agents-contract/` for the central fallback. For an installed
+skill, the docs templates live at `SKILL_DIR/../docs` (the lowheat checkout's
+`docs/` directory), because user scope links the skill into each harness.
+
+Read `contract/codedna.md` → **Comment audit** when that file exists. Outside
+lowheat it will not; the four categories below are the complete rule, so continue
+without it.
 
 ## 0. Establish the baseline
 
 ```bash
-python3 .agents/skills/agents-contract/scripts/comment_budget.py <paths> \
+python3 "$CHECKER" <paths> --baseline docs/comment-budget.json
+```
+
+**First run in a project without `docs/`, or with no readable baseline:** bootstrap
+explicitly, then continue. This is the only command allowed to create a baseline.
+
+```bash
+python3 "$CHECKER" <paths> --bootstrap \
+  --template-dir <lowheat-checkout>/docs \
   --baseline docs/comment-budget.json
 ```
 
-Both numbers must already pass. If `comments` or `open_notes` exceeds the baseline,
-stop: the tree is failing CI for a reason unrelated to this audit and a later
-subtraction would hide it.
+It creates `docs/comment-budget.json` seeded with the *current* counts,
+`docs/adr/0000-template.md`, `docs/adr/README.md`, and `docs/comment-debt.md`.
+It never overwrites an existing file, and it refuses to touch an unreadable
+baseline — a corrupt file may hold a real ceiling. Re-running it reports
+`bootstrap already complete`. If `<lowheat-checkout>/docs` is not available,
+create those four files by hand with the same names and seed the JSON with
+`{"version": 1, "comments": <count>, "open_notes": <count>}`.
+
+On every later run the baseline must already exist and both numbers must pass.
+If `comments` or `open_notes` exceeds it, stop: the tree is over budget and a
+later subtraction would hide that.
 
 ## 1. Inventory
 
@@ -79,8 +104,7 @@ skill.
 ## 4. Lower the budget
 
 ```bash
-python3 .agents/skills/agents-contract/scripts/comment_budget.py <paths> \
-  --baseline docs/comment-budget.json --update
+python3 "$CHECKER" <paths> --baseline docs/comment-budget.json --update
 ```
 
 `--update` writes the new, lower numbers. It refuses to raise either number; if it
@@ -94,15 +118,23 @@ even without `--update`.
 ## 5. Verify
 
 ```bash
-python3 .agents/skills/agents-contract/scripts/codedna_check.py <paths>    # exit 0
-python3 .agents/skills/agents-contract/scripts/comment_budget.py <paths> \
-  --baseline docs/comment-budget.json                                      # exit 0
-python3 -m pytest tests -q --cov                                           # exit 0, 80% floor
+BAN_CHECKER="$(dirname "$CHECKER")/codedna_check.py"
+python3 "$BAN_CHECKER" <paths>                                              # exit 0
+python3 "$CHECKER" <paths> --baseline docs/comment-budget.json             # exit 0
 ```
 
+Run the project's own test command with its own coverage floor, if it has one;
+the `pytest tests -q --cov` line in lowheat's CI is not portable to project A.
+
+`codedna_check.py` reports missing L1 headers too. A project that never adopted
+CodeDNA will fail that check on every source file; this audit does not fix that.
+Report the count as a pre-existing condition and leave the headers alone unless
+the user asked to adopt CodeDNA. The budget check passing is the gate for this
+skill's own change.
+
 Report three numbers — comments deleted, ADRs written, debt rows filed — and the
-baseline before and after. A pass that reports zero deletions on a tree this clean
-is the expected result, not a failed audit.
+baseline before and after. A first run that only bootstraps and deletes nothing is
+the expected result, not a failed audit.
 
 ## Grading examples
 
