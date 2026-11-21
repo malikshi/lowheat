@@ -2,12 +2,13 @@
 
 exports: check_comment_content | check_examples
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → check_comment_content and check_examples [cascade]
+used_by: .agents/skills/agents-contract/scripts/comment_budget.py → _comment_bodies and _is_directive_body [cascade]
 rules:   Permitted content is fixed: a declaration summary, L1 field lines, Rules:/message: lines and their continuations; the scan is line- and span-based and errs toward reporting — a false positive means the comment belongs under Rules:/message:. Data lines (heredoc bodies) are never comments, and a first-line `#!` is a shebang in every dialect.
-agent:   unknown | unknown | 2026-10-16 | s_gapfix | killed the Python header-zone exemption: docstring-adjacent `#` prose and TODO markers report now; probes confirmed non-Python string masking already correct.
 agent:   fx | unknown | 2026-10-31 | unknown | added span-derived comment bodies so trailing and multiline comments reach the classifier; tool directives and raw binary input stay exempt
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | exempted a first-line `#!` in every dialect after Python probe scripts reported their shebang as prose
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | comments now come from profile-derived spans only, so a marker at the start of a multi-line string line is code; doc markers and reconstructed directives are exempt
 agent:   fx | unknown | 2026-11-05 | unknown | split Python content scanning out of check_comment_content
+agent:   unknown | nexrouter | 2026-11-21 | unknown | exposed _comment_bodies and _is_directive_body to comment_budget.py and declared the consumer
 message: The scan is line- and span-based: a permitted summary line needs a declaration below it, and when unsure it reports. Known gaps: heredoc and here-string bodies outside shell (Ruby, Perl, PHP, PowerShell) can read as comments; an unterminated shell heredoc body reports as prose, because a missing terminator must never silence the rest of the file. In contract examples, repeat a field label on every docstring line after the summary.
 """
 from __future__ import annotations

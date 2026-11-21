@@ -67,13 +67,14 @@ class InstallerTestCase(unittest.TestCase):
         for spec in install.SPECS:
             if not spec.global_install or not spec.skill_dir:
                 continue
-            with self.subTest(harness=spec.name):
-                base = self.home / spec.config_dir
-                target = base / spec.skill_dir / install.SKILL_DIR.name
-                if spec.copy_skill:
-                    self.assertEqual(install.SKILL_DIR, plans[spec.name].dirs[target])
-                else:
-                    self.assertEqual(install.SKILL_DIR, plans[spec.name].links[target])
+            for skill in install.SKILL_DIRS:
+                with self.subTest(harness=spec.name, skill=skill.name):
+                    base = self.home / spec.config_dir
+                    target = base / spec.skill_dir / skill.name
+                    if spec.copy_skill:
+                        self.assertEqual(skill, plans[spec.name].dirs[target])
+                    else:
+                        self.assertEqual(skill, plans[spec.name].links[target])
 
     def test_codex_opencode_factory_kilo_pi_and_cline_get_contracts(self) -> None:
         plans = install.plan_harnesses(self.home)
@@ -364,6 +365,34 @@ class InstallerTestCase(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertTrue(skill.is_symlink())
         self.assertFalse(skill.with_name(skill.name + ".bak").exists())
+
+    def test_every_repo_skill_is_installed_not_just_the_contract_skill(self) -> None:
+        names = {skill.name for skill in install.SKILL_DIRS}
+
+        self.assertIn("agents-contract", names)
+        self.assertIn("delete-comment", names)
+
+        install.main(["--home", str(self.home), "--harness", "claude"])
+        installed = {path.name for path in (self.home / ".claude" / "skills").iterdir()}
+
+        self.assertEqual(names, installed)
+
+    def test_an_empty_skill_set_is_refused_instead_of_installing_nothing(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch.object(install, "SKILL_DIRS", ()):
+            with contextlib.redirect_stderr(stderr):
+                code = install.main(["--home", str(self.home), "--harness", "claude"])
+
+        self.assertEqual(1, code)
+        self.assertIn("no skill with a SKILL.md", stderr.getvalue())
+        self.assertFalse((self.home / ".claude" / "skills").exists())
+
+    def test_a_skill_directory_without_a_manifest_is_not_shipped(self) -> None:
+        webby = install.SKILLS_DIR / "no-manifest-skill"
+        webby.mkdir()
+        self.addCleanup(webby.rmdir)
+
+        self.assertNotIn(webby, install._skill_dirs())
 
     def test_apply_creates_links_that_resolve_to_the_contract(self) -> None:
         plan = install.plan_harnesses(self.home)["claude"]

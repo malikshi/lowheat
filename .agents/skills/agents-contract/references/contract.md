@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-08.3
+Contract-Version: 2026-11-21.1
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -395,6 +395,12 @@ the audit log. Full convention: `codedna.md`.
   one `agent:` line per session, and run the skill's `codedna_check.py` after
   annotation edits. Delete non-CodeDNA comments in functions or blocks you edit;
   this is the one exception to Surgical changes.
+- **Comment audit.** Before deleting a comment, grade it: Tautology, Excuse, or
+  Stale means delete — an Excuse also files a row in `docs/comment-debt.md`; a
+  Decision Record means delete it and write the ADR under `docs/adr/`. The ban is
+  already enforced, so the budget ratchet is the only thing that measures what is
+  left: `comment_budget.py` may lower `docs/comment-budget.json`, never raise it
+  without `--force`. Procedure, skill, and grading rubric: `codedna.md`.
 
 ### Testing Requirements
 

@@ -181,3 +181,53 @@ that document's Python examples against these rules.
 record the work in the git commit with the session trailers defined under Git
 Workflow; do not keep a separate ledger file. A project `RULES.md` of current
 cross-file invariants is a rulebook, not a session ledger.
+
+## Comment audit
+
+The ban above is already enforced: `codedna_check.py` reports prose, commented-out
+code, and mid-stream `TODO` markers. Do not build a second detector — it would
+disagree with the first. What the ban cannot measure is the **permitted** annotation
+surface, which is legal by construction and grows without limit unless something
+counts it. That is what a comment audit is for.
+
+Grade every comment, then take exactly one action:
+
+| Category | Test | Action |
+|---|---|---|
+| **Tautology** | Delete it and read the code — did any information vanish? | Delete |
+| **Excuse** | Does it exist only to justify a shortcut the code should not have taken? | Delete, then add a row to `docs/comment-debt.md` |
+| **Stale** | Does it name code, a file, an API, or a behavior that no longer exists? | Delete |
+| **Decision Record** | Does it carry *why* — an ordering, compatibility, or rejected-alternative constraint? | Delete, then write `docs/adr/NNNN-slug.md` |
+
+A CodeDNA annotation is not automatically safe. An `exports:` line written as a
+sales pitch, a `rules:` that restates the signature, an `agent:` note describing a
+change the diff already shows, and a `message:` whose issue has since closed are all
+Tautology or Stale. The four required L1 fields stay: removing one fails the
+checker.
+
+Two homes hold what deletion must not destroy. Reasoning goes to `docs/adr/`, one
+decision per file, moved in the same change that deletes the comment — never copied
+verbatim, always rewritten as Context / Decision / Consequences. An excused hack goes
+to `docs/comment-debt.md`, one row with the fix it was avoiding; the ledger is the
+tracker, so no issue tracker or network access is involved, and the file is deleted
+once the table is empty.
+
+**Ratchet.** Not every comment dies in one change, so the total may only fall.
+`comment_budget.py` counts two numbers over the same tree the ban covers:
+
+```bash
+python3 .agents/skills/agents-contract/scripts/comment_budget.py . \
+  --baseline docs/comment-budget.json            # exit 1 if either number grew
+python3 .agents/skills/agents-contract/scripts/comment_budget.py . --update
+```
+
+`comments` counts permitted annotation lines; `open_notes` counts `message:` lines,
+the genuinely unresolved items. `--update` writes the observed numbers and refuses
+to raise either one without `--force`, and it refuses a baseline it cannot read
+rather than creating one — an unreadable file must never become a free reset. CI
+also compares the checked-in baseline against the base commit with `--against`,
+so editing the JSON upward fails the run even without `--update`. `--force` is a
+deliberate, reviewed exception and belongs in the pull request body. The
+`delete-comment` skill runs the whole pass end to end, and `install.py` ships every
+skill under `.agents/skills` to each harness, so it is available wherever the
+contract is.

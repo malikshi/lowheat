@@ -147,6 +147,28 @@ class DocsTestCase(unittest.TestCase):
             self.assertIn("read-only checker", text)
         self.assertNotIn("There is no binary, validator", contract)
 
+    def test_comment_audit_categories_and_homes_are_pinned(self) -> None:
+        codedna = (install.CONTRACT_DIR / "codedna.md").read_text(encoding="utf-8")
+        contract = AGENTS.read_text(encoding="utf-8")
+        skill = (install.SKILL_DIR.parent / "delete-comment" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        root = install.CONTRACT_DIR.parent
+
+        for label in ("Tautology", "Excuse", "Stale", "Decision Record"):
+            with self.subTest(label=label):
+                self.assertIn(label, codedna)
+                self.assertIn(label, skill)
+        self.assertIn("docs/adr/", codedna)
+        self.assertIn("docs/comment-debt.md", codedna)
+        self.assertIn("comment_budget.py", contract)
+        self.assertIn("never raise it", contract)
+        self.assertTrue((root / "docs" / "adr" / "README.md").is_file())
+        self.assertTrue((root / "docs" / "adr" / "0000-template.md").is_file())
+        self.assertTrue((root / "docs" / "adr" / "0001-comments-are-codedna-only.md").is_file())
+        self.assertTrue((root / "docs" / "comment-debt.md").is_file())
+        self.assertTrue((root / "docs" / "comment-budget.json").is_file())
+
     def test_commit_format_accepts_an_optional_scope(self) -> None:
         contract = AGENTS.read_text(encoding="utf-8")
         skill = SKILL.read_text(encoding="utf-8")

@@ -6,6 +6,7 @@ used_by: .agents/skills/agents-contract/scripts/codedna_headers.py → profiles 
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → limits and label regexes [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_check.py → re-exports for tests and main [cascade]
 used_by: .agents/skills/agents-contract/scripts/codedna_python.py → arrow, export regexes, and suffix_for [cascade]
+used_by: .agents/skills/agents-contract/scripts/comment_budget.py → DEFAULT_IGNORED_DIRS and profile_for [cascade]
 used_by: tests/test_codedna_check.py → profile_for, suffix_for [cascade]
 rules:   Constants are single sources of truth — a consumer module never repeats them. A profile change reaches every dialect at once, so the shared scan logic stays free of per-language branches. SPDX lines are exempt in every dialect the contract scans; an agent history entry carries exactly the five contract fields, and a Python module docstring may carry a raw or unicode prefix. Suffix matching is case-insensitive. A suffix with two real languages takes one superset profile that never reports inside valid code. `->` and `→` are the same arrow: drop the return type before naming an export, and cut the symbol after it when resolving a used_by consumer. A compound suffix wins over its last component: `.blade.php` is Blade, never PHP.
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | replaced the suffix switch tables with explicit per-language profiles (line, word, and block markers) covering the declared language set

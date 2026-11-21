@@ -1,15 +1,15 @@
 """install.py — Put the contract in front of every harness that reads it.
 
-exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | detect | find_conflicts | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror
+exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | SKILLS_DIR | SKILL_DIRS | detect | find_conflicts | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror
 used_by: README.md → the install section
-used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
+used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, SKILL_DIRS, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. A harness with `skill_dir` also gets the skill linked into that directory; harnesses that discover the central `.agents/skills` leave it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
+rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. Every skill under `.agents/skills` that holds a SKILL.md is installed, so a new repo skill becomes available to every harness without an installer edit; a harness with `skill_dir` receives all of them, and one that discovers the central `.agents/skills` leaves it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
 agent:   fx | unknown | 2026-10-31 | unknown | ignored Python bytecode caches when comparing and copying the fx skill, so test runs no longer look like source drift
 agent:   fx | unknown | 2026-11-01 | 01a196ba-7693-7c40-9caa-dff862b90cac | dropped the .bak backup from --force: repeated forced runs had piled up agents-contract.bak and .bak1 beside the fx skill copy
 agent:   fx | unknown | 2026-11-05 | unknown | hardened install paths, force directory replacement, target verification, no-op reporting, and mirror idempotency
 agent:   fx | unknown | 2026-11-05 | unknown | added read-only --check drift verification and documented the contract bootstrap
-agent:   fx | unknown | 2026-11-05 | unknown | added loop.md to the companion set installed for every adapter
+agent:   unknown | nexrouter | 2026-11-21 | unknown | SKILL_DIRS replaces the one hardcoded skill so delete-comment reaches every harness
 """
 
 from __future__ import annotations
@@ -23,9 +23,26 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 CONTRACT_DIR = _HERE / "contract"
-SKILL_DIR = _HERE / ".agents" / "skills" / "agents-contract"
+SKILLS_DIR = _HERE / ".agents" / "skills"
+SKILL_DIR = SKILLS_DIR / "agents-contract"
 COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md", "loop.md")
 _COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
+
+
+def _skill_dirs() -> tuple[Path, ...]:
+    """Return every shipped repo skill directory.
+
+    Rules:   A directory counts only with a `SKILL.md`; the contract skill must be present, because an empty result ships nothing and would degrade to a silent no-op. Read per call, not at import, so a test or a fresh checkout sees the real tree.
+    """
+    found = (
+        tuple(path for path in sorted(SKILLS_DIR.iterdir()) if (path / "SKILL.md").is_file())
+        if SKILLS_DIR.is_dir()
+        else ()
+    )
+    return found if SKILL_DIR in found else ()
+
+
+SKILL_DIRS = _skill_dirs()
 
 
 @dataclass(frozen=True)
@@ -171,11 +188,12 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
         if rules_dir is None and spec.memory:
             links.update(_companion_links(memory_base))
         if spec.skill_dir:
-            target = base / spec.skill_dir / SKILL_DIR.name
-            if spec.copy_skill:
-                dirs[target] = SKILL_DIR
-            else:
-                links[target] = SKILL_DIR
+            for skill in SKILL_DIRS:
+                target = base / spec.skill_dir / skill.name
+                if spec.copy_skill:
+                    dirs[target] = skill
+                else:
+                    links[target] = skill
         for target, source in spec.global_files:
             links[home / target] = CONTRACT_DIR / source
         plans[spec.name] = HarnessPlan(
@@ -660,6 +678,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if not (CONTRACT_DIR / "AGENTS.md").is_file():
         print(f"install: {CONTRACT_DIR / 'AGENTS.md'} is missing", file=sys.stderr)
+        return 1
+    if not SKILL_DIRS:
+        print(
+            f"install: no skill with a SKILL.md under {SKILLS_DIR}; "
+            "refusing to install a contract with no bootstrap skill",
+            file=sys.stderr,
+        )
         return 1
 
     project_root, error = _resolve_scope(args, home)
