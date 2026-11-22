@@ -2,7 +2,9 @@
 
 Companion to `AGENTS.md` → The Work Loop. This file is the unit-level method
 for multi-unit, risky, or long-running work. `AGENTS.md` stays authoritative,
-including Precedence, approval gates, and the Commit rule.
+including Precedence, approval gates, and the Commit rule. Step 0 covers Work
+Loop 1; Steps 1–2 cover 2–4; Work Loop step 5 Merge, then review is Steps 3–4;
+Steps 5–7 cover 6–7.
 
 Adapted from the Karpathy-style loop gist: make one change, measure it against a
 fixed check, keep it if it passes, revert it if it does not. This version keeps
@@ -169,18 +171,6 @@ Unverified: what remains, and what would settle it
 
 Do not claim `DONE` while the check is unrun, failing, or unverified. Carry the
 compliance record from `AGENTS.md` in the same report.
-
-## Mapping to the Work Loop steps
-
-| Work Loop step | This companion |
-|---|---|
-| 1 Understand | Step 0: machine-evaluable pass condition |
-| 2 Read first | Step 1: read touched files, CodeDNA headers, and tests before carding |
-| 3 Plan | Step 1: unit cards, edges, parallel boundaries |
-| 4 Implement with TDD | Step 2: change → check → keep/revert, three attempts |
-| 5 Merge, then review | Steps 3–4: deterministic merge, failure return, review |
-| 6 Prove it | Step 5: check plus undo-cost gate |
-| 7 Report and record | Steps 6–7: learned rule, stop conditions, final report |
 
 ## Anti-patterns
 

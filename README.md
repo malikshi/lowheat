@@ -44,11 +44,11 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | Section | Covers |
 |---|---|
 | How to use this file | Task → section routing, companion table, precedence, session bootstrap, staleness check |
-| Operating Principles | Task sizing, think before coding, smallest change, verify don't assume, confusion protocol, operations discipline |
+| Operating Principles | Task sizing, think before coding, smallest change, verify don't assume, context curation, confusion protocol, operations discipline |
 | The Work Loop | 7-step delivery loop, each ending with a verify gate, plus the required compliance record; unit mechanics in `loop.md` |
 | Engineering Standards | Definition of Done, Verification, Coding Style, CodeDNA summary, Testing Requirements, Security Guidelines |
 | Execution & Delivery | Command Style, Communication Style, Git Workflow, Code Review Standards |
-| Environment & Source Repositories | Installed plugins / skills, context management, knowledge capture, sources |
+| Environment & Source Repositories | Installed plugins / skills, knowledge capture, sources |
 
 The companions hold the detail the core points to: `codedna.md` for annotations,
 `RTK.md` for command fidelity and catalogue, `semble.md` for discovery,
