@@ -15,6 +15,7 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | `contract/caveman.md` | Caveman reply-mode reference — voice rules, modes, commit and review formats, optional layer |
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `contract/loop.md` | Unit-loop companion — machine check, unit cards, bounded retries, deterministic merge, failure returns, undo gates |
+| `contract/review.md` | Review companion — agreement engine, five-element refutation, finding report, fresh independent rounds, triage, stopping rule |
 | `contract/aider.conf.yml` | Aider config that reads the project `CONVENTIONS.md` alias |
 | `contract/continue.md` | Continue project rule that points at `AGENTS.md` and its companions |
 | `.agents/skills/agents-contract/SKILL.md` | Mandatory session-bootstrap skill encoding the AGENTS.md contract as executable steps |
@@ -112,7 +113,7 @@ scope copies.
 
 The Grok row is the one worth knowing: Grok scans standalone rule files and
 does not expand imports, so its companions are written into `.grok/rules`.
-Every other adapter receives the six companions beside the contract or alias;
+Every other adapter receives the seven companions beside the contract or alias;
 `AGENTS.md` names them by bare filename for on-demand reads.
 
 **User scope normally links; project scope copies.** A user install symlinks the
@@ -201,10 +202,10 @@ side by side in the project root, or the companions alone in `.grok/rules/`.
 
 ```bash
 mkdir -p .grok/rules
-for f in AGENTS.md codedna.md RTK.md semble.md caveman.md ponytail.md loop.md; do
+for f in AGENTS.md codedna.md RTK.md semble.md caveman.md ponytail.md loop.md review.md; do
   curl -fsSL "https://raw.githubusercontent.com/malikshi/lowheat/main/contract/$f" -o "$f"
 done
-for f in codedna.md RTK.md semble.md caveman.md ponytail.md loop.md; do
+for f in codedna.md RTK.md semble.md caveman.md ponytail.md loop.md review.md; do
   cp "$f" ".grok/rules/$f"
 done
 ```
@@ -328,6 +329,7 @@ python3 bench/discovery_tokens.py /path/to/repo --query "renew user" --query "vp
 | [`jbarbier/CLAUDE.md`](https://github.com/jbarbier/CLAUDE.md) | Operating-contract influence — complete real fixes, search before building, verify before completion |
 | [`multica-ai/andrej-karpathy-skills`](https://github.com/multica-ai/andrej-karpathy-skills) | Karpathy behavioral guidelines — think before coding, simplicity first, surgical changes |
 | [`affaan-m/ECC`](https://github.com/affaan-m/ECC) | Rule packs for coding style, security, testing, git workflow, code review |
+| [`phuryn/product-engineering`](https://github.com/phuryn/product-engineering) | `code-review` and `independent-review` skill cores — agreement/refutation engine, fresh isolated reviewer rounds, triage and stopping rule |
 | [`Larens94/codedna`](https://github.com/Larens94/codedna) | CodeDNA source-annotation convention — hand-applied; lowheat ships its own read-only checker |
 
 ## License

@@ -1,0 +1,216 @@
+# Code Review and Independent Review
+
+This companion owns the executable detail behind `AGENTS.md` → Code Review
+Standards. The thin contract keeps the gates; this file explains how to run
+them. It distils the cores of two review skills: one reads code for defects,
+one decides whether a change is allowed to ship. They are separate passes.
+A defect-reading pass never clears a change; only a fresh independent round
+does.
+
+## Dimensions and selection
+
+State the selected dimensions, scope and comparison baseline before
+investigating. Bare "review this" means correctness only; an explicit list
+selects correctness, performance, security or a combination; an unknown or
+empty selection gets asked about, never reinterpreted. Review working changes
+when present, else the repository. Follow dependencies beyond changed lines
+and separate defects introduced from ones merely revealed. Review and report;
+apply fixes only when asked.
+
+| Dimension | Anchor |
+|---|---|
+| Correctness (core) | Agreements between participants across a boundary |
+| Performance | Workload → resource demand → growth or contention → consequence |
+| Security | Source → trust boundary → sink, with an attacker controlling the source |
+
+One flow map serves all dimensions. Enter performance from the workload: what
+work each request or operation triggers, how demand grows with input or load,
+where contention or unbounded growth appears, and what observable consequence
+follows. Static reasoning is not a measurement: settle layout and performance
+claims on the running build in either direction, with a baseline built from
+`HEAD` in its own worktree. Report one root cause once, with both impacts when
+it spans correctness and security. Keep the tests separate per dimension.
+
+## Two passes, two jobs
+
+| Pass | Author | Question | Owner |
+|---|---|---|---|
+| Self-review | writer of the change | "What is wrong with this code?" | the author |
+| Independent review | fresh session that never saw the build | "Would this break or block what ships?" | a non-author |
+
+Self-review fixes defects before anyone else sees the diff. Independent review
+owns the verdict; the writer never clears their own work. A one-line change
+that ships gets a short round, never no round. A review that only finds faults
+and a round that only approves both fail their job.
+
+## Self-review: the agreement engine
+
+Review consequential agreements, not isolated files. The defects worth finding
+are disagreements between participants that each look reasonable alone:
+caller and callee, producer and consumer, writer and later reader, branches
+that must end in the same state, validator and sink.
+
+**Map one flow** — inputs, execution paths, state owners, external
+dependencies, observable effects. For each agreement, note its participants,
+the value or effect exchanged, who decides the real answer (the authority),
+its identity and lifetime, the required relationship, the evidence for that
+relationship, and the order in which transitions happen.
+
+**Establish an obligation** from a specification, documented contract,
+language or protocol semantics, a test, or a necessary producer/consumer
+relationship — never from one participant's implementation alone. A consumer
+being written one way does not prove the consumer is right.
+
+**Start where agreements break** — transformed or negotiated values,
+reassigned identities, asynchronous work, persisted and reloaded state,
+effects that must agree. Then inspect local arithmetic, boundaries and error
+branches. Two probes earn explicit attention because they are usually missed:
+- *Authority reconciliation:* force a requested value apart from the accepted
+  or committed value, then find what still reads the request.
+- *Identity correlation:* vary keys under overlap, reordering, removal and
+  reuse; run two operations and complete them out of order.
+
+**Force a violating execution** before calling a suspicion a finding: make
+values differ, vary completion order, change identity between observation and
+use, inject failure between effects, and exercise empty, exact-boundary and
+adjacent-boundary inputs. Confirm each case is reachable. Absorption is not
+prevention — a cache that usually holds or a retry that usually succeeds
+hides a defect, it does not remove it. Timing that usually resolves correctly
+is a race. Rare still means real: say who meets the trigger and how often.
+
+### Refutation: the five elements
+
+Promote a candidate only when all five hold:
+
+1. **Expectation** — required behaviour, with the evidence for it.
+2. **Trigger** — a feasible execution: inputs, state and ordering the system permits.
+3. **Defect** — the concrete violated relationship, with source locations for every participant.
+4. **Impact** — an observable consequence and its affected scope.
+5. **Refutation** — the strongest mechanism that would prevent or repair it, checked and found insufficient.
+
+Hunt the refutation: an enclosing guarantee, synchronisation excluding the
+interleaving, reconciliation before any consequential read, an intentional
+contract, an excluding precondition, a different responsible owner. Drop on
+evidence that defeats execution, obligation or consequence; an essential
+unknown goes in a separate "Unexamined areas and essential unknowns" list.
+No quota: zero supported findings is valid; never call that "bug-free".
+
+Security uses the same engine with a changed anchor — source → trust boundary
+→ sink, with an attacker controlling the source — and one inverted rule:
+drop a finding whose only victim is the attacker on their own machine,
+account, tenant or data, unless it crosses a shared boundary. A finding
+dropped as security may still stand as correctness. Static findings are not
+confirmed exploits.
+
+### Finding report
+
+```
+Review scope:
+Comparison baseline:
+Selected dimensions:
+
+[Severity] [Dimension] Concrete consequence
+  Expectation:  required behaviour, and the evidence for it
+  Trigger:      feasible preconditions and execution
+  Defect:       the violated relationship
+  Evidence:     source locations for EVERY participant
+  Impact:       observable consequence and affected scope
+  Refutation:   strongest counterargument checked, and why it fails
+  Remedy:       minimal correction to the violated relationship
+  Verification: what was executed versus established from source
+
+Coverage:
+Unexamined areas and essential unknowns:
+```
+
+Chat findings use the terse `caveman.md` one-line shape; the fields above are
+the content, not optional decoration. Cite both sides of a cross-boundary
+defect. Report coverage as work performed: examined with/without findings,
+not applicable with a reason, or not examined with a reason. State what is
+well built and the limits of static review.
+
+Fan-out, when used, partitions complete flows, never files or taxonomy
+classes. Workers read both sides of their agreements and never edit the tree;
+confirm it is unchanged at the end. One model, named, for every worker.
+
+## Independent review: the ship gate
+
+**Selection and isolation.** The tool is optional; the review is not. Use a
+fresh session of any reviewer — another model family is preferred, a fresh
+session of the builder's own model is acceptable. Never the building session,
+a resume, a fork or a subagent of it: it must not inherit the builder's
+beliefs. Require read-only tools, no MCP servers or connectors, memory off,
+high effort, and project and user instructions off where the CLI allows.
+Name whatever cannot be switched off in the report. A repository's own
+instructions decide the reviewer, fallback, bar and release range; if its
+named reviewer cannot run, use the recorded fallback, then any installed
+reviewer, then a fresh session of the builder's family — never skip.
+
+**When.** Before every release, before any push that deploys, and again after
+every fix a round found. A fix is unreviewed code and produces the worst
+defects; never report readiness from a round followed by a fix.
+
+**Subject.** Compute it from git, not prose: the unreleased range
+(`git log --oneline $RELEASED..HEAD`, `git diff $RELEASED...HEAD --stat`,
+`git status --porcelain -uall`), including uncommitted and untracked files.
+`$RELEASED` is the production branch, release tag or deployed commit. Before
+a first release, review the whole history including the first commit, and
+mark every finding INTRODUCED. Later rounds cover only commits since the
+previous round, with the rest as context. Split an oversized subject by
+contiguous commits or by surface — never shorten it. Keep coordinator notes
+and suspected defects out of the subject until the series closes; they steer
+a fresh reviewer.
+
+**Run and verify the round.** Give the reviewer the mechanical range and the
+usage model, not a list of suspected defects. A short clean round is a failed
+round: require it to say what it read, what it expected and why the result
+holds. A round that could not read the subject is failed however long it is.
+Require a round to take minutes at high effort and check its saved read
+evidence. Findings and severity labels are claims. Verify each against the
+code by hand, including whether the trigger is reachable in the usage model.
+
+### Triage — mandatory before acting
+
+1. **Exact sequence** — literal steps, not "an attacker could".
+2. **Permitted execution** — does this system actually allow the sequence?
+3. **Actor and motive** — who does it, and why? Someone already holding the
+   owner's session on the owner's screen already had the screen.
+
+Record harm, who meets it, how often, and which line it crosses. Rank by
+what it costs this product, not by list position or reviewer label. For an
+attacker, ask whether the finding grants a capability they lack in that
+position; a mechanism granting nothing new is a description, not a
+vulnerability. Layout and performance claims settle on the running build,
+not by re-reading code in either direction. When findings cluster, look for
+one false premise underneath. Accepting a finding is legitimate; a fix that
+did not need to happen is itself a defect. Prefer removing the rare case to
+supporting it; ask whether it must exist before writing its branch.
+
+### Stopping rule and recording
+
+Stop at **no INTRODUCED finding above Low and no High or Critical of any
+age** — severity after triage, not the reviewer's label. Fix High and
+Critical regardless of age. An introduced Low goes to the owner's list with
+its round number, opens no round, and gets fixed only when already in a batch
+that needs one; that fix then opens a round.
+
+If one mechanism draws findings two rounds running, stop patching: cut it,
+or redesign it once in writing and only if the redesign removes machinery.
+No third design; take the choice to the owner as cut or pause. Budget a
+fix commit's own round in ingest, queue and concurrency code.
+
+Rerun the tests a fix touches yourself after every fix. Verify each finding
+and its INTRODUCED label against the released text. Record every round's
+finding count and outcome — confirmed, disproved, fixed, accepted with
+reason — in the PR body or commit message. Record pre-existing findings with
+a deferral reason *and* a revisit trigger. Number rounds in one sequence per
+repository and cite the number wherever the outcome lands. A clean round
+came from a fresh reviewer given only the mechanical range, with nothing
+fixed after it.
+
+## Compliance record
+
+The contract's four-line record reports `Review:` as an independent verdict
+only after this gate holds. Otherwise it says why: not required for a small
+or local change with no STOP trigger, or unavailable with the reason. Never
+report a verdict from a round whose findings or fixes you did not verify.

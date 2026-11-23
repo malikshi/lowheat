@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-22.1
+Contract-Version: 2026-11-23.1
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -21,7 +21,7 @@ Then use the table to find the section you need, and follow it literally.
 | Writing a test | Testing Requirements |
 | Touching auth, secrets, user input, or data | Security Guidelines |
 | Changing docs or config, or finishing | Verification, Definition of Done |
-| Committing or reviewing | Git Workflow, Code Review Standards |
+| Committing or reviewing | Git Workflow, Code Review Standards, `review.md` |
 | Unclear, blocked, or high stakes | Confusion protocol |
 
 Do not load every companion for a small task. Load the one that owns the detail
@@ -39,6 +39,7 @@ unloading is not an option.
 | `caveman.md` | changing reply mode, commits, or reviews | voice rules, modes, commit and review formats, optional layer |
 | `ponytail.md` | choosing scope or explaining a shortcut | ladder, never-cut list, levels, disclosure line |
 | `loop.md` | running multi-unit or risky work | machine check, unit graph, retry limits, merge, failure return, undo gates |
+| `review.md` | reviewing code or clearing a change to ship | agreement engine, five-element refutation, finding report, independent-round isolation, triage, stopping rule |
 
 ### Precedence
 
@@ -479,20 +480,37 @@ summary and a test plan with TODOs, and push with `-u` on a new branch.
 
 ### Code Review Standards
 
-Two review modes, each mandatory where it applies:
+Two review modes, each mandatory where it applies. Load `review.md` for the
+full engines and report contract; the pointers below are the gates.
 
 - **Self-review** — the author applies the Definition of Done and the severity
   table to the diff and fixes CRITICAL and HIGH findings before anyone else
-  sees it: Work Loop step 5, every change.
-- **Independent review** — a non-author owns the verdict, using a reviewer
-  subagent where the harness provides one and a human otherwise. Required for
-  every change bound for a shared branch (pushed to a shared remote, or
-  targeted by a merge or PR — a local scratch branch is not shared), every
-  merge, and every STOP trigger. The reviewer records the verdict, covered
-  scope, and open risk in the PR body or commit message.
+  sees it: Work Loop step 5, every change. Review consequential agreements
+  across boundaries (caller/callee, producer/consumer, writer/later reader),
+  not files in isolation. A finding needs an expectation with evidence, a
+  feasible execution, the concrete violated relationship cited at every
+  participant, an observable consequence, and a refutation surviving the
+  strongest counterargument. Absorbed defects and timing windows are not
+  refutations. Report zero as "no supported findings in the examined scope",
+  never "bug-free".
+- **Independent review** — a non-author owns the verdict, using a fresh
+  reviewer session that never saw the build. Required for every change bound
+  for a shared branch (pushed to a shared remote, or targeted by a merge or
+  PR — a local scratch branch is not shared), every merge, every STOP trigger,
+  and every release. Compute the subject from git (`$RELEASED..HEAD` plus the
+  working tree), not from prose; give the reviewer the mechanical range and
+  usage model, not suspected defects. No resume, fork, or subagent of the
+  building session; read-only, memory off, project instructions off where the
+  CLI allows. Re-run after every fix: a fix is unreviewed code. Triage each
+  finding against literal steps, permitted execution, actor and motive;
+  reviewer labels are claims. Stop at no INTRODUCED finding above Low and no
+  High or Critical of any age. The reviewer records the verdict, covered
+  scope, round count, each finding's outcome, and open risk in the PR body or
+  commit message.
 
 Pre-review: all automated checks pass, no merge conflicts, branch current with
-target.
+target. A short clean round or a round that could not read the subject is a
+failed round.
 
 | Level | Meaning | Action |
 |---|---|---|

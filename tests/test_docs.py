@@ -5,9 +5,9 @@ used_by: none
 rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and reference companions by name rather than importing them; every reference path the skill names must exist, and the skill and contract must agree on precedence, gates, trailers, and the compliance record.
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the session-bootstrap, RTK, and compliance-record gates in contract and skill
 agent:   fx | unknown | 2026-11-05 | unknown | pinned the loop companion gates and six-companion contract
-agent:   fx | unknown | 2026-11-05 | unknown | pinned the project rulebook boundary and its exclusion from installed companions
 agent:   grok-4.5 | xai | 2026-11-06 | 01a1add5-9f8f-7f01-ac4b-21d24f6dceaa | pinned skill precedence, rulebook gates, rejected-attempt trailer, and local review enum
 agent:   gemini-4-argon | google | 2026-11-08 | d7c52693-a719-48d1-a0fd-1ef0caadf691 | pinned bootstrap tool-call ordering, loop Work Loop mapping and revert/retry rules, and scoped comment/STOP gates
+agent:   fx | unknown | 2026-11-23 | unknown | pinned review-companion engines, independent-round isolation, and finding triage gates
 """
 
 from __future__ import annotations
@@ -134,6 +134,51 @@ class DocsTestCase(unittest.TestCase):
 
         for text in (contract, skill):
             self.assertIn("not required (small or local, no STOP trigger)", text)
+
+    def test_direct_download_loops_match_installer_companions(self) -> None:
+        readme = (install.CONTRACT_DIR.parent / "README.md").read_text(encoding="utf-8")
+        loops = re.findall(r"^for f in ([^;]+); do$", readme, re.MULTILINE)
+
+        self.assertEqual(2, len(loops))
+        first, second = loops
+        self.assertEqual(("AGENTS.md",) + install.COMPANIONS, tuple(first.split()))
+        self.assertEqual(install.COMPANIONS, tuple(second.split()))
+        self.assertNotIn("six companions", readme)
+
+    def test_review_companion_pins_both_engines(self) -> None:
+        contract = AGENTS.read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+
+        self.assertIn("review.md", install.COMPANIONS)
+        self.assertIn("`review.md`", contract)
+        self.assertIn("`review.md`", skill)
+        for marker in (
+            "agreement engine",
+            "five elements",
+            "feasible execution",
+            "observable consequence",
+            "counterargument",
+            "Coverage:",
+            "fresh session",
+            "never saw the build",
+            "read-only",
+            "no INTRODUCED finding above Low",
+            "Rerun the tests a fix touches",
+            "INTRODUCED",
+            "pre-existing",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, review)
+
+    def test_review_standards_point_to_the_companion(self) -> None:
+        contract = AGENTS.read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+
+        for text in (contract, skill):
+            self.assertIn("agreement", text)
+            self.assertIn("fresh", text)
+            self.assertIn("refut", text)
 
     def test_codedna_checker_is_documented(self) -> None:
         contract = AGENTS.read_text(encoding="utf-8")

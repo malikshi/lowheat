@@ -7,8 +7,8 @@ description: MANDATORY bootstrap for every task under the repository's AGENTS.md
 
 Canonical detail: `references/contract.md`, byte-identical to `AGENTS.md`.
 `references/codedna.md` covers annotations and `references/commands.md` the RTK
-catalogue. Companions `caveman.md`, `ponytail.md`, `semble.md`, `loop.md` sit
-beside `AGENTS.md`; this skill does not duplicate them.
+catalogue. Companions `caveman.md`, `ponytail.md`, `semble.md`, `loop.md`, and `review.md`
+sit beside `AGENTS.md`; this skill does not duplicate them.
 
 ## 0. Startup gate (before any task tool call)
 
@@ -165,12 +165,30 @@ Apply to every source file whose language supports comments; never annotate
 
 ## 6. Code review
 
+- Load `review.md` for both engines; the gates below stay in the thin core.
 - **Self-review** — the author applies the Definition of Done and severity
-  table and fixes CRITICAL/HIGH before anyone else sees the diff. Every change.
-- **Independent review** — a non-author owns the verdict (reviewer subagent or
-  human). Required for shared branches, merges, and every STOP trigger. Record
-  verdict, covered scope, and open risk in the PR body or commit message.
-- Pre-review: checks pass, no conflicts, branch current with target.
+  table, fixes CRITICAL/HIGH before anyone sees the diff, every change. Review
+  agreements across boundaries, not files. Every finding needs an
+  evidence-backed expectation, a feasible execution, the violated
+  relationship cited at every participant, an observable consequence, and a
+  refutation that survives the strongest counterargument; drop on a real
+  preventing mechanism, not on "usually works". Zero supported findings is
+  valid — never say "bug-free".
+- **Independent review** — a fresh session that never saw the build owns the
+  verdict (another model family preferred, fresh session of the builder's own
+  model acceptable; never a resume, fork, or subagent of the builder). Use
+  read-only tools, no MCP or connectors, memory off, high effort, project and
+  user instructions off where allowed. Required for shared branches, merges,
+  STOP triggers, and every release; a one-line shipped change gets a short
+  round, never none. Compute the subject from git (`$RELEASED..HEAD` plus
+  working tree), not prose; give the reviewer the range and usage model, not
+  suspected defects. Re-run after every fix. Triage literal steps, permitted
+  execution, actor and motive — severity labels are claims. Stop at no
+  INTRODUCED finding above Low and no High or Critical of any age. Record
+  verdict, scope, round count, finding outcomes, and open risk in the PR body
+  or commit message.
+- Pre-review: checks pass, no conflicts, branch current with target. A short
+  clean round or a round that could not read the subject is a failed round.
 - CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an unexplained file
   over the 800-line ceiling); LOW = NOTE. MEDIUM is fixed or recorded with a
   reason; LOW may be skipped. Approve only with no CRITICAL/HIGH; a security
