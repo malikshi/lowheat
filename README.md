@@ -96,6 +96,7 @@ scope copies.
 | Central `.agents` | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Cline | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Gemini CLI | `~/.gemini/GEMINI.md`, companions | `GEMINI.md`, companions |
+| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `GEMINI.md`, companions |
 | Crush | `~/.config/crush/CRUSH.md`, companions | `CRUSH.md`, companions |
 | Qwen Code | `~/.qwen/QWEN.md`, companions | `QWEN.md`, companions |
 | fx | `~/.fx/AGENTS.md`, companions as regular files, `~/.fx/skills/agents-contract` | `AGENTS.md`, companions |

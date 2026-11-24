@@ -25,6 +25,7 @@ Node `24.22.1` is installed at `/opt/node-v24.22.1` and linked from
 | Cline | native | `~/.agents/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions | installed; not smoke-tested |
 | Central `.agents` | agents | `~/.agents/AGENTS.md`, companions, `skills/agents-contract` | `AGENTS.md`, companions | shared fallback; `--harness agents` |
 | Gemini CLI | agents | `~/.gemini/GEMINI.md`, companions; central `.agents/skills` | `GEMINI.md`, companions | `0.66.0`; auth missing |
+| Antigravity CLI (`agy`) | agents | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/agents-contract` | `GEMINI.md`, companions | `1.5.16`; not smoke-tested |
 | Crush | agents | `~/.config/crush/CRUSH.md`, companions | `CRUSH.md`, companions | `v0.99.0`; API key rejected |
 | Cursor | agents | UI-managed | `AGENTS.md`, companions | config present; binary not installed |
 | Continue | alias | — (project only) | `AGENTS.md`, companions, `.continue/rules/agents-contract.md` | `cn` `1.5.47`; smoke request failed (interceptor error) |

@@ -3,11 +3,11 @@
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
 rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required. Directory comparisons ignore Python bytecode caches.
-agent:   fx | unknown | 2026-10-31 | unknown | covered the user-scope companion links, skill links, and both reference mirrors; added a real skill directory as a refusal case
 agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: project cases now assert every named companion ships and AGENTS.md carries no @ imports
 agent:   fx | unknown | 2026-10-31 | unknown | added the bytecode-cache regression for the installer's copied-skill comparison
 agent:   fx | unknown | 2026-11-05 | unknown | covered force-directory replacement, path validation, project-only no-op, list/detect, and mirror dry-run
 agent:   fx | unknown | 2026-11-05 | unknown | covered --check clean/stale states and refresh of a stale copied skill
+agent:   gemini-4-carbon | google | 2026-11-24 | unknown | covered agy: both ~/.gemini/config rule names, its skills dir, and the project alias
 """
 
 from __future__ import annotations
@@ -92,6 +92,18 @@ class InstallerTestCase(unittest.TestCase):
 
         self.assertEqual(install.CONTRACT_DIR / "AGENTS.md", plan.links[base / "GEMINI.md"])
         self.assertNotIn(base / "AGENTS.md", plan.links)
+
+    def test_agy_reads_both_rule_names_under_its_shared_config_dir(self) -> None:
+        plan = install.plan_harnesses(self.home)["agy"]
+        base = self.home / ".gemini" / "config"
+
+        for name in ("AGENTS.md", "GEMINI.md"):
+            with self.subTest(name=name):
+                self.assertEqual(install.CONTRACT_DIR / "AGENTS.md", plan.links[base / name])
+        self.assertEqual(
+            install.SKILLS_DIR / "agents-contract", plan.links[base / "skills" / "agents-contract"]
+        )
+        self.assertNotIn(self.home / ".gemini" / "GEMINI.md", plan.links)
 
     def test_gemini_crush_and_qwen_use_their_aliases(self) -> None:
         plans = install.plan_harnesses(self.home)
@@ -541,6 +553,7 @@ class ProjectScopeTestCase(unittest.TestCase):
         for harness, alias in (
             ("claude", "CLAUDE.md"),
             ("gemini", "GEMINI.md"),
+            ("agy", "GEMINI.md"),
             ("crush", "CRUSH.md"),
             ("aider", "CONVENTIONS.md"),
             ("qwen", "QWEN.md"),
