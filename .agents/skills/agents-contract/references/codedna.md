@@ -216,10 +216,12 @@ once the table is empty.
 `comment_budget.py` counts two numbers over the same tree the ban covers:
 
 ```bash
-python3 .agents/skills/agents-contract/scripts/comment_budget.py . \
+python3 <skill-dir>/scripts/comment_budget.py . \
   --baseline docs/comment-budget.json            # exit 1 if either number grew
-python3 .agents/skills/agents-contract/scripts/comment_budget.py . --update
+python3 <skill-dir>/scripts/comment_budget.py . --update
 ```
+
+`<skill-dir>` is where the harness reports the `agents-contract` skill, as above.
 
 `comments` counts permitted annotation lines; `open_notes` counts `message:` lines,
 the genuinely unresolved items. In a project with no baseline yet,
@@ -232,6 +234,6 @@ creating one — an unreadable file must never become a free reset. CI
 also compares the checked-in baseline against the base commit with `--against`,
 so editing the JSON upward fails the run even without `--update`. `--force` is a
 deliberate, reviewed exception and belongs in the pull request body. The
-`delete-comment` skill runs the whole pass end to end, and `install.py` ships every
-skill under `.agents/skills` to each harness, so it is available wherever the
-contract is.
+`delete-comment` skill runs the whole pass end to end. Every skill that ships
+beside this contract is installed into each harness, so it is available wherever
+the contract is.

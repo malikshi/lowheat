@@ -178,6 +178,193 @@ class InstallerTestCase(unittest.TestCase):
             plans["fx"].dirs,
         )
 
+    def test_user_scope_writes_review_agents_into_each_agent_dir(self) -> None:
+        plans = install.plan_harnesses(self.home)
+        cases = {
+            "claude": (".claude", "agents", "reviewer.md"),
+            "codex": (".codex", "agents", "reviewer.toml"),
+            "commandcode": (".commandcode", "agents", "reviewer.md"),
+            "grok": (".grok", "agents", "reviewer.md"),
+            "factory": (".factory", "droids", "reviewer.md"),
+            "opencode": (".config/opencode", "agents", "reviewer.md"),
+            "gemini": (".gemini", "agents", "reviewer.md"),
+        }
+
+        for harness, (config, agent_dir, filename) in cases.items():
+            with self.subTest(harness=harness):
+                target = self.home / config / agent_dir / filename
+                self.assertIn(target, plans[harness].files)
+                self.assertIn("name", plans[harness].files[target])
+        self.assertEqual({}, plans["pi"].files)
+        self.assertEqual({}, plans["aider"].files)
+
+    def test_install_writes_the_agents_and_a_rerun_reports_unchanged(self) -> None:
+        install.main(["--home", str(self.home), "--harness", "claude"])
+        agent = self.home / ".claude" / "agents" / "reviewer.md"
+
+        self.assertTrue(agent.is_file())
+        self.assertFalse(agent.is_symlink())
+        self.assertIn("tools: Bash", agent.read_text(encoding="utf-8"))
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--home", str(self.home), "--harness", "claude", "--check"])
+        self.assertEqual(0, code, stdout.getvalue())
+
+    def test_a_locally_edited_agent_file_is_refused_without_force(self) -> None:
+        agent = self.home / ".claude" / "agents" / "reviewer.md"
+        agent.parent.mkdir(parents=True)
+        agent.write_text("MY OWN AGENT\n", encoding="utf-8")
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("claude",), install.CONTRACT_DIR
+        )
+
+        self.assertIn(agent, conflicts)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "claude"])
+        self.assertEqual(1, code)
+        self.assertIn("refusing to overwrite", stderr.getvalue())
+        self.assertEqual("MY OWN AGENT\n", agent.read_text(encoding="utf-8"))
+
+        install.main(["--home", str(self.home), "--harness", "claude", "--force"])
+        self.assertIn("independent code reviewer", agent.read_text(encoding="utf-8"))
+
+    def test_stale_agent_bytes_are_reported_by_check(self) -> None:
+        install.main(["--home", str(self.home), "--harness", "claude"])
+        agent = self.home / ".claude" / "agents" / "review-finder.md"
+        agent.write_text("STALE\n", encoding="utf-8")
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "claude", "--check"])
+
+        self.assertEqual(1, code)
+        self.assertIn("stale", stderr.getvalue())
+
+    def test_project_scope_does_not_assume_a_project_agent_dir(self) -> None:
+        plans = install.plan_project(self.home)
+
+        for plan in plans.values():
+            self.assertEqual({}, plan.files, plan.harness)
+
+    def test_a_users_symlink_at_a_written_target_is_refused_not_repointed(self) -> None:
+        mine = self.home / "mine-reviewer.md"
+        mine.write_text("MY OWN REVIEWER\n", encoding="utf-8")
+        agent = self.home / ".claude" / "agents" / "reviewer.md"
+        agent.parent.mkdir(parents=True)
+        agent.symlink_to(mine)
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("claude",), install.CONTRACT_DIR
+        )
+
+        self.assertIn(agent, conflicts)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "claude"])
+        self.assertEqual(1, code)
+        self.assertIn("refusing to overwrite", stderr.getvalue())
+        self.assertTrue(agent.is_symlink())
+        self.assertEqual("MY OWN REVIEWER\n", mine.read_text(encoding="utf-8"))
+
+        install.main(["--home", str(self.home), "--harness", "claude", "--force"])
+        self.assertFalse(agent.is_symlink())
+        self.assertEqual("MY OWN REVIEWER\n", mine.read_text(encoding="utf-8"))
+
+    def test_a_users_symlink_at_a_copy_written_target_is_refused(self) -> None:
+        mine = self.home / "mine-agents.md"
+        mine.write_text("MY OWN AGENTS\n", encoding="utf-8")
+        fx_agents = self.home / ".fx" / "AGENTS.md"
+        fx_agents.parent.mkdir(parents=True)
+        fx_agents.symlink_to(mine)
+        skill_target = self.home / "my-own-skill"
+        skill_target.mkdir()
+        fx_skill = self.home / ".fx" / "skills" / install.SKILL_DIR.name
+        fx_skill.parent.mkdir(parents=True)
+        fx_skill.symlink_to(skill_target)
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("fx",), install.CONTRACT_DIR
+        )
+
+        self.assertIn(fx_agents, conflicts)
+        self.assertIn(fx_skill, conflicts)
+        self.assertTrue(fx_agents.is_symlink())
+        self.assertTrue(fx_skill.is_symlink())
+
+    def test_a_dangling_users_symlink_at_a_copied_tree_is_refused(self) -> None:
+        fx_skill = self.home / ".fx" / "skills" / install.SKILL_DIR.name
+        fx_skill.parent.mkdir(parents=True)
+        fx_skill.symlink_to(self.home / "gone")
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("fx",), install.CONTRACT_DIR
+        )
+
+        self.assertIn(fx_skill, conflicts)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = install.main(["--home", str(self.home), "--harness", "fx"])
+        self.assertEqual(1, code)
+        self.assertTrue(fx_skill.is_symlink())
+
+    def test_a_dangling_owned_symlink_is_repointed_without_force(self) -> None:
+        skill = self.home / ".claude" / "skills" / install.SKILL_DIR.name
+        skill.parent.mkdir(parents=True)
+        skill.symlink_to(self.home / "gone")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--home", str(self.home), "--harness", "claude"])
+
+        self.assertEqual(0, code)
+        self.assertTrue(skill.is_symlink())
+        self.assertEqual(install.SKILL_DIR, skill.resolve())
+
+    def test_a_users_symlink_at_a_project_target_is_refused(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        mine = root / "shared-agents.md"
+        mine.write_text("SHARED\n", encoding="utf-8")
+        (root / "AGENTS.md").symlink_to(mine)
+
+        conflicts = install.find_conflicts(
+            install.plan_project(root), ("claude",), install.CONTRACT_DIR
+        )
+
+        self.assertIn(root / "AGENTS.md", conflicts)
+        code = install.main(["--scope", "project", "--root", str(root), "--harness", "claude"])
+        self.assertEqual(1, code)
+        self.assertTrue((root / "AGENTS.md").is_symlink())
+        self.assertEqual("SHARED\n", mine.read_text(encoding="utf-8"))
+
+    def test_a_link_the_installer_owns_is_still_repointed_without_force(self) -> None:
+        install.main(["--home", str(self.home), "--harness", "claude"])
+        agents = self.home / ".claude" / "AGENTS.md"
+        self.assertTrue(agents.is_symlink())
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = install.main(["--home", str(self.home), "--harness", "claude"])
+
+        self.assertEqual(0, code)
+        self.assertNotIn("refusing", stdout.getvalue())
+        self.assertTrue(agents.is_symlink())
+
+    def test_a_users_symlink_at_a_rules_target_is_refused(self) -> None:
+        mine = self.home / "mine-rules.md"
+        mine.write_text("MY OWN RULES\n", encoding="utf-8")
+        rules = self.home / ".grok" / "rules" / "review.md"
+        rules.parent.mkdir(parents=True)
+        rules.symlink_to(mine)
+
+        conflicts = install.find_conflicts(
+            install.plan_harnesses(self.home), ("grok",), install.CONTRACT_DIR
+        )
+
+        self.assertIn(rules, conflicts)
+
     def test_detect_accepts_a_config_directory(self) -> None:
         (self.home / ".config" / "opencode").mkdir(parents=True)
         absent = install.HarnessSpec(
@@ -694,12 +881,28 @@ class ConflictGuardTestCase(unittest.TestCase):
             [], install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
         )
 
-    def test_a_symlink_is_never_a_conflict(self) -> None:
+    def test_a_symlink_the_installer_would_create_is_never_a_conflict(self) -> None:
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(home, ignore_errors=True))
+        agents = home / ".claude" / "AGENTS.md"
+        agents.parent.mkdir(parents=True)
+        agents.symlink_to(install.CONTRACT_DIR / "RTK.md")
+
+        self.assertEqual(
+            [],
+            install.find_conflicts(
+                install.plan_harnesses(home), ("claude",), install.CONTRACT_DIR
+            ),
+        )
+
+    def test_a_symlink_at_a_project_target_is_a_conflict_because_project_scope_copies(
+        self,
+    ) -> None:
         agents = self.root / "AGENTS.md"
         agents.symlink_to(install.CONTRACT_DIR / "RTK.md")
 
         self.assertEqual(
-            [], install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
+            [agents], install.find_conflicts(self.plans, self.chosen, install.CONTRACT_DIR)
         )
 
     def test_a_foreign_grok_rules_file_is_a_conflict(self) -> None:

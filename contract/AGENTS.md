@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-24.1
+Contract-Version: 2026-11-24.2
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -41,6 +41,12 @@ unloading is not an option.
 | `loop.md` | running multi-unit or risky work | machine check, unit graph, retry limits, merge, failure return, undo gates |
 | `review.md` | reviewing code or clearing a change to ship | agreement engine, five-element refutation, finding report, independent-round isolation, triage, stopping rule |
 
+Two subagents carry the review gate: `reviewer` owns the ship verdict,
+`review-finder` hunts one flow during fan-out. Both install into the harness's
+own agent directory, so a review never shells out to a second CLI. Dispatch the
+installed definition rather than restating it in the prompt; where a harness has
+no agent directory, use the recorded fallback.
+
 ### Precedence
 
 When instruction sources disagree, the higher entry wins:
@@ -59,8 +65,8 @@ destructive or irreversible action.
 A copy that lacks `Contract-Version` or shows a different one is stale. The
 version is `YYYY-MM-DD.N`; bump `N` for every change to any installed surface,
 including a companion. Refresh the copy from the canonical checkout, then act on
-this file. A matching version means the same published revision; confirming
-identical bytes needs `python3 install.py --check` against the checkout, with
+this file. A matching version means the same published revision. In the source
+checkout, confirming identical bytes needs `python3 install.py --check`, with
 `--scope project --root <path>` for a project copy.
 
 ### Session bootstrap (mandatory)
@@ -493,23 +499,24 @@ full engines and report contract; the pointers below are the gates.
   strongest counterargument. Absorbed defects and timing windows are not
   refutations. Report zero as "no supported findings in the examined scope",
   never "bug-free".
-- **Independent review** — a non-author owns the verdict, using a fresh
-  reviewer session that never saw the build. Required for every change bound
-  for a shared branch (pushed to a shared remote, or targeted by a merge or
-  PR — a local scratch branch is not shared), every merge, every STOP trigger,
-  and every release. Compute the subject from git (`$RELEASED..HEAD` plus the
-  working tree), not from prose; give the reviewer the mechanical range and
-  usage model, not suspected defects. No resume, fork, or subagent of the
-  building session; read-only, memory off, project instructions off where the
-  CLI allows. Re-run after every fix: a fix is unreviewed code. Triage each
-  finding against literal steps, permitted execution, actor and motive;
-  reviewer labels are claims. A repository ranks reviewers but never rules out
-  a review: named reviewer → recorded fallback → any installed reviewer →
-  fresh builder-family session; name the actual reviewer. Stop at no
-  INTRODUCED finding above Low and no High or Critical of any age. The reviewer
-  records the verdict, covered scope, round count, each finding's outcome, and
-  open risk in the PR body or commit message. Never skip a required review; a
-  reviewer that cannot run falls back or uses a fresh builder-family session.
+- **Independent review** — a non-author owns the verdict, using the installed
+  `reviewer` subagent: a fresh session that never saw the build, never a second
+  CLI. Required for every change bound for a shared branch (pushed to a shared
+  remote, or targeted by a merge or PR — a local scratch branch is not shared),
+  every merge, every STOP trigger, and every release. Compute the subject from
+  git (`$RELEASED..HEAD` plus the working tree), not from prose; give the
+  reviewer the mechanical range and usage model, not suspected defects. No
+  resume, fork, or inheritance of the building session's context; read-only
+  tools, memory off, project instructions off where the harness allows.
+  Dispatch one `review-finder` subagent per complete flow when a subject spans
+  several. Re-run after every fix: a fix is unreviewed code. Triage each finding
+  against literal steps, permitted execution, actor and motive; reviewer labels
+  are claims. A repository ranks reviewers but never rules out a review: named
+  reviewer → recorded fallback → a fresh subagent of the builder's family;
+  name the actual reviewer. Stop at no INTRODUCED finding above Low and no High
+  or Critical of any age. The reviewer records the verdict, covered scope,
+  round count, each finding's outcome, and open risk in the PR body or commit
+  message. Never skip a required review.
 
 Pre-review: all automated checks pass, no merge conflicts, branch current with
 target. A short clean round or a round that could not read the subject is a
@@ -532,7 +539,7 @@ CRITICAL or HIGH; a security-scoped review also blocks on HIGH.
 
 | Plugin / skill | Source | Purpose |
 |---|---|---|
-| `agents-contract` | this repository, `.agents/skills/agents-contract/` | Repo-local skill encoding this contract as executable steps; load at session start |
+| `agents-contract` | installed beside this contract | Skill encoding this contract as executable steps; load at session start |
 | `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code-search server — top rung of the discovery ladder |
 | `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
 

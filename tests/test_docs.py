@@ -169,7 +169,10 @@ class DocsTestCase(unittest.TestCase):
             "Unresolved values stored as resolved",
             "Verification and observability",
             "Deduplicate by violated agreement and root cause",
-            "first installed of Codex, headless Claude Code and Grok",
+            "subagent of the harness you are",
+            "no second",
+            "installed `reviewer`",
+            "read-only tools and no",
             "fresh session of the builder's",
             "cannot rule out a review",
             "Name the actual reviewer",
@@ -202,7 +205,7 @@ class DocsTestCase(unittest.TestCase):
             "observable consequence",
             "counterargument",
             "Coverage:",
-            "fresh session",
+            "fresh subagent",
             "never saw the build",
             "read-only",
             "no INTRODUCED finding above Low",
@@ -212,6 +215,106 @@ class DocsTestCase(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, review)
+
+    def test_review_agents_ship_as_subagent_definitions(self) -> None:
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+        contract = AGENTS.read_text(encoding="utf-8")
+        names = {path.stem for path in install.AGENTS_DIR.glob("*.md")}
+
+        self.assertEqual({"reviewer", "review-finder"}, names)
+        for path in install.AGENTS_DIR.glob("*.md"):
+            rendered = install.render_agent(path)
+            header, body = rendered.split("---")[1], rendered.split("---", 2)[2]
+            with self.subTest(agent=path.name):
+                self.assertIn(f"name: {path.stem}", header)
+                self.assertIn("description:", header)
+                self.assertIn("Read-only", body)
+                self.assertNotIn("Edit", header)
+        self.assertIn("`reviewer`", contract)
+        self.assertIn("`review-finder`", contract)
+        self.assertIn("installed definition", contract)
+        self.assertIn("review-finder", review)
+        self.assertNotIn("headless", contract)
+        self.assertNotIn("headless", review)
+
+    def test_the_installed_contract_does_not_point_at_repo_internal_paths(self) -> None:
+        contract = AGENTS.read_text(encoding="utf-8")
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+        codedna = (install.CONTRACT_DIR / "codedna.md").read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+
+        for name, text in (
+            ("AGENTS.md", contract),
+            ("review.md", review),
+            ("codedna.md", codedna),
+            ("SKILL.md", skill),
+        ):
+            for internal in ("contract/agents", "source repository"):
+                with self.subTest(file=name, internal=internal):
+                    self.assertNotIn(internal, text)
+        self.assertNotIn("install.py", review)
+        self.assertNotIn("this repository, `.agents/skills", contract)
+        self.assertIn("installed beside this contract", contract)
+
+    def test_agent_rendering_matches_each_harness_shape(self) -> None:
+        source = install.AGENTS_DIR / "reviewer.md"
+
+        claude = install.render_agent(source, "claude")
+        self.assertIn("tools: Bash, Read, Grep, Glob", claude.split("---")[1])
+        self.assertIn("mode: subagent", install.render_agent(source, "opencode"))
+        self.assertIn("readonly: true", install.render_agent(source, "grok").split("---")[1])
+        self.assertIn(
+            "  - run_shell_command", install.render_agent(source, "gemini").split("---")[1]
+        )
+        codex = install.render_agent(source, "codex")
+        self.assertTrue(codex.startswith('name = "reviewer"\n'))
+        self.assertIn('sandbox_mode = "read-only"', codex)
+        self.assertIn('developer_instructions = """', codex)
+        self.assertEqual(
+            {"reviewer.toml", "review-finder.toml"},
+            set(install.render_agents(install.SPEC_BY_NAME["codex"], install.AGENTS_DIR)),
+        )
+        self.assertEqual({}, install.render_agents(install.SPEC_BY_NAME["pi"], install.AGENTS_DIR))
+
+    def test_a_malformed_agent_file_is_refused(self) -> None:
+        cases = {
+            "no-block.md": "name: reviewer\n",
+            "unclosed.md": "---\nname: reviewer\n",
+            "nameless.md": "---\ndescription: no name here\n---\nbody\n",
+        }
+
+        for filename, text in cases.items():
+            path = Path(self._tmp()) / filename
+            path.write_text(text, encoding="utf-8")
+            with self.subTest(filename=filename):
+                with self.assertRaises(ValueError):
+                    install.render_agent(path)
+
+    def test_a_body_that_breaks_codex_toml_is_refused(self) -> None:
+        path = Path(self._tmp()) / "triple.md"
+        path.write_text('---\nname: reviewer\n---\nUse """ fences.\n', encoding="utf-8")
+
+        self.assertIn("Use", install.render_agent(path, "claude"))
+        with self.assertRaises(ValueError):
+            install.render_agent(path, "codex")
+
+    def test_every_rendered_agent_parses_in_its_own_format(self) -> None:
+        import tomllib
+
+        for path in install.AGENTS_DIR.glob("*.md"):
+            with self.subTest(agent=path.name):
+                codex = tomllib.loads(install.render_agent(path, "codex"))
+                self.assertEqual("read-only", codex["sandbox_mode"])
+                self.assertTrue(codex["developer_instructions"].strip())
+                header = install.render_agent(path, "claude").split("---")[1]
+                self.assertIn(f"name: {path.stem}", header)
+
+    def _tmp(self) -> str:
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(directory, ignore_errors=True))
+        return directory
 
     def test_review_standards_point_to_the_companion(self) -> None:
         contract = AGENTS.read_text(encoding="utf-8")

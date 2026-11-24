@@ -36,7 +36,7 @@ it spans correctness and security. Keep the tests separate per dimension.
 | Pass | Author | Question | Owner |
 |---|---|---|---|
 | Self-review | writer of the change | "What is wrong with this code?" | the author |
-| Independent review | fresh session that never saw the build | "Would this break or block what ships?" | a non-author |
+| Independent review | fresh subagent that never saw the build | "Would this break or block what ships?" | a non-author |
 
 Self-review fixes defects before anyone else sees the diff. Independent review
 owns the verdict; the writer never clears their own work. A one-line change
@@ -191,27 +191,33 @@ not applicable with a reason, or not examined with a reason. State what is
 well built and the limits of static review.
 
 Fan-out, when used, partitions complete flows, never files or taxonomy
-classes. Workers read both sides of their agreements and never edit the tree;
-confirm it is unchanged at the end. One model, named, for every worker.
+classes. Dispatch one `review-finder` subagent per flow; each reads both sides
+of its agreements and never edits the tree, so confirm the worktree is
+unchanged at the end. One model, named, for every worker.
 
 ## Independent review: the ship gate
 
-**Selection and isolation.** The tool is optional; the review is not. By
-default use the first installed of Codex, headless Claude Code and Grok. A
-fresh session of the builder's own model is independent: it never saw the
-build. It shares more blind spots than another family; a round that runs beats
-one skipped. The repository ranks its reviewers; it cannot rule out a review.
-When none of its named reviewers can run, use the recorded fallback without
-asking — then any installed reviewer, then a fresh session of the builder's
-family. Name the actual reviewer and why it replaced the named one.
-"Never review another family's work" means prefer another family, never skip.
+**Selection and isolation.** The reviewer is a subagent of the harness you are
+already running, dispatched from the installed `reviewer` definition: no second
+CLI, no external process, no provider key. A fresh subagent session never saw the
+build, so it is independent; it shares more blind spots than another model
+family, and a round that runs beats one skipped. The repository ranks its
+reviewers; it cannot rule out a review. When no agent runner is available, use
+the recorded fallback without asking — then a fresh session of the builder's
+family. Name the actual reviewer and why it replaced the named one. "Never
+review another family's work" means prefer another family, never skip.
 
-Fresh means never a resume, a fork or a subagent of the builder: it must not
-inherit the builder's beliefs. Require read-only tools, no MCP servers or
-connectors, memory off, high effort or above, and project and user instructions
-off where the CLI allows. A sandbox flag alone is insufficient. Name whatever
-cannot be switched off in the report. Give the reviewer only the mechanical
-range and the usage model, not suspected defects.
+Fresh means never a resume, a fork or the builder's own context: the subagent
+must not inherit the builder's beliefs. Dispatch it with read-only tools and no
+edit, write, or commit capability, memory off, project and user instructions off
+where the harness allows, and the brief below as its whole prompt. A sandbox
+flag alone is insufficient; the installed `reviewer` restricts to reading through
+whatever the harness format accepts — a tool list, a permission block, Grok's
+`readonly`, Codex's read-only sandbox. Factory Droid's agent format carries no
+such field, so there the definition's own read-only instruction is the only
+control — say so when you report the round. Name whatever cannot be switched off
+in the report. Give the reviewer only the mechanical range and the usage model,
+not suspected defects.
 
 **Write the brief in five parts, in this order, to avoid steering:** what the
 product is in two sentences, naming binding spec files and trust boundaries;
@@ -253,10 +259,10 @@ give generated docs as context, not subject.
 usage model, not a list of suspected defects. A short clean round is a failed
 round: require it to say what it read, what it expected and why the result
 holds. A round that could not read the subject is failed however long it is.
-Require a round to take minutes at high effort and check its saved read
-evidence. Findings and severity labels are claims. Verify each against the
-code by hand, including whether the trigger is reachable in the usage model.
-Keep notes, brief, report and read evidence outside the repository; review in
+Require a round that reports the files and ranges it examined, and check those
+against the subject yourself. Findings and severity labels are claims. Verify
+each against the code by hand, including whether the trigger is reachable in
+the usage model. Keep notes, brief and report outside the repository; review in
 a still checkout, and treat a pushing deploy as closing that round.
 
 ### Triage — mandatory before acting

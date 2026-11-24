@@ -8,7 +8,8 @@ description: MANDATORY bootstrap for every task under the repository's AGENTS.md
 Canonical detail: `references/contract.md`, byte-identical to `AGENTS.md`.
 `references/codedna.md` covers annotations and `references/commands.md` the RTK
 catalogue. Companions `caveman.md`, `ponytail.md`, `semble.md`, `loop.md`, and `review.md`
-sit beside `AGENTS.md`; this skill does not duplicate them.
+sit beside `AGENTS.md`; this skill does not duplicate them. The review gate
+dispatches the installed `reviewer` and `review-finder` subagents.
 
 ## 0. Startup gate (before any task tool call)
 
@@ -174,19 +175,20 @@ Apply to every source file whose language supports comments; never annotate
   refutation that survives the strongest counterargument; drop on a real
   preventing mechanism, not on "usually works". Zero supported findings is
   valid — never say "bug-free".
-- **Independent review** — a fresh session that never saw the build owns the
-  verdict (another model family preferred, fresh session of the builder's own
-  model acceptable; never a resume, fork, or subagent of the builder). Use
-  read-only tools, no MCP or connectors, memory off, high effort, project and
+- **Independent review** — a non-author owns the verdict, using the installed
+  `reviewer` subagent (another model family preferred, a fresh subagent of the
+  builder's own family acceptable; never a resume, fork, or inheritance of the
+  builder's context). Use read-only tools, no connector, memory off, project and
   user instructions off where allowed. Required for shared branches, merges,
   STOP triggers, and every release; a one-line shipped change gets a short
   round, never none. Compute the subject from git (`$RELEASED..HEAD` plus
   working tree), not prose; give the reviewer the range and usage model, not
-  suspected defects. Re-run after every fix. Triage literal steps, permitted
-  execution, actor and motive — severity labels are claims. Stop at no
+  suspected defects. Dispatch one `review-finder` subagent per complete flow
+  when the subject spans several. Re-run after every fix. Triage literal steps,
+  permitted execution, actor and motive — severity labels are claims. Stop at no
   INTRODUCED finding above Low and no High or Critical of any age. Record
-  verdict, scope, round count, finding outcomes, and open risk in the PR body
-  or commit message.
+  verdict, scope, round count, finding outcomes, and open risk in the PR body or
+  commit message.
 - Pre-review: checks pass, no conflicts, branch current with target. A short
   clean round or a round that could not read the subject is a failed round.
 - CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an unexplained file
@@ -220,7 +222,8 @@ separate ledger.
 ## 8. Verification
 
 - Docs/config: syntax check or targeted grep.
-- Installed contract surface: `python3 install.py --check --harness <name>`
+- Installed contract surface, in the source checkout:
+  `python3 install.py --check --harness <name>`
   (read-only; `--force` refresh only after reviewing replacements).
 - Python: the relevant `rtk pytest` target, or `python3 -m pytest` (or
   `python3 -m unittest`) without RTK.

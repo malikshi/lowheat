@@ -1,10 +1,11 @@
 """install.py — Put the contract in front of every harness that reads it.
 
-exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | SKILLS_DIR | SKILL_DIRS | detect | find_conflicts | main | plan_harnesses | plan_project | render_grok_rules | sync_contract_mirror
+exports: AGENTS_DIR | HARNESSES | SPECS | HarnessPlan | HarnessSpec | SKILLS_DIR | SKILL_DIRS | detect | find_conflicts | main | plan_harnesses | plan_project | render_agent | render_agents | render_grok_rules | sync_contract_mirror
 used_by: README.md → the install section
-used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, SKILL_DIRS, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
+used_by: tests/test_install.py → AGENTS_DIR, CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, SKILL_DIRS, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_agent, render_agents, render_grok_rules, sync_contract_mirror [cascade]
+used_by: tests/test_docs.py → CONTRACT_DIR, SKILL_DIR, SKILLS_DIR, COMPANIONS, AGENTS_DIR [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. Every skill under `.agents/skills` that holds a SKILL.md is installed, so a new repo skill becomes available to every harness without an installer edit; a harness with `skill_dir` receives all of them, and one that discovers the central `.agents/skills` leaves it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate. User scope links a harness's several rule filenames at ONE target so a harness that dedups by realpath loads the contract once; project scope gets no alias for agy, whose 24,000-byte per-file rule cap already truncates the 29 KB contract and would only be spent twice.
+rules:   Emit per harness from SPECS, never hand-copy. Review agents live in `contract/agents/*.md` as one canonical markdown body; `agent_format` renders that body into each harness's subagent file shape (markdown frontmatter, Gemini tool list, opencode permission block, or Codex TOML), because a definition written for one harness does not load in another. Agents are written, never linked, since the bytes differ per harness, and they are a user-scope surface only: no project agent directory is assumed. A differing existing agent file is user-owned and refused unless --force. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. Every skill under `.agents/skills` that holds a SKILL.md is installed, so a new repo skill becomes available to every harness without an installer edit; a harness with `skill_dir` receives all of them, and one that discovers the central `.agents/skills` leaves it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate. User scope links a harness's several rule filenames at ONE target so a harness that dedups by realpath loads the contract once; project scope gets no alias for agy, whose 24,000-byte per-file rule cap already truncates the 30 KB contract and would only be spent twice.
 agent:   fx | unknown | 2026-11-05 | unknown | hardened install paths, force directory replacement, target verification, no-op reporting, and mirror idempotency
 agent:   fx | unknown | 2026-11-05 | unknown | added read-only --check drift verification and documented the contract bootstrap
 agent:   unknown | nexrouter | 2026-11-21 | unknown | SKILL_DIRS replaces the one hardcoded skill so delete-comment reaches every harness
@@ -23,10 +24,21 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 CONTRACT_DIR = _HERE / "contract"
+AGENTS_DIR = CONTRACT_DIR / "agents"
 SKILLS_DIR = _HERE / ".agents" / "skills"
 SKILL_DIR = SKILLS_DIR / "agents-contract"
 COMPANIONS = ("codedna.md", "RTK.md", "semble.md", "caveman.md", "ponytail.md", "loop.md", "review.md")
 _COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
+_AGENT_TOOLS = {
+    "claude": ['tools: Bash, Read, Grep, Glob'],
+    "commandcode": ["tools: shell_command, read_file, read_directory, grep, glob"],
+    "grok": ["readonly: true", "tools: shell_command, read_file, grep, glob"],
+    "opencode": ["mode: subagent", "permission:", "  bash: allow", "  read: allow", "  edit: deny"],
+    "gemini": ["tools:", "  - run_shell_command", "  - read_file"],
+    "plain": [],
+}
+_AGENT_SUFFIX = {"codex": ".toml"}
+_CODEX_SANDBOX = 'sandbox_mode = "read-only"'
 
 
 def _skill_dirs() -> tuple[Path, ...]:
@@ -49,7 +61,7 @@ SKILL_DIRS = _skill_dirs()
 class HarnessSpec:
     """One harness's installation surface.
 
-    Rules:   `memory` names the files the harness reads as global instructions; each resolves to AGENTS.md. `global_base` overrides the directory those files land in (Jcode uses the home directory). `companions` is `beside` when the harness reads sibling files, or `rules` when it scans a directory of standalone rule documents. `project_alias` adds a project-root filename for a harness that does not read AGENTS.md. `project_rules_dir` writes the companions as standalone files under that directory. `global_files` and `project_files` map extra config files to a file under `contract/`. `skill_dir` is unset for harnesses that discover the central `.agents/skills` or read no skills. `copy_global` writes real files because fx refuses symlinked instructions; `copy_skill` recursively copies the skill because fx refuses linked skill directories. `global_install` is false for project-only harnesses whose global memory is UI-managed.
+    Rules:   `memory` names the files the harness reads as global instructions; each resolves to AGENTS.md. `global_base` overrides the directory those files land in (Jcode uses the home directory). `companions` is `beside` when the harness reads sibling files, or `rules` when it scans a directory of standalone rule documents. `project_alias` adds a project-root filename for a harness that does not read AGENTS.md. `project_rules_dir` writes the companions as standalone files under that directory. `global_files` and `project_files` map extra config files to a file under `contract/`. `skill_dir` is unset for harnesses that discover the central `.agents/skills` or read no skills. `agent_dir` is the subagent directory, unset when the harness has none, and `agent_format` names the file shape that directory loads. `copy_global` writes real files because fx refuses symlinked instructions; `copy_skill` recursively copies the skill because fx refuses linked skill directories. `global_install` is false for project-only harnesses whose global memory is UI-managed.
     """
 
     name: str
@@ -66,21 +78,23 @@ class HarnessSpec:
     copy_global: bool = False
     copy_skill: bool = False
     global_install: bool = True
+    agent_dir: str | None = None
+    agent_format: str = "plain"
     tier: str = "native"
 
 
 SPECS = (
-    HarnessSpec("claude", ("claude",), ".claude", ("AGENTS.md", "CLAUDE.md"), project_alias="CLAUDE.md"),
-    HarnessSpec("codex", ("codex",), ".codex", ("AGENTS.md",)),
-    HarnessSpec("commandcode", ("commandcode", "command-code"), ".commandcode", ("AGENTS.md",)),
-    HarnessSpec("grok", ("grok",), ".grok", ("AGENTS.md",), companions="rules", project_rules_dir=".grok/rules"),
-    HarnessSpec("opencode", ("opencode",), ".config/opencode", ("AGENTS.md",), skill_dir=None),
-    HarnessSpec("factory", ("droid",), ".factory", ("AGENTS.md",)),
-    HarnessSpec("kilo", ("kilo", "kilocode"), ".config/kilo", ("AGENTS.md",), skill_dir=None),
+    HarnessSpec("claude", ("claude",), ".claude", ("AGENTS.md", "CLAUDE.md"), project_alias="CLAUDE.md", agent_dir="agents", agent_format="claude"),
+    HarnessSpec("codex", ("codex",), ".codex", ("AGENTS.md",), agent_dir="agents", agent_format="codex"),
+    HarnessSpec("commandcode", ("commandcode", "command-code"), ".commandcode", ("AGENTS.md",), agent_dir="agents", agent_format="commandcode"),
+    HarnessSpec("grok", ("grok",), ".grok", ("AGENTS.md",), companions="rules", project_rules_dir=".grok/rules", agent_dir="agents", agent_format="grok"),
+    HarnessSpec("opencode", ("opencode",), ".config/opencode", ("AGENTS.md",), skill_dir=None, agent_dir="agents", agent_format="opencode"),
+    HarnessSpec("factory", ("droid",), ".factory", ("AGENTS.md",), agent_dir="droids"),
+    HarnessSpec("kilo", ("kilo", "kilocode"), ".config/kilo", ("AGENTS.md",), skill_dir=None, agent_dir="agents", agent_format="opencode"),
     HarnessSpec("pi", ("pi",), ".pi/agent", ("AGENTS.md",)),
     HarnessSpec("cline", ("cline",), ".agents", ("AGENTS.md",)),
     HarnessSpec("agents", (), ".agents", ("AGENTS.md",), tier="agents"),
-    HarnessSpec("gemini", ("gemini",), ".gemini", ("GEMINI.md",), skill_dir=None, project_alias="GEMINI.md", tier="agents"),
+    HarnessSpec("gemini", ("gemini",), ".gemini", ("GEMINI.md",), skill_dir=None, project_alias="GEMINI.md", agent_dir="agents", agent_format="gemini", tier="agents"),
     HarnessSpec("agy", ("agy",), ".gemini/config", ("AGENTS.md", "GEMINI.md"), tier="agents"),
     HarnessSpec("crush", ("crush",), ".config/crush", ("CRUSH.md",), skill_dir=None, project_alias="CRUSH.md", tier="agents"),
     HarnessSpec("cursor", ("cursor",), ".cursor", (), skill_dir=None, global_install=False, tier="agents"),
@@ -107,7 +121,7 @@ SPEC_BY_NAME = {spec.name: spec for spec in SPECS}
 class HarnessPlan:
     """One harness's install shape and the paths it needs.
 
-    Rules:   `links` maps a path to create to the contract or skill source. `rules_dir` names a directory whose companion files are written whole because that harness scans it. `copy` writes contents instead of a symlink, required for project scope where a link into the installer's checkout is dead on another clone.
+    Rules:   `links` maps a path to create to the contract or skill source. `rules_dir` names a directory whose companion files are written whole because that harness scans it. `files` holds rendered text with no single source file, such as a subagent definition whose shape differs per harness. `copy` writes contents instead of a symlink, required for project scope where a link into the installer's checkout is dead on another clone.
     """
 
     harness: str
@@ -115,6 +129,7 @@ class HarnessPlan:
     rules_dir: Path | None
     copy: bool = False
     dirs: dict[Path, Path] = field(default_factory=dict)
+    files: dict[Path, str] = field(default_factory=dict)
 
 
 def detect(spec: HarnessSpec, home: Path) -> bool:
@@ -123,6 +138,57 @@ def detect(spec: HarnessSpec, home: Path) -> bool:
     Rules:   A binary on PATH or an existing config directory counts. Detection never proves the harness loaded the contract; it only decides which adapters `--harness auto` selects.
     """
     return any(shutil.which(binary) for binary in spec.binaries) or (home / spec.config_dir).is_dir()
+
+
+def render_agent(path: Path, agent_format: str = "plain") -> str:
+    """Render one canonical agent file into a harness subagent definition.
+
+    Rules:   The canonical file is markdown with a `---` block of `key: value` lines holding `name` and `description`, and its body is kept verbatim so every rendered shape carries identical instruction text. Refuse an unclosed block, a missing name, or a body that cannot sit inside a Codex TOML string, rather than shipping a definition the harness cannot parse. Every harness reads those two fields; the rest differs — Gemini takes a YAML tool list, opencode and Kilo a permission block, Claude, Grok and Command Code a comma tool list of their own ids, and Codex TOML with a read-only sandbox because it does not read markdown agents. A definition written in one shape does not load in another, so render per `agent_format`. Every shape that accepts a tool or sandbox field restricts to reading: a reviewer that can edit the tree invalidates its own verdict.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise ValueError(f"{path.name} has no frontmatter block")
+    try:
+        end = lines.index("---", 1)
+    except ValueError as error:
+        raise ValueError(f"{path.name} frontmatter is not closed") from error
+    fields: dict[str, str] = {}
+    for line in lines[1:end]:
+        key, _, value = line.partition(":")
+        fields[key.strip()] = value.strip()
+    name = fields.get("name")
+    if not name:
+        raise ValueError(f"{path.name} frontmatter has no name")
+    description = fields.get("description", "")
+    body = "\n".join(lines[end + 1 :]).strip() + "\n"
+    if agent_format == "codex":
+        if '"""' in body or body.rstrip("\n").endswith("\\"):
+            raise ValueError(f"{path.name} body cannot be embedded in a TOML string")
+        return (
+            f'name = "{name}"\n'
+            f'description = "{description}"\n'
+            f"{_CODEX_SANDBOX}\n"
+            'developer_instructions = """\n'
+            f"{body}"
+            '"""\n'
+        )
+    header = ["---", f"name: {name}", f"description: {description}"]
+    header.extend(_AGENT_TOOLS.get(agent_format, _AGENT_TOOLS["plain"]))
+    return "\n".join([*header, "---"]) + "\n\n" + body
+
+
+def render_agents(spec: HarnessSpec, agents_dir: Path | None = None) -> dict[Path, str]:
+    """Return every rendered agent file a harness's subagent directory needs.
+
+    Rules:   A harness with no `agent_dir` gets nothing, because it reads no agent files and would only collect dead copies. The filename is the canonical stem plus `_AGENT_SUFFIX` for a harness that needs another extension, so two agents never collide and a re-run overwrites the same paths. Read the source directory per call so a new agent file ships without an installer edit.
+    """
+    if spec.agent_dir is None or agents_dir is None or not agents_dir.is_dir():
+        return {}
+    suffix = _AGENT_SUFFIX.get(spec.agent_format, ".md")
+    return {
+        path.with_suffix(suffix).name: render_agent(path, spec.agent_format)
+        for path in sorted(agents_dir.glob("*.md"))
+    }
 
 
 def render_grok_rules(contract_dir: Path) -> dict[str, str]:
@@ -197,8 +263,15 @@ def plan_harnesses(home: Path) -> dict[str, HarnessPlan]:
                     links[target] = skill
         for target, source in spec.global_files:
             links[home / target] = CONTRACT_DIR / source
+        files = {}
+        if spec.agent_dir:
+            base_agents = base / spec.agent_dir
+            files = {
+                base_agents / name: text
+                for name, text in render_agents(spec, AGENTS_DIR).items()
+            }
         plans[spec.name] = HarnessPlan(
-            spec.name, links, rules_dir, copy=spec.copy_global, dirs=dirs
+            spec.name, links, rules_dir, copy=spec.copy_global, dirs=dirs, files=files
         )
     return plans
 
@@ -271,12 +344,17 @@ def find_conflicts(
 ) -> list[Path]:
     """Return existing files an install would overwrite with different content.
 
-    Rules:   A symlink is never a conflict — it is wiring this script owns and repoints. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions, so it must be refused rather than replaced. A directory target is always refused because the only directory this script links is the skill, and a real directory there belongs to the user. Rules-directory files count too: they are written by apply_plan outside `links`.
+    Rules:   Ownership follows the writer, not the path. A link-mode plan `_link`s its targets, so a symlink there is wiring this script owns and repoints. A copy-mode plan (`plan.copy`: fx user scope, every project scope) and the rendered outputs (`files`, `rules_dir`) are written as regular files and never symlinked, so any symlink at those targets is the user's own and must be refused unless --force. A regular file whose bytes already match the contract is not a conflict either, so a re-run stays quiet. Anything else is somebody's own file and overwriting it destroys their instructions. A real directory at a linked target is refused for the same reason.
     """
     conflicts: list[Path] = []
 
-    def note(target: Path, expected: bytes) -> None:
-        if target in conflicts or target.is_symlink():
+    def note(target: Path, expected: bytes, owned_link: bool) -> None:
+        if target in conflicts:
+            return
+        if target.is_symlink():
+            if owned_link:
+                return
+            conflicts.append(target)
             return
         if target.is_file():
             if target.read_bytes() != expected:
@@ -284,27 +362,34 @@ def find_conflicts(
         elif target.exists():
             conflicts.append(target)
 
-    def note_directory(target: Path) -> None:
-        if target in conflicts or target.is_symlink() or not target.exists():
+    def note_directory(target: Path, owned_link: bool) -> None:
+        if target in conflicts or (not target.exists() and not target.is_symlink()):
+            return
+        if target.is_symlink() and owned_link:
             return
         conflicts.append(target)
 
     for harness, plan in plans.items():
         if harness not in chosen:
             continue
+        owned_link = not plan.copy
         for target, source in plan.links.items():
             if source.is_dir():
-                note_directory(target)
+                note_directory(target, owned_link)
             else:
-                note(target, source.read_bytes())
+                note(target, source.read_bytes(), owned_link)
         for target, source in plan.dirs.items():
-            if target.is_symlink() or not target.exists():
+            if not target.exists() and not target.is_symlink():
+                continue
+            if target.is_symlink() and owned_link:
                 continue
             if not _same_tree(target, source) and target not in conflicts:
                 conflicts.append(target)
+        for target, text in plan.files.items():
+            note(target, text.encode(), owned_link=False)
         if plan.rules_dir is not None:
             for name, text in render_grok_rules(contract_dir).items():
-                note(plan.rules_dir / name, text.encode())
+                note(plan.rules_dir / name, text.encode(), owned_link=False)
     return conflicts
 
 
@@ -437,13 +522,31 @@ def _apply_rules(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[s
     return actions
 
 
+def _apply_files(plan: HarnessPlan, dry_run: bool) -> list[str]:
+    """Write or report one plan's rendered files, such as subagent definitions.
+
+    Rules:   These have no source file to link, so each is written whole through the staged writer and verified as a regular file. A dry run reports `write` or `unchanged` and touches nothing.
+    """
+    actions: list[str] = []
+    for target, text in plan.files.items():
+        same = target.is_file() and not target.is_symlink() and target.read_text(encoding="utf-8") == text
+        if dry_run:
+            actions.append(f"{plan.harness}: {'unchanged' if same else 'write'} {target} (dry run)")
+            continue
+        action = _write_text(target, text)
+        _verify_target(target, "file")
+        actions.append(f"{plan.harness}: {action} {target}")
+    return actions
+
+
 def apply_plan(plan: HarnessPlan, contract_dir: Path, dry_run: bool) -> list[str]:
     """Create one harness's links or copies and rules files, reporting each change.
 
-    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing. Report every action so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract.
+    Rules:   Verify each written path resolves before reporting it, since a link to a missing source loads nothing. Report every action so a partial run shows exactly what landed. A copy plan writes file contents; a link plan points at the contract; rendered files are always written.
     """
     actions = _apply_links(plan, dry_run)
     actions.extend(_apply_dirs(plan, dry_run))
+    actions.extend(_apply_files(plan, dry_run))
     actions.extend(_apply_rules(plan, contract_dir, dry_run))
     return actions
 
@@ -581,7 +684,7 @@ def _apply_selected(
 ) -> list[str]:
     """Apply each selected harness once, skipping paths an earlier harness already emitted.
 
-    Rules:   Cline and the central `.agents` adapter share the same targets; custom adapters may overlap too. Deduplicate links and tree targets before writing so the second harness never repeats a write. Return every action for `--check`.
+    Rules:   Cline and the central `.agents` adapter share the same targets; custom adapters may overlap too. Deduplicate links, tree targets, and rendered files before writing so the second harness never repeats a write. Return every action for `--check`.
     """
     emitted: set[Path] = set()
     actions: list[str] = []
@@ -594,9 +697,11 @@ def _apply_selected(
             plan.rules_dir,
             plan.copy,
             plan.dirs,
+            {t: x for t, x in plan.files.items() if t not in emitted},
         )
         emitted.update(unique.links)
         emitted.update(unique.dirs)
+        emitted.update(unique.files)
         for action in apply_plan(unique, CONTRACT_DIR, dry_run):
             print(action)
             actions.append(action)

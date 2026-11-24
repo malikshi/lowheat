@@ -7,7 +7,7 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 
 | Path | Purpose |
 |---|---|
-| `install.py` | Adapter-driven installer — links or copies the contract, companions, aliases, skill, and rules files where each harness reads them |
+| `install.py` | Adapter-driven installer — links or copies the contract, companions, aliases, and skill, and renders the review subagents into each harness's own agent format |
 | `contract/AGENTS.md` | Canonical thin contract — operating principles, Work Loop, engineering standards, execution & delivery, environment |
 | `contract/codedna.md` | Full CodeDNA convention — module headers, function annotations, inline rules, checker behaviour |
 | `contract/RTK.md` | RTK command reference — decision rule, fidelity zones, and the full CLI catalogue |
@@ -16,6 +16,8 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 | `contract/ponytail.md` | Ponytail posture reference — ladder, never-cut list, shortcut and disclosure conventions |
 | `contract/loop.md` | Unit-loop companion — machine check, unit cards, bounded retries, deterministic merge, failure returns, undo gates |
 | `contract/review.md` | Review companion — agreement engine, five-element refutation, finding report, fresh independent rounds, triage, stopping rule |
+| `contract/agents/reviewer.md` | Canonical ship-gate subagent definition — read-only, never saw the build, owns the verdict; rendered per harness by `install.py` |
+| `contract/agents/review-finder.md` | Canonical one-flow defect-hunt subagent — dispatched once per complete flow during fan-out; rendered per harness |
 | `contract/aider.conf.yml` | Aider config that reads the project `CONVENTIONS.md` alias |
 | `contract/continue.md` | Continue project rule that points at `AGENTS.md` and its companions |
 | `.agents/skills/agents-contract/SKILL.md` | Mandatory session-bootstrap skill encoding the AGENTS.md contract as executable steps |
@@ -56,6 +58,32 @@ The companions hold the detail the core points to: `codedna.md` for annotations,
 `caveman.md` for reply modes, `ponytail.md` for scope discipline, `loop.md` for
 the unit-level execution loop, and `review.md` for review and ship gates.
 
+## Review agents
+
+The independent review gate runs on the harness's own subagents, not on a second
+CLI. `contract/agents/` holds two canonical markdown definitions — `reviewer`
+for the ship verdict and `review-finder` for one-flow fan-out — and `install.py`
+renders each into the shape the harness loads:
+
+| Harness | Agent directory | File shape |
+|---|---|---|
+| Claude Code | `~/.claude/agents/` | frontmatter with a comma tool list |
+| Codex | `~/.codex/agents/` | TOML with `developer_instructions` and `sandbox_mode = "read-only"` |
+| Command Code | `~/.commandcode/agents/` | frontmatter with its own tool ids |
+| Grok | `~/.grok/agents/` | frontmatter with `readonly: true` |
+| OpenCode, Kilo | `~/.config/{opencode,kilo}/agents/` | `mode: subagent` plus a permission block |
+| Factory Droid | `~/.factory/droids/` | plain frontmatter |
+| Gemini CLI | `~/.gemini/agents/` | YAML tool list |
+
+Every harness whose agent format accepts a tool, permission or sandbox field
+gets one that restricts to reading — Claude Code, Command Code, Grok, OpenCode,
+Kilo, Gemini, and Codex (`sandbox_mode = "read-only"`). Factory Droid's agent
+format carries no such field, so there the read-only rule is the definition's own
+instruction and a round must say so. Agents are written, never linked: the bytes
+differ per harness, and they are a user-scope surface — no project agent
+directory is assumed. A differing existing agent file belongs to the user and is
+refused unless `--force`.
+
 ## Bootstrapping
 
 ```bash
@@ -85,18 +113,18 @@ scope copies.
 
 | Harness | User scope | Project scope |
 |---|---|---|
-| Claude Code | `~/.claude/{AGENTS,CLAUDE}.md`, companions, `skills/*` | `AGENTS.md`, companions, `CLAUDE.md` |
-| Codex | `~/.codex/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
-| Command Code | `~/.commandcode/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
-| Grok | `~/.grok/AGENTS.md`, `~/.grok/rules/*.md`, `skills/*` | `AGENTS.md`, companions, `.grok/rules/*.md` |
-| OpenCode | `~/.config/opencode/AGENTS.md`, companions | `AGENTS.md`, companions |
-| Factory Droid | `~/.factory/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
-| Kilo | `~/.config/kilo/AGENTS.md`, companions | `AGENTS.md`, companions |
+| Claude Code | `~/.claude/{AGENTS,CLAUDE}.md`, companions, `skills/*`, `agents/*` | `AGENTS.md`, companions, `CLAUDE.md` |
+| Codex | `~/.codex/AGENTS.md`, companions, `skills/*`, `agents/*.toml` | `AGENTS.md`, companions |
+| Command Code | `~/.commandcode/AGENTS.md`, companions, `skills/*`, `agents/*` | `AGENTS.md`, companions |
+| Grok | `~/.grok/AGENTS.md`, `~/.grok/rules/*.md`, `skills/*`, `agents/*` | `AGENTS.md`, companions, `.grok/rules/*.md` |
+| OpenCode | `~/.config/opencode/AGENTS.md`, companions, `agents/*` | `AGENTS.md`, companions |
+| Factory Droid | `~/.factory/AGENTS.md`, companions, `skills/*`, `droids/*` | `AGENTS.md`, companions |
+| Kilo | `~/.config/kilo/AGENTS.md`, companions, `agents/*` | `AGENTS.md`, companions |
 | Pi | `~/.pi/agent/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Central `.agents` | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Cline | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
-| Gemini CLI | `~/.gemini/GEMINI.md`, companions | `GEMINI.md`, companions |
-| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `AGENTS.md`, companions. No `GEMINI.md` copy: two identical files spend its 24,000-byte per-file rule cap twice, and the cap already truncates the 29,244-byte `AGENTS.md`; its uncapped skills carry the full contract |
+| Gemini CLI | `~/.gemini/GEMINI.md`, companions, `agents/*` | `GEMINI.md`, companions |
+| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `AGENTS.md`, companions. No `GEMINI.md` copy: two identical files spend its 24,000-byte per-file rule cap twice, and the cap already truncates the 29,975-byte `AGENTS.md`; its uncapped skills carry the full contract |
 | Crush | `~/.config/crush/CRUSH.md`, companions | `CRUSH.md`, companions |
 | Qwen Code | `~/.qwen/QWEN.md`, companions | `QWEN.md`, companions |
 | fx | `~/.fx/AGENTS.md`, companions as regular files, `~/.fx/skills/agents-contract` | `AGENTS.md`, companions |
