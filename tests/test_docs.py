@@ -281,8 +281,9 @@ class DocsTestCase(unittest.TestCase):
     def test_a_panel_prompt_carries_the_definition_body_for_both_agents(self) -> None:
         review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
 
-        self.assertIn("that agent's full definition body", review)
+        self.assertIn("that agent's full\ndefinition body", review)
         self.assertIn("for `review-finder` it names the flow", review)
+        self.assertIn("**Naming the models.**", review)
         self.assertNotIn("the `reviewer` body plus", review)
 
     def test_a_pinned_model_in_the_definition_would_collapse_the_panel(self) -> None:

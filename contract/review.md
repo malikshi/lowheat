@@ -233,13 +233,26 @@ applies to both subagents. On `reviewer` it widens the ship verdict on one
 subject; on `review-finder` it widens each flow, so every flow still gets every
 model — a panel applied to some flows and not others is not a panel.
 
+**Naming the models.** Do not hard-code a provider or an endpoint. Read the
+model ids from the harness's own list — the picker, a `--list-models` flag, or
+whatever it calls its catalog — and take three that the session's current
+provider already serves. That keeps the panel on the endpoint the session is
+authenticated against, with no extra credentials and no per-project config, and
+it follows the user when they switch providers. Name each id exactly as the list
+prints it, including any provider prefix; a bare alias is often rejected as an
+unknown model. Do not substitute another provider's spelling of the same
+capability: a member that fails to launch is a failed member, not a third view.
+If the session's provider serves fewer than three models, widen on the models it
+does serve and say how many ran, rather than silently reaching for another
+endpoint.
+
 **Dispatch.** Hold the agent definition itself back. Name `reviewer` or
 `review-finder` in a subagent file only when you are happy with one fixed model;
 pin `model` there and the panel collapses to that model, because a per-run
 override is the only way to vary it. For a panel, dispatch three generic
-subagent calls in one turn on a provider that offers at least three models. Each
-member's prompt is that agent's full definition body — read the installed agent
-file and use it verbatim — with the brief appended beneath it. For `reviewer`
+subagent calls in one turn. Each member's prompt is that agent's full
+definition body — read the installed agent file and use it verbatim — with the
+brief appended beneath it. For `reviewer`
 the brief is the five parts below; for `review-finder` it names the flow, the
 baseline and the dimension. The brief alone is only the subject; without the
 body a member has no method, no five-element refutation and no report shape, and
