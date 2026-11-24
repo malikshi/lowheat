@@ -2,12 +2,12 @@
 
 exports: class DocsTestCase
 used_by: none
-rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and reference companions by name rather than importing them; every reference path the skill names must exist, the skill and contract must agree on precedence, gates, trailers, and the compliance record, and the README companion prose must name every registered companion.
-agent:   fx | unknown | 2026-11-05 | unknown | pinned the loop companion gates and six-companion contract
+rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and reference companions by name rather than importing them; every reference path the skill names must exist, the skill and contract must agree on precedence, gates, trailers, and the compliance record, the README companion prose must name every registered companion, and the review companion must pin the upstream taxonomy and reviewer-fallback gates.
 agent:   grok-4.5 | xai | 2026-11-06 | 01a1add5-9f8f-7f01-ac4b-21d24f6dceaa | pinned skill precedence, rulebook gates, rejected-attempt trailer, and local review enum
 agent:   gemini-4-argon | google | 2026-11-08 | d7c52693-a719-48d1-a0fd-1ef0caadf691 | pinned bootstrap tool-call ordering, loop Work Loop mapping and revert/retry rules, and scoped comment/STOP gates
 agent:   fx | unknown | 2026-11-23 | unknown | pinned review-companion engines, independent-round isolation, and finding triage gates
 agent:   fx | unknown | 2026-11-24 | unknown | pinned README companion prose to the installer registry
+agent:   fx | unknown | 2026-11-24 | unknown | pinned upstream review taxonomy and reviewer-fallback gates
 """
 
 from __future__ import annotations
@@ -155,6 +155,37 @@ class DocsTestCase(unittest.TestCase):
         for name in install.COMPANIONS:
             with self.subTest(name=name):
                 self.assertIn(f"`{name}`", prose.group())
+
+    def test_review_companion_pins_upstream_taxonomy_and_reviewer_fallback(self) -> None:
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+        contract = AGENTS.read_text(encoding="utf-8")
+
+        for marker in (
+            "Authority reconciliation",
+            "Identity and correlation",
+            "Representation and information loss",
+            "nullish",
+            "field-set drift",
+            "Unresolved values stored as resolved",
+            "Verification and observability",
+            "Deduplicate by violated agreement and root cause",
+            "first installed of Codex, headless Claude Code and Grok",
+            "fresh session of the builder's",
+            "cannot rule out a review",
+            "Name the actual reviewer",
+            "recorded fallback",
+            "usage model",
+            "literal triggering sequence",
+            "Question zero",
+            "costs this product",
+            "fix that did not need to happen is itself",
+            "Before the first release",
+            "Split by contiguous commits or by complete",
+            "by surface when it does not",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, review)
+        self.assertIn("Never skip", contract)
 
     def test_review_companion_pins_both_engines(self) -> None:
         contract = AGENTS.read_text(encoding="utf-8")

@@ -78,6 +78,67 @@ prevention — a cache that usually holds or a retry that usually succeeds
 hides a defect, it does not remove it. Timing that usually resolves correctly
 is a race. Rare still means real: say who meets the trigger and how often.
 
+### Diagnostic lenses
+
+Overlapping detection tells, not a classification scheme or quota. Lenses 1 and
+2 are the ones read-throughs miss most, because both sides look reasonable
+alone; force those probes explicitly.
+
+1. **Authority reconciliation** — a requested value is not an applied value.
+   Follow validation, normalisation, negotiation and commit. Force the
+   effective answer to differ from the request, then find stored state, UI,
+   later calls and logs still carrying the request. Reconcile before the first
+   consequential use.
+2. **Identity and correlation** — check the correlation key's uniqueness,
+   stability and lifetime under overlap, reordering, removal and reuse. Run two
+   operations and complete them out of order; remove one mid-flight and reuse
+   its slot.
+3. **Freshness and generations** — mark values captured before a yield, await,
+   callback, timer or lock release. Ask what can change before use and whether
+   the stale result is ignored, applied, or applied silently.
+4. **Lifecycle and derived state** — compare every construction, replacement,
+   restoration, reset, failure and termination path. Two paths that should end
+   in equivalent state are an agreement.
+5. **Atomicity and partial failure** — split multi-effect operations at each
+   failure and cancellation point. Check partial state is recoverable and
+   success is not reported before effects are durable.
+6. **Replay and effect cardinality** — follow retries, duplicate delivery and
+   re-entry; compare guaranteed effects with required effects, especially for
+   money, messages and shared totals. Check deduplication scope and lifetime.
+7. **Composition and precedence** — trace pieces through merge, reduction,
+   ordering and dispatch; compare real overwrite and selection rules with the
+   intended authority, including transformations applied after the merge.
+8. **Bounds, units and accounting** — follow counts, lengths, offsets and
+   totals through every transformation. Check empty, boundary and overflow
+   cases and whether measurement and consumption use the same unit.
+9. **Framing and incremental processing** — compare logical item boundaries
+   with read, write, iterator and callback boundaries. Test split items,
+   combined items, partial writes and the last item.
+10. **Representation and information loss** — compare what a producer can emit
+    with the distinctions a consumer relies on; trace round-trips. This is the
+    highest-frequency class: probe the nullish family (pending, absent, empty,
+    zero, false, failed), field-set drift (a producer stops emitting a field
+    and consumers degrade silently), and Unresolved values stored as resolved
+    ones. A cast, `any`, non-null assertion or suppressed warning at a boundary
+    is a candidate, not a refutation.
+11. **Ownership, completion and progress** — trace who may mutate, release,
+    cancel and complete. Inspect exceptional exits and competing terminal paths
+    for premature release, missing completion, deadlock and use after ownership
+    changed hands.
+12. **Decisions and dispatch** — enumerate meaningful states and inputs for
+    consequential predicates; check overlapping, inverted and missing branches
+    and the language or framework default when nothing is specified. Ask
+    whether each branch is reachable and whether anything starts each handler.
+13. **Verification and observability** — follow each step's failure. Look for
+    checks that cannot fail, oracles measuring the wrong thing, exceptions
+    swallowed into success, gates skipping their subject, and effects whose
+    absence nothing detects. If no observation would break, the guarantee is
+    decorative.
+
+Deduplicate by violated agreement and root cause, never by file. Passing tests,
+unfamiliar code, a suspicious name and a missing test warrant investigation;
+none is a finding or a refutation. Zero supported findings is valid.
+
 ### Refutation: the five elements
 
 Promote a candidate only when all five hold:
@@ -135,31 +196,58 @@ confirm it is unchanged at the end. One model, named, for every worker.
 
 ## Independent review: the ship gate
 
-**Selection and isolation.** The tool is optional; the review is not. Use a
-fresh session of any reviewer — another model family is preferred, a fresh
-session of the builder's own model is acceptable. Never the building session,
-a resume, a fork or a subagent of it: it must not inherit the builder's
-beliefs. Require read-only tools, no MCP servers or connectors, memory off,
-high effort, and project and user instructions off where the CLI allows.
-Name whatever cannot be switched off in the report. A repository's own
-instructions decide the reviewer, fallback, bar and release range; if its
-named reviewer cannot run, use the recorded fallback, then any installed
-reviewer, then a fresh session of the builder's family — never skip.
+**Selection and isolation.** The tool is optional; the review is not. By
+default use the first installed of Codex, headless Claude Code and Grok. A
+fresh session of the builder's own model is independent: it never saw the
+build. It shares more blind spots than another family; a round that runs beats
+one skipped. The repository ranks its reviewers; it cannot rule out a review.
+When none of its named reviewers can run, use the recorded fallback without
+asking — then any installed reviewer, then a fresh session of the builder's
+family. Name the actual reviewer and why it replaced the named one.
+"Never review another family's work" means prefer another family, never skip.
 
-**When.** Before every release, before any push that deploys, and again after
-every fix a round found. A fix is unreviewed code and produces the worst
-defects; never report readiness from a round followed by a fix.
+Fresh means never a resume, a fork or a subagent of the builder: it must not
+inherit the builder's beliefs. Require read-only tools, no MCP servers or
+connectors, memory off, high effort or above, and project and user instructions
+off where the CLI allows. A sandbox flag alone is insufficient. Name whatever
+cannot be switched off in the report. Give the reviewer only the mechanical
+range and the usage model, not suspected defects.
+
+**Write the brief in five parts, in this order, to avoid steering:** what the
+product is in two sentences, naming binding spec files and trust boundaries;
+the git-computed subject; the usage model — who uses which surface, when, and
+what stays serious however exotic the trigger; the question "what would block
+or break this release", requiring every finding labelled INTRODUCED or
+PRE-EXISTING with a literal triggering sequence; and a terse ranked list of
+claim, `file:line` evidence and what to change. Omit earlier findings,
+suspected files and approval requests — a reviewer asked whether it approves
+will say it approves.
+
+**When.** Before every release, however green the tests; before any push that
+deploys; again after every fix a round found. A fix is unreviewed code and
+produces the worst defects; never report readiness from a round followed by a
+fix. Review the completed phase; test stages as they land. State the phase
+split, review cadence and rough builder-hour estimate before building. Run
+phase reviews after the coordinator's gate, visual and docs checks. An
+advisory stage round clears nothing. Run the full applicable gate before
+reviewing a finished standalone change, and rerun it if a fix followed its
+last full run.
 
 **Subject.** Compute it from git, not prose: the unreleased range
 (`git log --oneline $RELEASED..HEAD`, `git diff $RELEASED...HEAD --stat`,
 `git status --porcelain -uall`), including uncommitted and untracked files.
-`$RELEASED` is the production branch, release tag or deployed commit. Before
-a first release, review the whole history including the first commit, and
+`$RELEASED` is the production branch, release tag or deployed commit. Read the
+status for what does not belong; generated or scratch files are subject noise,
+so ignore them or ask the owner before the round. Before the first release,
+review the whole history with `--subject HEAD`, including the first commit, and
 mark every finding INTRODUCED. Later rounds cover only commits since the
-previous round, with the rest as context. Split an oversized subject by
-contiguous commits or by surface — never shorten it. Keep coordinator notes
-and suspected defects out of the subject until the series closes; they steer
-a fresh reviewer.
+previous round, with the rest as context. Never narrow a range by hand to make
+it fit: split an oversized subject by commits when history falls into stages,
+or by surface when it does not. Split by contiguous commits or by complete
+area; together the rounds cover every changed file. Keep coordinator notes and
+suspected defects out of the subject until the series closes; they steer a
+fresh reviewer. Scope the subject by what a reviewer must read, not file count;
+give generated docs as context, not subject.
 
 **Run and verify the round.** Give the reviewer the mechanical range and the
 usage model, not a list of suspected defects. A short clean round is a failed
@@ -168,23 +256,40 @@ holds. A round that could not read the subject is failed however long it is.
 Require a round to take minutes at high effort and check its saved read
 evidence. Findings and severity labels are claims. Verify each against the
 code by hand, including whether the trigger is reachable in the usage model.
+Keep notes, brief, report and read evidence outside the repository; review in
+a still checkout, and treat a pushing deploy as closing that round.
 
 ### Triage — mandatory before acting
+
+**Question zero, in one sentence: what actually goes wrong for the person?**
+If it does not sound bad read aloud, there is nothing to fix. The reviewer's
+label is part of its claim. Weigh frequency before fixing: a rare precondition
+is Low, except when it crosses a line the person cares about — another tenant's
+data, private data on a public surface, disappearing work, a lost write, an
+irreversible external write the person did not approve or had stopped, or
+anonymous access to a member capability. A stated limit that stops loudly and
+leaves visible, repairable state is safe; a silent wrong result is not.
+Record each finding's harm, who meets it, how often, and the line it crosses;
+rank by what it costs this product, not by list position or reviewer label.
+When findings cluster, look for one false premise underneath before fixing any.
 
 1. **Exact sequence** — literal steps, not "an attacker could".
 2. **Permitted execution** — does this system actually allow the sequence?
 3. **Actor and motive** — who does it, and why? Someone already holding the
    owner's session on the owner's screen already had the screen.
 
-Record harm, who meets it, how often, and which line it crosses. Rank by
-what it costs this product, not by list position or reviewer label. For an
-attacker, ask whether the finding grants a capability they lack in that
-position; a mechanism granting nothing new is a description, not a
-vulnerability. Layout and performance claims settle on the running build,
-not by re-reading code in either direction. When findings cluster, look for
-one false premise underneath. Accepting a finding is legitimate; a fix that
-did not need to happen is itself a defect. Prefer removing the rare case to
-supporting it; ask whether it must exist before writing its branch.
+An attacker finding must grant a capability they lack in that position; a
+mechanism granting nothing new is a description, not a vulnerability.
+Layout and performance claims settle on the running build, not by re-reading
+code in either direction; build the baseline from `HEAD` in its own worktree.
+Accepting a finding is legitimate. A fix that did not need to happen is itself
+a defect: run its regression test on the tree before the fix; if it passes,
+revert the fix and keep the assertion. Prefer removing the rare case to
+supporting it. Check whether the fix replaces a mechanism or adds one, and
+write each stated limit where the product keeps its assumptions. When a repair
+writes who decided, scope it by participant and item, never by current row
+state. Search every doc when a state they all describe changes; repair a
+drifted pair by copying the right sentence, never writing a third version.
 
 ### Stopping rule and recording
 

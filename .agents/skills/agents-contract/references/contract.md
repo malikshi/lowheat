@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-23.1
+Contract-Version: 2026-11-24.1
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -503,10 +503,13 @@ full engines and report contract; the pointers below are the gates.
   building session; read-only, memory off, project instructions off where the
   CLI allows. Re-run after every fix: a fix is unreviewed code. Triage each
   finding against literal steps, permitted execution, actor and motive;
-  reviewer labels are claims. Stop at no INTRODUCED finding above Low and no
-  High or Critical of any age. The reviewer records the verdict, covered
-  scope, round count, each finding's outcome, and open risk in the PR body or
-  commit message.
+  reviewer labels are claims. A repository ranks reviewers but never rules out
+  a review: named reviewer → recorded fallback → any installed reviewer →
+  fresh builder-family session; name the actual reviewer. Stop at no
+  INTRODUCED finding above Low and no High or Critical of any age. The reviewer
+  records the verdict, covered scope, round count, each finding's outcome, and
+  open risk in the PR body or commit message. Never skip a required review; a
+  reviewer that cannot run falls back or uses a fresh builder-family session.
 
 Pre-review: all automated checks pass, no merge conflicts, branch current with
 target. A short clean round or a round that could not read the subject is a
