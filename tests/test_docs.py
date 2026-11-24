@@ -284,6 +284,11 @@ class DocsTestCase(unittest.TestCase):
         self.assertIn("that agent's full\ndefinition body", review)
         self.assertIn("for `review-finder` it names the flow", review)
         self.assertIn("**Naming the models.**", review)
+        self.assertIn("Pick one provider that the session can already reach", review)
+        self.assertIn("Name each id as the catalog prints it", review)
+        for private in ("nexrouter", "9router", "127.0.0.1", "baseURL"):
+            with self.subTest(private=private):
+                self.assertNotIn(private, review)
         self.assertNotIn("the `reviewer` body plus", review)
 
     def test_a_pinned_model_in_the_definition_would_collapse_the_panel(self) -> None:

@@ -233,18 +233,23 @@ applies to both subagents. On `reviewer` it widens the ship verdict on one
 subject; on `review-finder` it widens each flow, so every flow still gets every
 model — a panel applied to some flows and not others is not a panel.
 
-**Naming the models.** Do not hard-code a provider or an endpoint. Read the
-model ids from the harness's own list — the picker, a `--list-models` flag, or
-whatever it calls its catalog — and take three that the session's current
-provider already serves. That keeps the panel on the endpoint the session is
-authenticated against, with no extra credentials and no per-project config, and
-it follows the user when they switch providers. Name each id exactly as the list
-prints it, including any provider prefix; a bare alias is often rejected as an
-unknown model. Do not substitute another provider's spelling of the same
-capability: a member that fails to launch is a failed member, not a third view.
-If the session's provider serves fewer than three models, widen on the models it
-does serve and say how many ran, rather than silently reaching for another
-endpoint.
+**Naming the models.** Name models from the harness's own catalog — the picker,
+a `--list-models` flag, or whatever it calls the list — and split it into
+providers: the entries that carry a provider prefix, grouped by that prefix. A
+self-hosted or BYOK endpoint owns the models under its prefix; a hosted model
+owns its vendor prefix. Pick one provider that the session can already reach and
+take three of its models. Do not hard-code the provider. Dispatching a personal
+alias (`opus-model`, `sonnet-model`, `haiku-model`) repeats a private setup that
+means nothing on another machine, and writing one endpoint's name into this file
+hands every reader a provider they may not have. Those aliases belong to a one-off
+panel on the machine that defines them, never to the shipped text.
+
+Name each id as the catalog prints it, provider prefix included. A bare alias
+resolves only while exactly one provider serves it; two providers serving the
+same name make it ambiguous, and an unknown one is rejected outright. A member
+that fails to launch is a failed member, not a third view — name it and say how
+many ran. When the reachable provider serves fewer than three models, widen on
+what it does serve rather than silently reaching for another endpoint.
 
 **Dispatch.** Hold the agent definition itself back. Name `reviewer` or
 `review-finder` in a subagent file only when you are happy with one fixed model;
