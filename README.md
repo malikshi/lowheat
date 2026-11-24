@@ -75,6 +75,13 @@ renders each into the shape the harness loads:
 | Factory Droid | `~/.factory/droids/` | plain frontmatter |
 | Gemini CLI | `~/.gemini/agents/` | YAML tool list |
 
+A review can be widened to a model panel: the same definition body and the same
+brief dispatched to three models in one turn with per-run model overrides. It
+applies to both agents — `reviewer` for the ship verdict, `review-finder` across
+every flow — and never by pinning `model:` in a rendered definition, which would
+collapse the panel to that one model. `review.md` → Model panel holds the rules
+for dispatch, isolation, reading the spread, and counting a panel as one round.
+
 No rendered shape grants an edit or write tool, and Codex gets a real read-only
 sandbox. The others need shell to run `git log` and `git diff`, and no agent
 format it can express both ways sandboxes that shell: OpenCode and Kilo get

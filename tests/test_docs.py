@@ -268,11 +268,22 @@ class DocsTestCase(unittest.TestCase):
             "A panel is one round, not three",
             "not by counting votes",
             "A model that\nreturns nothing usable is a failed member",
+            "It\napplies to both subagents",
+            "every flow still gets every\nmodel",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, review)
         self.assertIn("Model panel", contract)
         self.assertIn("Model panel", skill)
+        self.assertIn("either\nsubagent's body", contract)
+        self.assertIn("`review-finder` body plus", skill)
+
+    def test_a_panel_prompt_carries_the_definition_body_for_both_agents(self) -> None:
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+
+        self.assertIn("that agent's full definition body", review)
+        self.assertIn("for `review-finder` it names the flow", review)
+        self.assertNotIn("the `reviewer` body plus", review)
 
     def test_a_pinned_model_in_the_definition_would_collapse_the_panel(self) -> None:
         for path in install.AGENTS_DIR.glob("*.md"):

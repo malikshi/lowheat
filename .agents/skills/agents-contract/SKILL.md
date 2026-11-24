@@ -191,11 +191,12 @@ Apply to every source file whose language supports comments; never annotate
   commit message.
 - Pre-review: checks pass, no conflicts, branch current with target. A short
   clean round or a round that could not read the subject is a failed round.
-- **Model panel** — to widen one round, dispatch the `reviewer` body plus the
-  same brief to three models in one turn with per-run model overrides, never by
-  pinning `model` in the installed definition. Members stay isolated; a lone
-  member's finding gets the full five elements, not a majority vote; a panel is
-  one round, not three.
+- **Model panel** — to widen one round, dispatch the `reviewer` or
+  `review-finder` body plus the same brief to three models in one turn with
+  per-run model overrides, never by pinning `model` in the installed definition.
+  Members stay isolated; a lone member's finding gets the full five elements,
+  not a majority vote; a panel is one round, not three. Fan-out applies it to
+  every flow or not at all, never to some flows.
 - CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an unexplained file
   over the 800-line ceiling); LOW = NOTE. MEDIUM is fixed or recorded with a
   reason; LOW may be skipped. Approve only with no CRITICAL/HIGH; a security

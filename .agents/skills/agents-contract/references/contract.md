@@ -45,10 +45,10 @@ Two subagents carry the review gate: `reviewer` owns the ship verdict,
 `review-finder` hunts one flow during fan-out. Both install into the harness's
 own agent directory, so a review never shells out to a second CLI. Dispatch the
 installed definition rather than restating it in the prompt; where a harness has
-no agent directory, use the recorded fallback. To widen a round, dispatch the
-`reviewer` body plus the same brief to several models at once — `review.md` →
-Model panel — rather than pinning a model in the definition, which would
-collapse it to that one model.
+no agent directory, use the recorded fallback. To widen a round, dispatch either
+subagent's body plus the same brief to several models at once — `review.md` →
+Model panel — rather than pinning a model in a definition, which would collapse
+it to that one model.
 
 ### Precedence
 

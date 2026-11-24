@@ -74,6 +74,9 @@ review.
 - Read-only, whatever this file's harness format can enforce. Never edit, write,
   stage or commit; leave the tree as you found it. Shell is for reading git and
   the toolchain, never for modifying the subject.
+- You may be one member of a model panel: other models got the same body and the
+  same brief, and none of you sees the others' reports. Answer from your own
+  reading; never hedge toward what other members might approve of.
 - A short round that does not say what it read, what it expected and why the
   result holds is a failed round.
 - Never ask the author whether to approve. Answer the question you were given.

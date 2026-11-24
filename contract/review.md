@@ -193,9 +193,11 @@ well built and the limits of static review.
 Fan-out, when used, partitions complete flows, never files or taxonomy
 classes. Dispatch one `review-finder` subagent per flow; each reads both sides
 of its agreements and never edits the tree, so confirm the worktree is
-unchanged at the end. Workers that split one flow share one model, named, so
-their reports stay comparable; a model panel is the opposite axis and is
-described below.
+unchanged at the end. A finder that splits a flow across several workers uses
+one model, named, for that flow, so their reports stay comparable. Widening to
+several models is the other axis: it goes to every flow through the panel
+described below, never to half a flow, because two models covering different
+halves of one flow produce reports nobody can compare.
 
 ## Independent review: the ship gate
 
@@ -226,18 +228,24 @@ range and the usage model, not suspected defects.
 
 A panel is the cheapest way to buy coverage of blind spots: the same brief and
 the same subject dispatched to several models at once, so their different tells
-surface on one subject instead of one model's view standing in for review.
+surface on one subject instead of one model's view standing in for review. It
+applies to both subagents. On `reviewer` it widens the ship verdict on one
+subject; on `review-finder` it widens each flow, so every flow still gets every
+model — a panel applied to some flows and not others is not a panel.
 
-**Dispatch.** Hold `reviewer` itself back. Name `reviewer` in a subagent file
-only when you are happy with one fixed model; pin `model` there and the panel
-collapses to that model, because a per-run override is the only way to vary it.
-For a panel, dispatch three generic subagent calls in one turn on a provider that
-offers at least three models. Each member's prompt is the full `reviewer`
-definition body — read the installed agent file and use it verbatim — with the
-five-part brief appended beneath it. The brief alone is only the subject; without
-the body a member has no method, no five-element refutation and no report shape,
-and the three reports stop being comparable. Keep both parts byte-identical
-across members: a variant prompt measures the prompt, not the model.
+**Dispatch.** Hold the agent definition itself back. Name `reviewer` or
+`review-finder` in a subagent file only when you are happy with one fixed model;
+pin `model` there and the panel collapses to that model, because a per-run
+override is the only way to vary it. For a panel, dispatch three generic
+subagent calls in one turn on a provider that offers at least three models. Each
+member's prompt is that agent's full definition body — read the installed agent
+file and use it verbatim — with the brief appended beneath it. For `reviewer`
+the brief is the five parts below; for `review-finder` it names the flow, the
+baseline and the dimension. The brief alone is only the subject; without the
+body a member has no method, no five-element refutation and no report shape, and
+the reports stop being comparable. Keep both parts byte-identical across
+members, and across flows when fanning out: a variant prompt measures the
+prompt, not the model.
 
 **Independence.** Members never see each other's report and never share a
 session, a resume, or a fork of the builder. Run them in that one turn, collect
