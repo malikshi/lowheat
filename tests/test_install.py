@@ -539,6 +539,16 @@ class ProjectScopeTestCase(unittest.TestCase):
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 self.assertNotIn(str(install.CONTRACT_DIR), text, path)
 
+    def test_agy_project_install_does_not_duplicate_the_contract_bytes(self) -> None:
+        install.main(["--scope", "project", "--root", str(self.root), "--harness", "agy"])
+
+        self.assertTrue((self.root / "AGENTS.md").is_file())
+        self.assertFalse(
+            (self.root / "GEMINI.md").exists(),
+            "agy loads AGENTS.md hierarchically and dedups by realpath, so a second "
+            "identical GEMINI.md only spends its 24 KB per-file and 20,000-token budget twice",
+        )
+
     def test_project_contract_names_every_companion_and_imports_none(self) -> None:
         self.apply()
 
@@ -553,7 +563,6 @@ class ProjectScopeTestCase(unittest.TestCase):
         for harness, alias in (
             ("claude", "CLAUDE.md"),
             ("gemini", "GEMINI.md"),
-            ("agy", "GEMINI.md"),
             ("crush", "CRUSH.md"),
             ("aider", "CONVENTIONS.md"),
             ("qwen", "QWEN.md"),

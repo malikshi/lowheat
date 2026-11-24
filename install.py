@@ -4,12 +4,12 @@ exports: HARNESSES | SPECS | HarnessPlan | HarnessSpec | SKILLS_DIR | SKILL_DIRS
 used_by: README.md → the install section
 used_by: tests/test_install.py → CONTRACT_DIR, HARNESSES, HOME_DIR, SKILL_DIR, SKILL_DIRS, HarnessPlan, apply_plan, detect, find_conflicts, main, plan_harnesses, plan_project, render_grok_rules, sync_contract_mirror [cascade]
 related: contract/AGENTS.md is the source and contract/*.md are its companions.
-rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. Every skill under `.agents/skills` that holds a SKILL.md is installed, so a new repo skill becomes available to every harness without an installer edit; a harness with `skill_dir` receives all of them, and one that discovers the central `.agents/skills` leaves it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate.
+rules:   Emit per harness from SPECS, never hand-copy. AGENTS.md is the thin core and names its companions by bare filename, so every harness receives the contract plus the companions beside it, or as standalone rules where the harness scans a rules directory. User scope symlinks unless a harness refuses links; fx gets regular files and a real skill copy. Project scope copies. Every skill under `.agents/skills` that holds a SKILL.md is installed, so a new repo skill becomes available to every harness without an installer edit; a harness with `skill_dir` receives all of them, and one that discovers the central `.agents/skills` leaves it unset. `global_files` and `project_files` map extra config files, such as Aider's `.aider.conf.yml`, to a contract source. A broken symlink contributes nothing, so verify every emitted path before reporting success. Never overwrite a file the user owns: a differing regular file or directory is refused unless --force, which replaces it outright. Directory comparisons and copies ignore Python bytecode caches, which tests recreate. User scope links a harness's several rule filenames at ONE target so a harness that dedups by realpath loads the contract once; project scope gets no alias for agy, whose 24,000-byte per-file rule cap already truncates the 29 KB contract and would only be spent twice.
 agent:   fx | unknown | 2026-11-05 | unknown | hardened install paths, force directory replacement, target verification, no-op reporting, and mirror idempotency
 agent:   fx | unknown | 2026-11-05 | unknown | added read-only --check drift verification and documented the contract bootstrap
 agent:   unknown | nexrouter | 2026-11-21 | unknown | SKILL_DIRS replaces the one hardcoded skill so delete-comment reaches every harness
 agent:   fx | unknown | 2026-11-23 | unknown | registered review.md as the seventh companion for every harness
-agent:   gemini-4-carbon | google | 2026-11-24 | unknown | registered agy: it reads AGENTS.md and GEMINI.md under ~/.gemini/config and discovers skills there
+agent:   gemini-4-carbon | google | 2026-11-24 | unknown | dropped agy's project alias: two identical copies spend its 24 KB per-file rule cap twice, while user scope links both names at one target and dedups by realpath
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ SPECS = (
     HarnessSpec("cline", ("cline",), ".agents", ("AGENTS.md",)),
     HarnessSpec("agents", (), ".agents", ("AGENTS.md",), tier="agents"),
     HarnessSpec("gemini", ("gemini",), ".gemini", ("GEMINI.md",), skill_dir=None, project_alias="GEMINI.md", tier="agents"),
-    HarnessSpec("agy", ("agy",), ".gemini/config", ("AGENTS.md", "GEMINI.md"), project_alias="GEMINI.md", tier="agents"),
+    HarnessSpec("agy", ("agy",), ".gemini/config", ("AGENTS.md", "GEMINI.md"), tier="agents"),
     HarnessSpec("crush", ("crush",), ".config/crush", ("CRUSH.md",), skill_dir=None, project_alias="CRUSH.md", tier="agents"),
     HarnessSpec("cursor", ("cursor",), ".cursor", (), skill_dir=None, global_install=False, tier="agents"),
     HarnessSpec("continue", ("cn",), ".continue", (), skill_dir=None, global_install=False, project_files=((".continue/rules/agents-contract.md", "continue.md"),), tier="alias"),
