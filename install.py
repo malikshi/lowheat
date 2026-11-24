@@ -16,6 +16,7 @@ agent:   gemini-4-carbon | google | 2026-11-24 | unknown | dropped agy's project
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -33,7 +34,7 @@ _AGENT_TOOLS = {
     "claude": ['tools: Bash, Read, Grep, Glob'],
     "commandcode": ["tools: shell_command, read_file, read_directory, grep, glob"],
     "grok": ["readonly: true", "tools: shell_command, read_file, grep, glob"],
-    "opencode": ["mode: subagent", "permission:", "  bash: allow", "  read: allow", "  edit: deny"],
+    "opencode": ["mode: subagent", "permission:", "  edit: deny", "  bash: allow", "  read: allow"],
     "gemini": ["tools:", "  - run_shell_command", "  - read_file"],
     "plain": [],
 }
@@ -143,7 +144,7 @@ def detect(spec: HarnessSpec, home: Path) -> bool:
 def render_agent(path: Path, agent_format: str = "plain") -> str:
     """Render one canonical agent file into a harness subagent definition.
 
-    Rules:   The canonical file is markdown with a `---` block of `key: value` lines holding `name` and `description`, and its body is kept verbatim so every rendered shape carries identical instruction text. Refuse an unclosed block, a missing name, or a body that cannot sit inside a Codex TOML string, rather than shipping a definition the harness cannot parse. Every harness reads those two fields; the rest differs — Gemini takes a YAML tool list, opencode and Kilo a permission block, Claude, Grok and Command Code a comma tool list of their own ids, and Codex TOML with a read-only sandbox because it does not read markdown agents. A definition written in one shape does not load in another, so render per `agent_format`. Every shape that accepts a tool or sandbox field restricts to reading: a reviewer that can edit the tree invalidates its own verdict.
+    Rules:   The canonical file is markdown with a `---` block of `key: value` lines holding `name` and `description`, and its body is kept verbatim so every rendered shape carries identical instruction text. Refuse an unclosed block, a missing name, or a body that cannot sit inside a TOML multi-line literal, rather than shipping a definition the harness cannot parse. Every harness reads those two fields; the rest differs — Gemini takes a YAML tool list, opencode and Kilo a permission block, Claude, Grok and Command Code a comma tool list of their own ids, and Codex TOML with a read-only sandbox because it does not read markdown agents. A definition written in one shape does not load in another, so render per `agent_format`. No shape grants an edit or write tool, but only Codex's sandbox actually blocks writes; elsewhere the reviewer needs shell for `git log` and `git diff`, and that shell is not sandboxed. Say so rather than claiming an enforcement the format does not provide.
     """
     lines = path.read_text(encoding="utf-8").splitlines()
     if not lines or lines[0].strip() != "---":
@@ -162,15 +163,15 @@ def render_agent(path: Path, agent_format: str = "plain") -> str:
     description = fields.get("description", "")
     body = "\n".join(lines[end + 1 :]).strip() + "\n"
     if agent_format == "codex":
-        if '"""' in body or body.rstrip("\n").endswith("\\"):
+        if "'''" in body or body.rstrip("\n").endswith("'"):
             raise ValueError(f"{path.name} body cannot be embedded in a TOML string")
         return (
-            f'name = "{name}"\n'
-            f'description = "{description}"\n'
+            f"name = {json.dumps(name)}\n"
+            f"description = {json.dumps(description)}\n"
             f"{_CODEX_SANDBOX}\n"
-            'developer_instructions = """\n'
+            "developer_instructions = '''\n"
             f"{body}"
-            '"""\n'
+            "'''\n"
         )
     header = ["---", f"name: {name}", f"description: {description}"]
     header.extend(_AGENT_TOOLS.get(agent_format, _AGENT_TOOLS["plain"]))

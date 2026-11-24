@@ -75,12 +75,13 @@ renders each into the shape the harness loads:
 | Factory Droid | `~/.factory/droids/` | plain frontmatter |
 | Gemini CLI | `~/.gemini/agents/` | YAML tool list |
 
-Every harness whose agent format accepts a tool, permission or sandbox field
-gets one that restricts to reading — Claude Code, Command Code, Grok, OpenCode,
-Kilo, Gemini, and Codex (`sandbox_mode = "read-only"`). Factory Droid's agent
-format carries no such field, so there the read-only rule is the definition's own
-instruction and a round must say so. Agents are written, never linked: the bytes
-differ per harness, and they are a user-scope surface — no project agent
+No rendered shape grants an edit or write tool, and Codex gets a real read-only
+sandbox. The others need shell to run `git log` and `git diff`, and no agent
+format it can express both ways sandboxes that shell: OpenCode and Kilo get
+`edit: deny` with `bash: allow`, Grok gets `readonly: true`, and Factory Droid
+carries no field at all. There the definition's own instruction is the control,
+so a round on those harnesses names it. Agents are written, never linked: the
+bytes differ per harness, and they are a user-scope surface — no project agent
 directory is assumed. A differing existing agent file belongs to the user and is
 refused unless `--force`.
 

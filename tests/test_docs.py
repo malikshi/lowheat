@@ -172,7 +172,7 @@ class DocsTestCase(unittest.TestCase):
             "subagent of the harness you are",
             "no second",
             "installed `reviewer`",
-            "read-only tools and no",
+            "must not inherit the builder's beliefs",
             "fresh session of the builder's",
             "cannot rule out a review",
             "Name the actual reviewer",
@@ -256,6 +256,30 @@ class DocsTestCase(unittest.TestCase):
         self.assertNotIn("this repository, `.agents/skills", contract)
         self.assertIn("installed beside this contract", contract)
 
+    def test_review_companion_pins_the_model_panel(self) -> None:
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+        contract = AGENTS.read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+
+        for marker in (
+            "### Model panel",
+            "byte-identical",
+            "Members never see each other",
+            "A panel is one round, not three",
+            "not by counting votes",
+            "A model that\nreturns nothing usable is a failed member",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, review)
+        self.assertIn("Model panel", contract)
+        self.assertIn("Model panel", skill)
+
+    def test_a_pinned_model_in_the_definition_would_collapse_the_panel(self) -> None:
+        for path in install.AGENTS_DIR.glob("*.md"):
+            fields = install.render_agent(path).split("---")[1]
+            with self.subTest(agent=path.name):
+                self.assertNotIn("model:", fields)
+
     def test_agent_rendering_matches_each_harness_shape(self) -> None:
         source = install.AGENTS_DIR / "reviewer.md"
 
@@ -269,7 +293,7 @@ class DocsTestCase(unittest.TestCase):
         codex = install.render_agent(source, "codex")
         self.assertTrue(codex.startswith('name = "reviewer"\n'))
         self.assertIn('sandbox_mode = "read-only"', codex)
-        self.assertIn('developer_instructions = """', codex)
+        self.assertIn("developer_instructions = '''", codex)
         self.assertEqual(
             {"reviewer.toml", "review-finder.toml"},
             set(install.render_agents(install.SPEC_BY_NAME["codex"], install.AGENTS_DIR)),
@@ -290,13 +314,33 @@ class DocsTestCase(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     install.render_agent(path)
 
+    def test_codex_render_survives_quotes_in_frontmatter(self) -> None:
+        import tomllib
+
+        path = Path(self._tmp()) / "quoted.md"
+        path.write_text(
+            '---\nname: reviewer\ndescription: has "quotes" and a \\ backslash\n---\nbody\n',
+            encoding="utf-8",
+        )
+
+        data = tomllib.loads(install.render_agent(path, "codex"))
+        self.assertEqual("reviewer", data["name"])
+        self.assertIn('"quotes"', data["description"])
+        self.assertEqual("body\n", data["developer_instructions"])
+
     def test_a_body_that_breaks_codex_toml_is_refused(self) -> None:
         path = Path(self._tmp()) / "triple.md"
-        path.write_text('---\nname: reviewer\n---\nUse """ fences.\n', encoding="utf-8")
+        path.write_text("---\nname: reviewer\n---\nUse ''' fences.\n", encoding="utf-8")
 
         self.assertIn("Use", install.render_agent(path, "claude"))
         with self.assertRaises(ValueError):
             install.render_agent(path, "codex")
+
+    def test_a_body_with_double_quotes_is_fine_in_codex(self) -> None:
+        path = Path(self._tmp()) / "dquotes.md"
+        path.write_text('---\nname: reviewer\n---\nUse """ fences.\n', encoding="utf-8")
+
+        self.assertIn("USE", install.render_agent(path, "codex").upper())
 
     def test_every_rendered_agent_parses_in_its_own_format(self) -> None:
         import tomllib

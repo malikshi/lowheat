@@ -193,7 +193,9 @@ well built and the limits of static review.
 Fan-out, when used, partitions complete flows, never files or taxonomy
 classes. Dispatch one `review-finder` subagent per flow; each reads both sides
 of its agreements and never edits the tree, so confirm the worktree is
-unchanged at the end. One model, named, for every worker.
+unchanged at the end. Workers that split one flow share one model, named, so
+their reports stay comparable; a model panel is the opposite axis and is
+described below.
 
 ## Independent review: the ship gate
 
@@ -208,16 +210,55 @@ family. Name the actual reviewer and why it replaced the named one. "Never
 review another family's work" means prefer another family, never skip.
 
 Fresh means never a resume, a fork or the builder's own context: the subagent
-must not inherit the builder's beliefs. Dispatch it with read-only tools and no
-edit, write, or commit capability, memory off, project and user instructions off
-where the harness allows, and the brief below as its whole prompt. A sandbox
-flag alone is insufficient; the installed `reviewer` restricts to reading through
-whatever the harness format accepts — a tool list, a permission block, Grok's
-`readonly`, Codex's read-only sandbox. Factory Droid's agent format carries no
-such field, so there the definition's own read-only instruction is the only
-control — say so when you report the round. Name whatever cannot be switched off
-in the report. Give the reviewer only the mechanical range and the usage model,
-not suspected defects.
+must not inherit the builder's beliefs. Dispatch it with no edit, write, or
+commit capability, memory off, project and user instructions off where the
+harness allows, and the brief below as its whole prompt. The installed `reviewer`
+grounds this in the harness's own controls as far as they go: no edit tool in any
+rendered shape, Codex's read-only sandbox, OpenCode and Kilo's `edit: deny`, Grok's
+`readonly`. The reviewer still needs shell for `git log` and `git diff`, and that
+shell is not sandboxed on those harnesses; Factory Droid carries no field at all.
+So the remaining control is the definition's instruction, and a round says which
+of its controls were enforced and which were instruction only. Name whatever
+cannot be switched off in the report. Give the reviewer only the mechanical
+range and the usage model, not suspected defects.
+
+### Model panel
+
+A panel is the cheapest way to buy coverage of blind spots: the same brief and
+the same subject dispatched to several models at once, so their different tells
+surface on one subject instead of one model's view standing in for review.
+
+**Dispatch.** Hold `reviewer` itself back. Name `reviewer` in a subagent file
+only when you are happy with one fixed model; pin `model` there and the panel
+collapses to that model, because a per-run override is the only way to vary it.
+For a panel, dispatch three generic subagent calls in one turn on a provider that
+offers at least three models. Each member's prompt is the full `reviewer`
+definition body — read the installed agent file and use it verbatim — with the
+five-part brief appended beneath it. The brief alone is only the subject; without
+the body a member has no method, no five-element refutation and no report shape,
+and the three reports stop being comparable. Keep both parts byte-identical
+across members: a variant prompt measures the prompt, not the model.
+
+**Independence.** Members never see each other's report and never share a
+session, a resume, or a fork of the builder. Run them in that one turn, collect
+all three results, then triage; showing one member another's findings turns the
+panel into a single reviewer with extra steps. Name every model actually used,
+and say which one was the fallback if fewer members ran than you asked for.
+
+**Reading the spread.** Treat agreement as strength and disagreement as the
+lead. A finding several members reach independently earns triage first; a
+finding only one member reaches is not weaker — a single member is often the
+one who saw it — so give it the same five-element check, never a pass because
+the majority was silent. Where two members contradict each other, say so
+plainly and settle it from the code, not by counting votes. A model that
+returns nothing usable is a failed member, not a silent approval: report it by
+name and rerun on another model rather than reading three as two.
+
+**Cost.** A panel is one round, not three. It covers a subject once with three
+views, so it consumes one round number and one set of findings; triage
+outcomes, fixes and reruns follow the stopping rule unchanged. Run a panel when
+the subject is large, security-scoped, or bound for a release; a one-line
+change still gets a single short round.
 
 **Write the brief in five parts, in this order, to avoid steering:** what the
 product is in two sentences, naming binding spec files and trust boundaries;
