@@ -53,8 +53,8 @@ Minimal agent-operations bootstrap — a thin cross-agent contract in
 
 The companions hold the detail the core points to: `codedna.md` for annotations,
 `RTK.md` for command fidelity and catalogue, `semble.md` for discovery,
-`caveman.md` for reply modes, `ponytail.md` for scope discipline, and `loop.md`
-for the unit-level execution loop.
+`caveman.md` for reply modes, `ponytail.md` for scope discipline, `loop.md` for
+the unit-level execution loop, and `review.md` for review and ship gates.
 
 ## Bootstrapping
 
