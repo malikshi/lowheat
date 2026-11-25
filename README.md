@@ -132,7 +132,7 @@ scope copies.
 | Central `.agents` | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Cline | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Gemini CLI | `~/.gemini/GEMINI.md`, companions, `agents/*` | `GEMINI.md`, companions |
-| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `AGENTS.md`, companions. No `GEMINI.md` copy: two identical files spend its 24,000-byte per-file rule cap twice, and the cap already truncates the 29,975-byte `AGENTS.md`; its uncapped skills carry the full contract |
+| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `AGENTS.md`, companions. No `GEMINI.md` copy: two identical files spend its 24,000-byte per-file rule cap twice, and the cap already truncates `AGENTS.md`, dropping Code Review Standards and the whole Environment section; its uncapped skills carry the full contract |
 | Crush | `~/.config/crush/CRUSH.md`, companions | `CRUSH.md`, companions |
 | Qwen Code | `~/.qwen/QWEN.md`, companions | `QWEN.md`, companions |
 | fx | `~/.fx/AGENTS.md`, companions as regular files, `~/.fx/skills/agents-contract` | `AGENTS.md`, companions |

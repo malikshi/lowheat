@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-24.3
+Contract-Version: 2026-11-25.1
 
 This repository operates as a multi-agent workspace. This file is the thin,
 cross-agent core: universal behavior, routing, and the rules every task follows.
@@ -543,6 +543,7 @@ CRITICAL or HIGH; a security-scoped review also blocks on HIGH.
 | Plugin / skill | Source | Purpose |
 |---|---|---|
 | `agents-contract` | installed beside this contract | Skill encoding this contract as executable steps; load at session start |
+| `delete-comment` | installed beside this contract | Comment-audit pass — grade each comment, delete or relocate it, then lower the annotation budget |
 | `semble` | [`https://github.com/MinishLab/semble`](https://github.com/MinishLab/semble) | MCP code-search server — top rung of the discovery ladder |
 | `superpowers` | [`https://github.com/obra/superpowers`](https://github.com/obra/superpowers) | Workflow skills (TDD, planning, debugging, parallel, verification) |
 

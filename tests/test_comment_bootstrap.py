@@ -118,8 +118,27 @@ class CommentBootstrapTestCase(unittest.TestCase):
         )
 
         self.assertEqual(1, code)
-        self.assertIn("refusing to create one", output)
+        self.assertIn("refusing to create or reset one", output)
+        self.assertIn("create one with --bootstrap", output)
         self.assertFalse((self.root / "docs" / "comment-budget.json").exists())
+
+    def test_update_with_force_does_not_reset_a_missing_or_corrupt_baseline(self) -> None:
+        baseline = self.root / "docs" / "comment-budget.json"
+        baseline.parent.mkdir(parents=True)
+
+        missing_code, _ = self.run_budget(
+            "--update", "--force", "--baseline", str(baseline)
+        )
+        self.assertEqual(1, missing_code)
+        self.assertFalse(baseline.exists())
+
+        baseline.write_text("{not json", encoding="utf-8")
+        before = baseline.read_bytes()
+        corrupt_code, _ = self.run_budget(
+            "--update", "--force", "--baseline", str(baseline)
+        )
+        self.assertEqual(1, corrupt_code)
+        self.assertEqual(before, baseline.read_bytes())
 
     def test_bootstrap_passes_immediately_after_creating_baseline(self) -> None:
         baseline = self.root / "docs" / "comment-budget.json"

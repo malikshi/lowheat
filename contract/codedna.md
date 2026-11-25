@@ -224,7 +224,11 @@ python3 <skill-dir>/scripts/comment_budget.py . --update
 `<skill-dir>` is where the harness reports the `agents-contract` skill, as above.
 
 `comments` counts permitted annotation lines; `open_notes` counts `message:` lines,
-the genuinely unresolved items. In a project with no baseline yet,
+the genuinely unresolved items. An `agent:` entry counts like any other annotation,
+so a file below the five-entry cap pays one unit for the entry it appends. A file
+at the cap stays flat by dropping its oldest entry; a file below it pays, and pays
+by deleting an annotation the audit already judged Tautology or Stale. In a
+project with no baseline yet,
 `--bootstrap --template-dir <lowheat-checkout>/docs` creates one seeded with the
 current counts plus the ADR and debt templates. It never overwrites an existing
 file; `--update` still never creates one, so creating a baseline stays a separate,
