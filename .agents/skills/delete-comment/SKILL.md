@@ -11,12 +11,22 @@ reports `0`.
 Resolve the checker path from the harness skill directory you were given — do
 not guess a repo-relative path or search the filesystem. Call it `CHECKER`
 below, e.g. `~/.claude/skills/agents-contract/scripts/comment_budget.py` for
-Claude Code or `.agents/skills/agents-contract/` for the central fallback. For
-an installed skill, the docs templates live at `SKILL_DIR/../docs` (the lowheat
-checkout's `docs/`), because user scope links the skill into each harness.
+Claude Code or `.agents/skills/agents-contract/` for the central fallback. The
+bootstrap templates live in the checkout's `docs/`. A user-scope install links
+the skill into the harness, so resolve the link first and climb three levels
+from the `agents-contract` directory:
 
-Read `contract/codedna.md` → **Comment audit** when it exists. Outside lowheat
-it will not; the four categories below are the complete rule, so continue.
+```bash
+SKILL_DIR=$(dirname "$(dirname "$(realpath "$CHECKER")")")
+TEMPLATE_DIR="$SKILL_DIR/../../../docs"   # lowheat checkout's docs/
+```
+
+A copied skill (fx) and a project-scope install carry no docs tree, so create
+the four files by hand as described in step 0.
+
+Read `codedna.md` → **Comment audit** when it sits beside the installed
+`AGENTS.md`. Outside lowheat it does; the four categories below are the
+complete rule either way, so continue if it is absent.
 
 ## 0. Establish the baseline
 
@@ -29,16 +39,19 @@ then continue. This is the only command allowed to create a baseline.
 
 ```bash
 python3 "$CHECKER" <paths> --bootstrap \
-  --template-dir <lowheat-checkout>/docs \
+  --template-dir "$TEMPLATE_DIR" \
   --baseline docs/comment-budget.json
 ```
 
 It creates `docs/comment-budget.json` seeded with current counts,
 `docs/adr/0000-template.md`, `docs/adr/README.md`, and `docs/comment-debt.md`.
 It never overwrites an existing file and refuses an unreadable baseline, which
-may hold a real ceiling. A re-run reports `bootstrap already complete`. Without
-the checkout, create those four files by hand and seed the JSON with
-`{"version": 1, "comments": <count>, "open_notes": <count>}`.
+may hold a real ceiling. A re-run reports `bootstrap already complete`. An
+unreadable baseline is repaired by hand — restore the last committed JSON, or
+write it with the numbers from the last green run; neither `--update --force`
+nor `--bootstrap` will replace it, because a corrupt file may hide a real
+ceiling. Without the checkout, create those four files by hand and seed the JSON
+with `{"version": 1, "comments": <count>, "open_notes": <count>}`.
 
 On later runs the baseline must exist and both numbers must pass. If `comments`
 or `open_notes` exceeds it, stop: the tree is over budget, and a later
@@ -57,12 +70,14 @@ reader for the dialect:
 
 - Python: `ast.get_docstring` per module, class, and function, plus
   `codedna_masking._python_scan_inputs` comment bodies.
-- Other dialects: `codedna_masking._comment_bodies(profile, text, spans)`.
+- Other dialects: `codedna_content._comment_bodies(profile, text, spans)`.
 
-Skip directive bodies, shebangs, and bare separators — they cost nothing to
-keep, and the counter exempts them in every dialect (`# type: ignore`,
-`# shellcheck`, a first-line `#!`). A bare `#` separator line counts, because
-someone chose to keep it.
+Skip directive bodies, shebangs, and empty bodies — they cost nothing to keep,
+and the counter exempts them in every dialect (`# type: ignore`, `# shellcheck`,
+a first-line `#!`, a bare `#` separator). Every `agent:` line counts like any
+other annotation. A file at the five-entry cap stays flat by dropping its oldest
+entry as it appends the newest; a file below the cap pays one unit, so delete a
+Tautology or Stale annotation in the same change to hold the budget.
 
 ## 2. Grade each comment
 

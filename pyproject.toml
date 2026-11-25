@@ -2,7 +2,7 @@
 name = "lowheat"
 version = "0.0.0"
 description = "Agent-operations contract installer, checker, and benchmark"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

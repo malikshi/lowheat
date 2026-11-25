@@ -5,9 +5,9 @@ used_by: tests/test_comment_budget.py → count_comments, compare_budget, load_b
 used_by: tests/test_comment_bootstrap.py → bootstrap_project, main [cascade]
 used_by: README.md → the comment-budget section
 related: codedna_check.py owns the ban itself; this script only measures the annotation surface.
-rules:   Read-only unless --update or --bootstrap is passed. Two numbers only: `comments` (every permitted annotation line) and `open_notes` (message: lines, the genuinely unresolved items). Directive bodies and shebangs are not debt; a bare separator line is. --update may lower or hold a number and must refuse to raise one without --force — that refusal is the ratchet. --bootstrap is the only action that may create a baseline, needs an explicit --template-dir, and never overwrites an existing file or resets a corrupt one. Exit 1 when a number exceeds the baseline, an update would raise it, or a bootstrap is missing pieces; 2 on a missing path, an unreadable baseline, or malformed input, so a typo never reads clean.
-agent:   unknown | nexrouter | 2026-11-21 | unknown | added the annotation budget and its ratchet after measuring the comment surface
+rules:   Read-only unless --update or --bootstrap is passed. Two numbers only: `comments` (every permitted annotation line) and `open_notes` (message: lines, the genuinely unresolved items). Directive bodies and shebangs are not debt; a bare separator line is. --update may lower or hold a number and must refuse to raise one without --force — that refusal is the ratchet. --update never creates or replaces an unreadable baseline, even with --force, because a corrupt or deleted file may hold a real ceiling; --bootstrap is the only action that may create a baseline, needs an explicit --template-dir, and never overwrites an existing file. Exit 1 when a number exceeds the baseline, an update would raise it, or the baseline is unreadable under --update; 2 on a missing path, an unreadable baseline on the read path, or malformed input, so a typo never reads clean.
 agent:   unknown | nexrouter | 2026-11-21 | unknown | added explicit --bootstrap so a user-scope install can bootstrap a plain project without weakening --update
+agent:   deepseek-v4.1-flash | unknown | 2026-11-25 | unknown | --update now refuses to create or reset a missing or unreadable baseline even with --force, so a corrupt file can never become a free ratchet reset
 """
 from __future__ import annotations
 
@@ -304,13 +304,18 @@ def main(argv=None) -> int:
         return 0
 
     if args.update:
-        if baseline is None and not args.force:
+        if baseline is None:
+            advice = (
+                "create one with --bootstrap"
+                if not baseline_path.exists()
+                else "repair or restore it; --bootstrap also refuses an unreadable file"
+            )
             print(
                 f"comment_budget: no readable baseline at {baseline_path}; "
-                "refusing to create one without --force"
+                f"refusing to create or reset one — {advice}"
             )
             return 1
-        if baseline is not None and not args.force:
+        if not args.force:
             raised = [name for name in _FIELDS if observed[name] > baseline[name]]
             if raised:
                 for name in raised:
