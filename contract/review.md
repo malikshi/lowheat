@@ -10,12 +10,14 @@ does.
 ## Dimensions and selection
 
 State the selected dimensions, scope and comparison baseline before
-investigating. Bare "review this" means correctness only; an explicit list
-selects correctness, performance, security or a combination; an unknown or
-empty selection gets asked about, never reinterpreted. Review working changes
-when present, else the repository. Follow dependencies beyond changed lines
-and separate defects introduced from ones merely revealed. Review and report;
-apply fixes only when asked.
+investigating. Omitted or bare "review this" defaults to correctness only (plus
+security automatically whenever a STOP trigger surface is touched); "full",
+"all" or "audit" selects correctness, performance and security. Only ask about
+an explicitly named unknown dimension when ambiguous and risky — never stall an
+unattended review on an omitted selection. Review working changes when present,
+else the repository. Follow dependencies beyond changed lines and separate
+defects introduced from ones merely revealed. Review and report; apply fixes
+only when asked.
 
 | Dimension | Anchor |
 |---|---|
@@ -202,27 +204,36 @@ halves of one flow produce reports nobody can compare.
 ## Independent review: the ship gate
 
 **Selection and isolation.** The reviewer is a subagent of the harness you are
-already running, dispatched from the installed `reviewer` definition: no second
-CLI, no external process, no provider key. A fresh subagent session never saw the
-build, so it is independent; it shares more blind spots than another model
-family, and a round that runs beats one skipped. The repository ranks its
-reviewers; it cannot rule out a review. When no agent runner is available, use
-the recorded fallback without asking — then a fresh session of the builder's
-family. Name the actual reviewer and why it replaced the named one. "Never
-review another family's work" means prefer another family, never skip.
+already running, no second CLI, no external process, no provider key. Dispatch
+along this ladder without asking the user:
+
+1. Installed `reviewer` (and `review-finder` per flow on multi-flow subjects)
+   where the harness loads an agent directory.
+2. Runtime or generic read-only subagent (`define_subagent`, `research`, or a
+   read-only worker) when the harness exposes subagent tools without an agent
+   directory or in project scope — pass the installed agent body if readable,
+   else this file's five-element method, report shape and read-only rule
+   verbatim plus the brief.
+3. The repository's recorded fallback, then a fresh session of the builder's
+   family (`"Never review another family's work"` means prefer another family,
+   never skip).
+4. Single-session harnesses with zero subagent tools run the full five-element
+   + STOP-trigger audit inline and report `Review: unavailable (no subagent
+   runner; inline five-element review completed)` without faking independence.
+
+A fresh subagent session never saw the build, so it is independent; it shares
+more blind spots than another model family, and a round that runs beats one
+skipped. The repository ranks its reviewers; it cannot rule out a review. Name the actual reviewer and why it replaced the named one.
 
 Fresh means never a resume, a fork or the builder's own context: the subagent
 must not inherit the builder's beliefs. Dispatch it with no edit, write, or
 commit capability, memory off, project and user instructions off where the
-harness allows, and the brief below as its whole prompt. The installed `reviewer`
-grounds this in the harness's own controls as far as they go: no edit tool in any
-rendered shape, Codex's read-only sandbox, OpenCode and Kilo's `edit: deny`, Grok's
-`readonly`. The reviewer still needs shell for `git log` and `git diff`, and that
-shell is not sandboxed on those harnesses; Factory Droid carries no field at all.
-So the remaining control is the definition's instruction, and a round says which
-of its controls were enforced and which were instruction only. Name whatever
-cannot be switched off in the report. Give the reviewer only the mechanical
-range and the usage model, not suspected defects.
+harness allows, and the brief below as its whole prompt. An installed `reviewer`
+enforces no edit tool; Codex adds a read-only sandbox, OpenCode and Kilo set
+`edit: deny`, Grok sets `readonly`. Shell for `git log`/`git diff` is unsandboxed
+elsewhere and Factory Droid has no tool field, so name which controls were
+enforced vs instruction-only. Give only the mechanical range and usage model,
+not suspected defects.
 
 ### Model panel
 
@@ -233,104 +244,82 @@ applies to both subagents. On `reviewer` it widens the ship verdict on one
 subject; on `review-finder` it widens each flow, so every flow still gets every
 model — a panel applied to some flows and not others is not a panel.
 
-**Naming the models.** Name models from the harness's own catalog — the picker,
-a `--list-models` flag, or whatever it calls the list — and split it into
-providers: the entries that carry a provider prefix, grouped by that prefix. A
-self-hosted or BYOK endpoint owns the models under its prefix; a hosted model
-owns its vendor prefix. Pick one provider that the session can already reach and
-take three of its models. Do not hard-code the provider. Dispatching a personal
-alias (`opus-model`, `sonnet-model`, `haiku-model`) repeats a private setup that
-means nothing on another machine, and writing one endpoint's name into this file
-hands every reader a provider they may not have. Those aliases belong to a one-off
-panel on the machine that defines them, never to the shipped text.
+**Naming the models.** Read model IDs from the harness catalog (picker or
+`--list-models`), grouped by provider prefix (self-hosted/BYOK prefix or vendor
+prefix). Pick one provider that the session can already reach and take three of
+its models. Do not hard-code a provider or personal aliases (`opus-model`,
+`sonnet-model`, `haiku-model`) — those are private one-machine setups that fail
+elsewhere.
 
-Name each id as the catalog prints it, provider prefix included. A bare alias
-resolves only while exactly one provider serves it; two providers serving the
-same name make it ambiguous, and an unknown one is rejected outright. A member
-that fails to launch is a failed member, not a third view — name it and say how
-many ran. When the reachable provider serves fewer than three models, widen on
-what it does serve rather than silently reaching for another endpoint.
+Name each id as the catalog prints it, provider prefix included; bare aliases
+can be ambiguous or rejected. When the subagent tool constrains `Model` to fixed
+tier enums (`pro`, `flash`, `flash_lite`, `inherit`) rather than catalog strings,
+widen across distinct schema tiers instead of passing an invalid string. If a
+member fails to launch, report it and how many ran; if the provider serves fewer
+than three models, widen on what it serves rather than crossing endpoints.
 
-**Dispatch.** Hold the agent definition itself back. Name `reviewer` or
-`review-finder` in a subagent file only when you are happy with one fixed model;
-pin `model` there and the panel collapses to that model, because a per-run
-override is the only way to vary it. For a panel, dispatch three generic
-subagent calls in one turn. Each member's prompt is that agent's full
-definition body — read the installed agent file and use it verbatim — with the
-brief appended beneath it. For `reviewer`
+**Dispatch.** Keep `model` unpinned in `reviewer` and `review-finder` (pinning
+collapses the panel to one model). For a panel, dispatch three generic subagent
+calls in one turn. Each member's prompt is that agent's full
+definition body — read the installed file verbatim, or use this file's
+five-element method, report block and read-only rule when no file exists on disk
+— with the brief appended beneath it. For `reviewer`
 the brief is the five parts below; for `review-finder` it names the flow, the
-baseline and the dimension. The brief alone is only the subject; without the
-body a member has no method, no five-element refutation and no report shape, and
-the reports stop being comparable. Keep both parts byte-identical across
-members, and across flows when fanning out: a variant prompt measures the
-prompt, not the model.
+baseline and the dimension. Without the body a member lacks method and report
+shape; keep both parts byte-identical across members and flows so differences
+measure the model, not the prompt.
 
-**Independence.** Members never see each other's report and never share a
-session, a resume, or a fork of the builder. Run them in that one turn, collect
-all three results, then triage; showing one member another's findings turns the
-panel into a single reviewer with extra steps. Name every model actually used,
-and say which one was the fallback if fewer members ran than you asked for.
+**Independence.** Members never see each other's reports and never share a
+session, resume, or builder fork. Run all three in one turn, collect, then
+triage; name every model used and any fallback.
 
-**Reading the spread.** Treat agreement as strength and disagreement as the
-lead. A finding several members reach independently earns triage first; a
-finding only one member reaches is not weaker — a single member is often the
-one who saw it — so give it the same five-element check, never a pass because
-the majority was silent. Where two members contradict each other, say so
-plainly and settle it from the code, not by counting votes. A model that
-returns nothing usable is a failed member, not a silent approval: report it by
-name and rerun on another model rather than reading three as two.
+**Reading the spread.** Agreement earns triage first; disagreement is a lead.
+Give a lone member's finding the full five-element check, never a pass because
+the majority was silent. Settle contradictions from code, not by counting votes. A model that
+returns nothing usable is a failed member, not silent approval: name it and
+rerun on another model.
 
-**Cost.** A panel is one round, not three. It covers a subject once with three
-views, so it consumes one round number and one set of findings; triage
-outcomes, fixes and reruns follow the stopping rule unchanged. Run a panel when
-the subject is large, security-scoped, or bound for a release; a one-line
+**Cost.** A panel is one round, not three — one round number and one triage/fix
+cycle. Run a panel for large, security-scoped, or release subjects; a one-line
 change still gets a single short round.
 
-**Write the brief in five parts, in this order, to avoid steering:** what the
-product is in two sentences, naming binding spec files and trust boundaries;
-the git-computed subject; the usage model — who uses which surface, when, and
-what stays serious however exotic the trigger; the question "what would block
-or break this release", requiring every finding labelled INTRODUCED or
-PRE-EXISTING with a literal triggering sequence; and a terse ranked list of
-claim, `file:line` evidence and what to change. Omit earlier findings,
-suspected files and approval requests — a reviewer asked whether it approves
-will say it approves.
+**Brief in five parts (in order, no steering):** two-sentence product summary
+naming specs and trust boundaries; git-computed subject; usage model (who uses
+which surface, when, and what stays serious however exotic the trigger); the
+question "what would block or break this release" requiring INTRODUCED or
+PRE-EXISTING plus a literal triggering sequence; and ranked findings (`file:line`,
+claim, minimal change). Omit prior findings, suspected files, and approval
+requests — asking if it approves biases toward yes.
 
-**When.** Before every release, however green the tests; before any push that
-deploys; again after every fix a round found. A fix is unreviewed code and
-produces the worst defects; never report readiness from a round followed by a
-fix. Review the completed phase; test stages as they land. State the phase
-split, review cadence and rough builder-hour estimate before building. Run
-phase reviews after the coordinator's gate, visual and docs checks. An
-advisory stage round clears nothing. Run the full applicable gate before
-reviewing a finished standalone change, and rerun it if a fix followed its
-last full run.
+**When.** Before releases, deploying pushes, and after any fix a round found
+(a fix is unreviewed code). Review completed phases and test stages as they
+land; state phase split, review cadence, task size and unit count before
+building. Run phase reviews after coordinator gates and docs checks. Advisory
+rounds clear nothing. Run full applicable gates before final review, and rerun
+after fixes.
 
-**Subject.** Compute it from git, not prose: the unreleased range
-(`git log --oneline $RELEASED..HEAD`, `git diff $RELEASED...HEAD --stat`,
-`git status --porcelain -uall`), including uncommitted and untracked files.
-`$RELEASED` is the production branch, release tag or deployed commit. Read the
-status for what does not belong; generated or scratch files are subject noise,
-so ignore them or ask the owner before the round. Before the first release,
-review the whole history with `--subject HEAD`, including the first commit, and
-mark every finding INTRODUCED. Later rounds cover only commits since the
-previous round, with the rest as context. Never narrow a range by hand to make
-it fit: split an oversized subject by commits when history falls into stages,
-or by surface when it does not. Split by contiguous commits or by complete
-area; together the rounds cover every changed file. Keep coordinator notes and
-suspected defects out of the subject until the series closes; they steer a
-fresh reviewer. Scope the subject by what a reviewer must read, not file count;
+**Subject.** Compute deterministically from git: resolve `RELEASED` first
+(explicit release tag/ref → `git merge-base HEAD @{upstream}` → `origin/HEAD` /
+`origin/main` / `origin/master` merge-base). Never run an unset
+`$RELEASED..HEAD` (git parses `..HEAD` as empty `HEAD..HEAD`). Run
+`git log --oneline "$RELEASED..HEAD"`, `git diff "$RELEASED...HEAD" --stat`, and
+`git status --porcelain -uall` (if `HEAD` equals `RELEASED`, review `git diff
+HEAD` + untracked files). Exclude generated/scratch noise and list exclusions
+under `Coverage:`. Before the first release (no base ref), review full history
+from git's empty tree (`git log --oneline HEAD`, `git diff --stat $(git
+hash-object -t tree /dev/null)..HEAD`), marking all findings INTRODUCED. Later
+rounds cover commits since the prior round with earlier commits as context.
+Never narrow by hand: split oversized subjects into stages by commits, or
+by surface when it does not. Split by contiguous commits or by complete
+area covering every changed file. Keep suspected defects out of the brief;
 give generated docs as context, not subject.
 
-**Run and verify the round.** Give the reviewer the mechanical range and the
-usage model, not a list of suspected defects. A short clean round is a failed
-round: require it to say what it read, what it expected and why the result
-holds. A round that could not read the subject is failed however long it is.
-Require a round that reports the files and ranges it examined, and check those
-against the subject yourself. Findings and severity labels are claims. Verify
-each against the code by hand, including whether the trigger is reachable in
-the usage model. Keep notes, brief and report outside the repository; review in
-a still checkout, and treat a pushing deploy as closing that round.
+**Run and verify the round.** Supply only the mechanical range and usage model.
+Short clean rounds and unreadable-subject rounds fail: require examined files
+and ranges, expected behavior, and why it holds, then verify against the
+subject yourself. Findings and severity labels are claims; verify triggers in
+code and usage model. Keep briefs/reports outside the repo in a still checkout;
+a deploying push closes the round.
 
 ### Triage — mandatory before acting
 

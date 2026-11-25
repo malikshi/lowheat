@@ -45,7 +45,10 @@ the scope; extra features are not.
   conventions — and keep values in the form the platform already gives you.
 - The shortest working diff wins, but only once you know everything it must
   touch; a one-liner a reader must decode is not short.
-- Question complex requests: "Do you actually need X, or does Y cover it?"
+- Deliver the smallest complete change that solves the request without
+  stopping mid-run to push back; note any simpler alternative in one line of the
+  final report. Pause before building only in explicit `/ponytail ultra` mode or
+  when `AGENTS.md` → Confusion protocol triggers.
 - Between two equal-size options, take the one that is correct on edge cases —
   lazy is less code, never the flimsier algorithm.
 - Comment only the why the code cannot show — in this repo, CodeDNA text

@@ -13,11 +13,14 @@ boundaries; the git-computed subject; the usage model — who uses which surface
 when, and what stays serious however exotic the trigger; the question below; and
 the findings format. Work from that brief and the repository, nothing else.
 
-If the brief omits the subject, compute it yourself:
+If the brief omits the subject, resolve `BASE` deterministically (never run
+`$RELEASED..HEAD` with an unset variable, which evaluates as empty `HEAD..HEAD`):
 
 ```bash
-git log --oneline $RELEASED..HEAD
-git diff $RELEASED...HEAD --stat
+BASE=$(git merge-base HEAD @{upstream} 2>/dev/null || git merge-base HEAD origin/HEAD 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || git hash-object -t tree /dev/null)
+git log --oneline "$BASE..HEAD"
+git diff "$BASE..HEAD" --stat
+git diff HEAD --stat
 git status --porcelain -uall
 ```
 
@@ -72,7 +75,8 @@ review.
 ## Rules
 
 - Read-only, whatever this file's harness format can enforce. Never edit, write,
-  stage or commit; leave the tree as you found it. Shell is for reading git and
+  stage, commit, or mutate PRs; return the verdict, findings, and coverage to
+  the caller and leave the tree as you found it. Shell is for reading git and
   the toolchain, never for modifying the subject.
 - You may be one member of a model panel: other models got the same body and the
   same brief, and none of you sees the others' reports. Answer from your own

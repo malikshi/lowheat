@@ -2,12 +2,12 @@
 
 exports: class DocsTestCase
 used_by: none
-rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and reference companions by name rather than importing them; every reference path the skill names must exist, the skill and contract must agree on precedence, gates, trailers, and the compliance record, the README companion prose must name every registered companion, and the review companion must pin the upstream taxonomy and reviewer-fallback gates.
-agent:   grok-4.5 | xai | 2026-11-06 | 01a1add5-9f8f-7f01-ac4b-21d24f6dceaa | pinned skill precedence, rulebook gates, rejected-attempt trailer, and local review enum
+rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and under the 24,000-byte per-file rule cap, reference companions by name rather than importing them; every reference path the skill names must exist, the skill and contract must agree on precedence, gates, trailers, and the compliance record, the README companion prose must name every registered companion, and the review companion must pin the upstream taxonomy and reviewer-fallback gates.
 agent:   gemini-4-argon | google | 2026-11-08 | d7c52693-a719-48d1-a0fd-1ef0caadf691 | pinned bootstrap tool-call ordering, loop Work Loop mapping and revert/retry rules, and scoped comment/STOP gates
 agent:   fx | unknown | 2026-11-23 | unknown | pinned review-companion engines, independent-round isolation, and finding triage gates
 agent:   fx | unknown | 2026-11-24 | unknown | pinned README companion prose to the installer registry
 agent:   fx | unknown | 2026-11-24 | unknown | pinned upstream review taxonomy and reviewer-fallback gates
+agent:   gemini-4-carbon | google | 2026-11-25 | b221ee10-722e-4fa5-bcc3-ee4a6c26742f | pinned 24 KB rule cap, autonomous bootstrap/review rules, and RTK/semble/continue updates
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ install = importlib.import_module("install")
 AGENTS = install.CONTRACT_DIR / "AGENTS.md"
 SKILL = install.SKILL_DIR / "SKILL.md"
 MAX_CONTRACT_WORDS = 5400
+MAX_RULE_BYTES = 24_000
 
 
 class DocsTestCase(unittest.TestCase):
@@ -34,6 +35,11 @@ class DocsTestCase(unittest.TestCase):
 
         self.assertLess(len(text.split()), MAX_CONTRACT_WORDS)
         self.assertNotRegex(text, r"(?m)^@\S+$")
+
+    def test_contract_and_companions_fit_24kb_rule_cap(self) -> None:
+        for path in (AGENTS, *(install.CONTRACT_DIR / name for name in install.COMPANIONS)):
+            with self.subTest(path=path.name):
+                self.assertLessEqual(len(path.read_bytes()), MAX_RULE_BYTES)
 
     def test_contract_has_a_version_line(self) -> None:
         first_page = AGENTS.read_text(encoding="utf-8").split("\n\n", 2)[1]
@@ -452,6 +458,38 @@ class DocsTestCase(unittest.TestCase):
         self.assertTrue(named)
         for name in named:
             self.assertTrue((install.SKILL_DIR / name).is_file(), name)
+
+    def test_contract_and_skill_enable_autonomous_execution(self) -> None:
+        contract = AGENTS.read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+
+        for text in (contract, skill):
+            self.assertIn("Do not end Turn 1", text)
+            self.assertIn("never block waiting for a human", text.lower())
+            self.assertIn("comment_budget.py", text)
+            self.assertIn("author/coordinator", text)
+        self.assertIn("Execute end-to-end without pausing", contract)
+
+    def test_reviewer_resolves_base_without_empty_released_bug(self) -> None:
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+        reviewer = (install.AGENTS_DIR / "reviewer.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("--subject HEAD", review)
+        self.assertIn("HEAD..HEAD", review)
+        self.assertIn("HEAD..HEAD", reviewer)
+        self.assertIn("define_subagent", review)
+        self.assertIn("Review: unavailable", review)
+
+    def test_rtk_and_continue_avoid_autonomous_traps(self) -> None:
+        rtk = (install.CONTRACT_DIR / "RTK.md").read_text(encoding="utf-8")
+        semble = (install.CONTRACT_DIR / "semble.md").read_text(encoding="utf-8")
+        cont = (install.CONTRACT_DIR / "continue.md").read_text(encoding="utf-8")
+
+        self.assertIn("1.2.1", rtk)
+        self.assertIn("rtk gain --text", rtk)
+        self.assertIn("0.7.3", semble)
+        self.assertNotIn("and the companion files it names", cont)
+        self.assertIn("only the companion files the current task needs", cont)
 
 
 if __name__ == "__main__":

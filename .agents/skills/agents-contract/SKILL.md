@@ -16,15 +16,24 @@ dispatches the installed `reviewer` and `review-finder` subagents.
 1. **Load this skill.** If the harness cannot load it, read the tracked
    `.agents/skills/agents-contract/SKILL.md` when present; otherwise state
    `skill unavailable` and follow `AGENTS.md`.
-2. **State the task size**: `small`, `medium`, or `large`.
-3. **State the command lane**: RTK-wrapped by default; raw only for exact
-   bytes, parseable output, streaming, or secrets, with the reason.
-4. **Check installed surfaces** after a contract or skill edit when the lowheat
-   checkout is available: `python3 install.py --check --harness <name>`
-   (read-only; exit 1 on drift). Refresh with `--force`, then restart the
-   session so it reloads instruction and skill metadata.
+2. **State the task size** (`small`, `medium`, or `large`) and **command lane**
+   (RTK-wrapped default; raw only for exact bytes, parseable output, streaming,
+   or secrets, stating why). Do not end Turn 1 after stating these — proceed
+   directly into the Work Loop.
+3. **Check installed surfaces** when a contract or skill changed and the
+   lowheat checkout is available: `python3 install.py --check --harness <name>`
+   (use `/usr/bin/python3` or `.venv/bin/python` if a `python3` shim on `PATH`
+   fails). Refresh missing or installer-owned links without `--force`; use
+   `--force` only after confirming a differing target is an older lowheat copy,
+   never a user-owned file. If user-scope config paths are read-only inside a
+   sandbox, sync repo mirrors via
+   `python3 -c 'import install; install.sync_contract_mirror(install.CONTRACT_DIR, install.SKILL_DIR)'`
+   and read canonical `contract/` files from disk instead of asking for sandbox
+   escalation. Re-read updated files from disk in-session;
+   never block waiting for a human harness restart (note the refresh for
+   future sessions in the final report).
 
-Starting task work before steps 1–3 is non-compliant. Stop, perform them, then
+Starting task work before steps 1–2 is non-compliant. Stop, perform them, then
 continue.
 
 ## 1. Work Loop
@@ -44,9 +53,9 @@ Each step ends with its gate. Unit mechanics: `loop.md`.
    wrong. Revert only your own edits. Gate: the targeted check passes.
 5. **Merge, then review.** Compare with code. A failed unit returns `UNIT`,
    `VERDICT`, `REASON`, `EVIDENCE`, and `SCOPE`; never redo a passed unit.
-   Self-review against the Definition of Done; a shared branch, merge, or STOP
-   trigger also gets independent review. Gate: every changed line traces to a
-   unit and its check.
+   Self-review against the Definition of Done; a shared branch, merge, release,
+   or STOP trigger also gets independent review. Gate: every changed line traces
+   to a unit and its check.
 6. **Prove it and gate by undo cost.** Run the smallest proving check. Cheap
    contained changes may proceed; reversible wide changes need evidence and a
    rollback path; irreversible changes stop for approval. A passing check never
@@ -72,9 +81,12 @@ If a step fails, fix the root cause; do not work around it or declare done.
   tests, regression test for fixes. **large** — feature, cross-module,
   contract, or judgment-heavy; plan first, full suites, consider fan-out. When
   torn, pick smaller and say so; escalate with the new call.
-- **Think first.** State assumptions; separate facts from uncertainty; present
-  competing interpretations. Ask only when materially ambiguous, risky, or
-  approval-bound. Name the outcome and what "done" looks like before coding.
+- **Think first.** Name the outcome and what "done" looks like before coding.
+  Resolve ambiguity from existing code, tests, types, git history, and
+  `RULES.md` first. Execute end-to-end without pausing for plan or step
+  confirmations unless asked; when multiple reversible paths fit, pick the
+  smallest convention-matching one, verify it, and disclose the assumption.
+  Explicit commit/push approval may come in the user prompt or after the report.
 - **Smallest complete change.** Completeness is the floor, minimalism the
   ceiling. Read touched code, list callers/tests/fixtures/config/exports, then
   climb: YAGNI → existing code → standard library → native platform →
@@ -90,9 +102,10 @@ If a step fails, fix the root cause; do not work around it or declare done.
 - **Context.** Load the relevant section, header, source, tests, and examples
   only. Avoid the last 20% of the window for multi-file refactors or complex
   debugging; when a task goes sideways, inspect what was in the window first.
-- **Confusion protocol.** For destructive, contradictory,
-  production-impacting, or architectural ambiguity: stop, name it, present
-  2–3 options with trade-offs, ask.
+- **Confusion protocol.** Trigger only when codebase evidence cannot settle
+  ambiguity AND a wrong choice risks destructive/irreversible actions, data
+  loss, security exposure, production impact, or breaking an external contract:
+  stop, name it, present 2–3 options with trade-offs, ask.
 - **Operations.** Document rollback before background jobs or backfills;
   report before/after with paths and metrics. List exact restart commands for
   the human; never `sudo` restart unless authorized. Never commit secrets,
@@ -133,8 +146,11 @@ Apply to every source file whose language supports comments; never annotate
   rules, step-order dependencies, or edge cases.
 - **On edit** — keep `exports:` accurate, update `rules:`, append one `agent:`
   line, drop the oldest beyond five, delete non-CodeDNA comments in functions
-  or blocks you edit, and run the skill's `scripts/codedna_check.py` after
-  annotation changes. Skip when the install ships no script.
+  or blocks you edit, and run `scripts/codedna_check.py` after annotation
+  changes (skip when no script ships). If `docs/comment-budget.json` exists,
+  also run `scripts/comment_budget.py . --baseline docs/comment-budget.json`,
+  and offset `<5`-entry `agent:` appends by deleting a Tautology or Stale line
+  in the same edit.
 
 ## 5. Engineering standards
 
@@ -175,28 +191,32 @@ Apply to every source file whose language supports comments; never annotate
   refutation that survives the strongest counterargument; drop on a real
   preventing mechanism, not on "usually works". Zero supported findings is
   valid — never say "bug-free".
-- **Independent review** — a non-author owns the verdict, using the installed
-  `reviewer` subagent (another model family preferred, a fresh subagent of the
-  builder's own family acceptable; never a resume, fork, or inheritance of the
-  builder's context). Use read-only tools, no connector, memory off, project and
-  user instructions off where allowed. Required for shared branches, merges,
-  STOP triggers, and every release; a one-line shipped change gets a short
-  round, never none. Compute the subject from git (`$RELEASED..HEAD` plus
-  working tree), not prose; give the reviewer the range and usage model, not
-  suspected defects. Dispatch one `review-finder` subagent per complete flow
-  when the subject spans several. Re-run after every fix. Triage literal steps,
-  permitted execution, actor and motive — severity labels are claims. Stop at no
-  INTRODUCED finding above Low and no High or Critical of any age. Record
-  verdict, scope, round count, finding outcomes, and open risk in the PR body or
-  commit message.
+- **Independent review** — a non-author owns the verdict, required for shared
+  branches, merges, STOP triggers, and every release. Dispatch ladder:
+  installed `reviewer` (plus `review-finder` per flow on multi-flow subjects) →
+  fresh runtime/generic read-only subagent (`define_subagent`, `research`, or
+  read-only worker) carrying `review.md`'s method + brief where no agent
+  directory exists or in project scope → `RULES.md` recorded fallback → fresh
+  builder-family subagent → inline five-element + STOP-trigger audit on
+  single-session harnesses with zero subagent tools (`Review: unavailable (no
+  subagent runner; inline five-element review completed)`). Never resume, fork,
+  or inherit the builder's context; read-only tools, no suspected defects in
+  brief. Compute the subject deterministically from git (resolve `RELEASED` or
+  empty tree first — never run an unset `$RELEASED..HEAD`, which evaluates as
+  empty `HEAD..HEAD`). Re-run after every fix. Stop at no INTRODUCED finding
+  above Low and no High or Critical of any age. The author/coordinator triages
+  findings and records verdict, scope, round count, finding outcomes, and open
+  risk in the final report, PR body, or commit message.
 - Pre-review: checks pass, no conflicts, branch current with target. A short
   clean round or a round that could not read the subject is a failed round.
 - **Model panel** — to widen one round, dispatch the `reviewer` or
-  `review-finder` body plus the same brief to three models in one turn with
-  per-run model overrides, never by pinning `model` in the installed definition.
-  Members stay isolated; a lone member's finding gets the full five elements,
-  not a majority vote; a panel is one round, not three. Fan-out applies it to
-  every flow or not at all, never to some flows.
+  `review-finder` body plus the same brief (using `review.md`'s method + report
+  block when no agent file exists on disk) to three models in one turn with
+  per-run model overrides (or distinct tier enum values when the tool schema
+  rejects catalog strings), never by pinning `model` in the installed
+  definition. Members stay isolated; a lone member's finding gets the full five
+  elements, not a majority vote; a panel is one round, not three. Fan-out
+  applies it to every flow or not at all, never to some flows.
 - CRITICAL = BLOCK; HIGH = WARN; MEDIUM = INFO (including an unexplained file
   over the 800-line ceiling); LOW = NOTE. MEDIUM is fixed or recorded with a
   reason; LOW may be skipped. Approve only with no CRITICAL/HIGH; a security

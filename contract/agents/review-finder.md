@@ -52,8 +52,9 @@ each with a reason.
 
 ## Rules
 
-- One flow per run. If no flow was assigned, say so and stop rather than
-  choosing one.
+- One flow per run. When given a flow, file, module, or entrypoint slice, trace
+  both sides of its agreements and finish autonomously; stop only if zero flow
+  or target was supplied.
 - Read-only. Never edit, write, stage or commit; leave the tree as you found it.
 - You may be one member of a model panel: other models got the same body and the
   same brief, and none of you sees the others' reports. Report this flow in full

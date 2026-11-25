@@ -4,7 +4,7 @@ Semble is an MCP code-search server (with a CLI fallback) that locates code by
 intent and returns ranked chunks with file and line. Upstream:
 [`MinishLab/semble`](https://github.com/MinishLab/semble). It is the **top rung
 of the discovery ladder** in `AGENTS.md` → Command Style → Tool ladder for code
-discovery; this file holds the full reference. Verified against **semble 0.7.0**
+discovery; this file holds the full reference. Verified against **semble 0.7.3**
 — run `semble -V` for your build, and treat anything missing from `semble
 --help` as unsupported.
 
@@ -75,8 +75,8 @@ semble search "database host port" . --content config
 
 Useful `search` flags: `-k/--top-k N` (results, default 5);
 `--max-snippet-lines N` (10 = signature + body, 0 = no code);
-`--format json|text` (default json); `--content code|docs|config|all`
-(default code).
+`--format json|text` (default json); `--content TYPE [TYPE ...]` (space-separated
+`code`, `docs`, `config`, `all`; default `code`).
 
 > The CLI verb is `find-related` (hyphen); the MCP tool is `find_related`
 > (underscore). The CLI examples above were run and verified; the MCP tool
@@ -90,7 +90,7 @@ semble install --agent claude --type mcp -y      # wire the MCP server in
 ```
 
 `semble install` configures agents non-interactively with `--agent`; `--type`
-selects the integrations (`mcp`, `instructions`, `subagent`, or `all`). The
+selects the integrations (`mcp`, `instructions`, `subagent`, `skill`, or `all`). The
 index builds on first run and is cached under `~/.cache/semble`; `semble clear`
 drops it.
 

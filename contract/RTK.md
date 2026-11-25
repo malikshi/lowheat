@@ -2,7 +2,7 @@
 
 Token-optimized CLI proxy. Prefix shell commands with `rtk` to cut the bash
 output your agent reads by 60-90% on dev operations. Full reference:
-`rtk --help`. This catalogue is verified against **rtk 1.1.0** — run
+`rtk --help`. This catalogue is verified against **rtk 1.2.1** — run
 `rtk --version` for your build, and treat anything missing from `rtk --help`
 and this catalogue as unsupported. For proxied tools, subcommand help is the
 wrapped tool's help (`rtk ls --help` prints `ls` help); RTK's own commands keep
@@ -148,9 +148,11 @@ rtk tree                       # Directory tree (compact)
 rtk read <file>                # Read file with intelligent filtering
 rtk read -l aggressive <file>  # Read with lossy aggressive filtering (opt-in)
 rtk read --head-lines 40 <file> # First N lines, byte-exact at the default level
+rtk read --tail-lines 40 <file> # Last N lines
 rtk smart <file>               # Generate a 2-line technical summary (lossy)
-rtk find "*.go" .              # Find files (pattern first; "-name" before the path fails)
+rtk find "*.go" .              # Find files (also accepts path first: rtk find . -name "*.go")
 rtk grep -rn "pattern" dir    # Compact grep; flags pass through, -r walks directories
+rtk grep --context-only "pat" dir # Match context only (omit full lines)
 rtk grep "pattern" file        # Single file: no -r needed
 rtk rg "pattern" dir --type go # ripgrep flags (--type, -g) work with rtk rg only
 rtk ast-grep run -p '<pat>' .  # ast-grep via RTK (needs the ast-grep binary on PATH)
@@ -309,7 +311,7 @@ rtk pipe                       # Read stdin, apply an RTK filter, print filtered
 ## Meta Commands
 
 ```bash
-rtk gain                       # Token savings summary
+rtk gain --text                # Static token summary (use --text in autonomous runs; bare rtk gain launches --watch TUI if llm-proxy runs)
 rtk gain --graph               # ASCII graph of daily savings
 rtk gain --history             # Command-level savings history
 rtk gain --daily               # Day-by-day breakdown
@@ -317,8 +319,8 @@ rtk gain --weekly / --monthly  # Weekly or monthly breakdown
 rtk gain --quota               # Monthly quota savings estimate
 rtk gain --recalls             # Recall efficiency per filter (elisions vs recalls)
 rtk gain --project             # Restrict to the current project
-rtk gain --watch               # Live dashboard (--text forces the static view)
-rtk gain --by-method           # Per-method savings (also --by-rule / --by-layer)
+rtk gain --watch               # Live interactive dashboard (hangs unattended runs)
+rtk gain --by-method           # Per-method savings (also --by-rule / --by-layer / --by-pipeline)
 rtk gain --all --format json   # All-time breakdowns, machine-readable (run raw to parse)
 rtk cc-economics               # Claude Code spending vs RTK savings analysis
 rtk config                     # Show or create RTK configuration

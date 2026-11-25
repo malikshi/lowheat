@@ -16,12 +16,13 @@ not kept as a second ledger.
 
 - **The check decides, not confidence.** "Looks good", "I'm confident", and a
   green-looking diff never count as passing.
-- **Everything before the final report is self-verified.** The user is asked to
-  approve only what `AGENTS.md` says needs approval — irreversible actions,
-  destructive operations, production mutations, a commit, or a push. Do not
-  defer a required approval to the end, and do not treat "approve only the final
-  step" as permission to do irreversible work earlier. Nothing here waives the
-  Confusion protocol or independent review.
+- **Everything before the final report is self-verified.** Execute autonomously
+  without pausing for plan or step confirmations; ask the user only for what
+  `AGENTS.md` says needs approval — irreversible actions, destructive
+  operations, production mutations, a commit, or a push (unless already
+  approved in the request). Do not defer a required approval to the end, and do
+  not treat "approve only the final step" as permission to do irreversible work
+  earlier. Nothing here waives the Confusion protocol or independent review.
 - **Preserve user work.** Revert only the current unit's own edits. Never reset,
   checkout over, or delete unrelated changes. Use an isolated worktree or branch
   for an experiment that may need to be discarded.
@@ -80,7 +81,10 @@ it if it does not.
   before editing so a revert restores that exact pre-unit state instead of
   discarding user work.
 - **Three attempts maximum per behavior unit.** Count one attempt each time a
-  newly changed hypothesis fails the same check. After the third failure, stop:
+  newly changed hypothesis fails the same check. Recover autonomously from local
+  tool friction first (e.g., broken `PATH` shims via `/usr/bin/...` or
+  `.venv/bin/...`, RTK elision via one raw rerun, and test isolation/mock
+  checks) before counting a failed hypothesis. After the third failure, stop:
   report `UNIT`, `VERDICT`, `REASON`, `EVIDENCE`, and the proposed new plan. Do
   not retry the same hypothesis.
 - Mechanical docs or formatting units normally need one pass. They also cap at

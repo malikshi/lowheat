@@ -132,7 +132,7 @@ scope copies.
 | Central `.agents` | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Cline | `~/.agents/AGENTS.md`, companions, `skills/*` | `AGENTS.md`, companions |
 | Gemini CLI | `~/.gemini/GEMINI.md`, companions, `agents/*` | `GEMINI.md`, companions |
-| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `AGENTS.md`, companions. No `GEMINI.md` copy: two identical files spend its 24,000-byte per-file rule cap twice, and the cap already truncates `AGENTS.md`, dropping Code Review Standards and the whole Environment section; its uncapped skills carry the full contract |
+| Antigravity CLI (`agy`) | `~/.gemini/config/{AGENTS,GEMINI}.md`, companions, `skills/*` | `AGENTS.md`, companions. No `GEMINI.md` copy: `agy` caps each rule file at 24,000 bytes and shares a 20,000-token rules budget (`AGENTS.md` and every companion stay below 24,000 bytes so `AGENTS.md` loads intact without spending the token budget twice) |
 | Crush | `~/.config/crush/CRUSH.md`, companions | `CRUSH.md`, companions |
 | Qwen Code | `~/.qwen/QWEN.md`, companions | `QWEN.md`, companions |
 | fx | `~/.fx/AGENTS.md`, companions as regular files, `~/.fx/skills/agents-contract` | `AGENTS.md`, companions |
@@ -266,7 +266,7 @@ cargo install --git https://github.com/rtk-ai/rtk
 Confirm the binary:
 
 ```bash
-rtk --version    # should print 1.1.0 or newer — the catalogue is verified against 1.1.0
+rtk --version    # should print 1.2.1 or newer — the catalogue is verified against 1.2.1
 ```
 
 > The crates.io package named `rtk` is a different project (Rust Type Kit) —
@@ -336,7 +336,7 @@ semble search "firewall install" . --max-snippet-lines 10   # CLI fallback
 The CLI subcommand for related code is `find-related` (`find_related` as an
 MCP tool). The index builds on first run and is cached under `~/.cache/semble`;
 `semble clear` drops it, `semble savings` reports token savings. Verified
-against semble 0.7.0.
+against semble 0.7.3.
 
 ### Benchmark
 

@@ -3,4 +3,4 @@ name: lowheat contract
 alwaysApply: true
 ---
 
-Read `AGENTS.md` and the companion files it names before starting work.
+Read `AGENTS.md` before starting work; load only the companion files the current task needs.
