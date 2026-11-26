@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-26.1
+Contract-Version: 2026-11-26.2
 
 Thin cross-agent operating core; companions load on demand only when needed.
 

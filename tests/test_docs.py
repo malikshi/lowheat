@@ -2,12 +2,12 @@
 
 exports: class DocsTestCase
 used_by: none
-rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and under the 24,000-byte per-file rule cap, reference companions by name rather than importing them; every reference path the skill names must exist, the skill and contract must agree on precedence, gates, trailers, and the compliance record, the README companion prose must name every registered companion, and the review companion must pin the upstream taxonomy and reviewer-fallback gates.
-agent:   fx | unknown | 2026-11-23 | unknown | pinned review-companion engines, independent-round isolation, and finding triage gates
+rules:   Assert structure and source-to-mirror equality without writing files. The contract must stay thin and under the 24,000-byte per-file rule cap, reference companions by name rather than importing them; every reference path the skill names must exist, the skill and contract must agree on precedence, gates, trailers, and the compliance record, the README companion prose must name every registered companion, the review companion must pin the upstream taxonomy and reviewer-fallback gates, and its model-panel naming must dispatch catalog-printed ids while banning no alias set.
 agent:   fx | unknown | 2026-11-24 | unknown | pinned README companion prose to the installer registry
 agent:   fx | unknown | 2026-11-24 | unknown | pinned upstream review taxonomy and reviewer-fallback gates
 agent:   gemini-4-carbon | google | 2026-11-25 | b221ee10-722e-4fa5-bcc3-ee4a6c26742f | pinned 24 KB rule cap, autonomous bootstrap/review rules, and RTK/semble/continue updates
 agent:   gemini-4-neon | google | 2026-11-26 | d7bcc136-70e7-4923-8114-ec7f030fb78d | replaced delete-comment and comment_budget checks with word-only codedna audit and full 24 KB cap assertions
+agent:   fx | unknown | 2026-11-26 | unknown | allowed catalog-printed bare aliases in the panel, kept the no-hard-coded-provider rule
 """
 
 from __future__ import annotations
@@ -299,10 +299,23 @@ class DocsTestCase(unittest.TestCase):
         self.assertIn("**Naming the models.**", review)
         self.assertIn("Pick one provider that the session can already reach", review)
         self.assertIn("Name each id as the catalog prints it", review)
+        self.assertNotIn("the `reviewer` body plus", review)
+
+    def test_panel_naming_dispatches_catalog_ids_and_bans_no_alias_set(self) -> None:
+        review = (install.CONTRACT_DIR / "review.md").read_text(encoding="utf-8")
+
+        self.assertIn("Do not hard-code a provider", review)
+        self.assertNotIn("personal aliases", review)
+        self.assertIn("bare alias when it prints bare", review)
+        self.assertIn("qualify it with the provider prefix or drop", review)
+        self.assertIn("Where the catalog serves them, prefer `opus-model`, `sonnet-model`, and", review)
+        self.assertIn("a name the catalog\ndoes not serve is not a member", review)
+        self.assertIn("That is a default, not a privilege", review)
+        self.assertIn("swap one member out", review)
+        self.assertIn("say the panel spans two families", review)
         for private in ("nexrouter", "9router", "127.0.0.1", "baseURL"):
             with self.subTest(private=private):
                 self.assertNotIn(private, review)
-        self.assertNotIn("the `reviewer` body plus", review)
 
     def test_a_pinned_model_in_the_definition_would_collapse_the_panel(self) -> None:
         for path in install.AGENTS_DIR.glob("*.md"):

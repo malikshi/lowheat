@@ -244,19 +244,30 @@ applies to both subagents. On `reviewer` it widens the ship verdict on one
 subject; on `review-finder` it widens each flow, so every flow still gets every
 model — a panel applied to some flows and not others is not a panel.
 
-**Naming the models.** Read model IDs from the harness catalog (picker or
-`--list-models`), grouped by provider prefix (self-hosted/BYOK prefix or vendor
-prefix). Pick one provider that the session can already reach and take three of
-its models. Do not hard-code a provider or personal aliases (`opus-model`,
-`sonnet-model`, `haiku-model`) — those are private one-machine setups that fail
-elsewhere.
+**Naming the models.** Read model IDs from the harness catalog (the harness's
+model picker or its own `models` command).
+Pick one provider that the session can already reach and take three of its
+models that differ. Do not hard-code a provider in the shipped text: whatever
+the catalog prints is dispatchable.
 
-Name each id as the catalog prints it, provider prefix included; bare aliases
-can be ambiguous or rejected. When the subagent tool constrains `Model` to fixed
-tier enums (`pro`, `flash`, `flash_lite`, `inherit`) rather than catalog strings,
-widen across distinct schema tiers instead of passing an invalid string. If a
-member fails to launch, report it and how many ran; if the provider serves fewer
-than three models, widen on what it serves rather than crossing endpoints.
+Where the catalog serves them, prefer `opus-model`, `sonnet-model`, and
+`haiku-model` as the default pick. That is a default, not a privilege, and it is
+one maintainer's default rather than a vendor naming scheme: a name the catalog
+does not serve is not a member, a catalog serving other ids still runs a panel
+from what it serves, and the dispatch rules below decide how each name is
+written. They are three sizes of one family, so where the same provider also
+serves another family, swap one member out and say the panel spans two families.
+
+Name each id as the catalog prints it: prefix included when it prints one, the
+bare alias when it prints bare, because a bare alias resolves while exactly one
+provider serves that name and becomes ambiguous only when two do. When two
+providers print the same bare name, qualify it with the provider prefix or drop
+that member and say which. When the subagent tool constrains `Model` to fixed
+tier enums (`pro`, `flash`, `flash_lite`, `inherit`) rather than catalog
+strings, widen across distinct schema tiers instead of passing an invalid
+string. If a member fails to launch, report it and how many ran. If the provider
+serves fewer than three ids, widen on what it serves rather than crossing
+endpoints, and state the panel size and every name dispatched.
 
 **Dispatch.** Keep `model` unpinned in `reviewer` and `review-finder` (pinning
 collapses the panel to one model). For a panel, dispatch three generic subagent
