@@ -1,6 +1,6 @@
 # 0001 — Comment content is CodeDNA only, and the budget only shrinks
 
-- Status: accepted
+- Status: superseded by 0002
 - Date: 2026-11-21
 
 ## Context

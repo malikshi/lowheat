@@ -147,10 +147,10 @@ Apply to every source file whose language supports comments; never annotate
 - **On edit** — keep `exports:` accurate, update `rules:`, append one `agent:`
   line, drop the oldest beyond five, delete non-CodeDNA comments in functions
   or blocks you edit, and run `scripts/codedna_check.py` after annotation
-  changes (skip when no script ships). If `docs/comment-budget.json` exists,
-  also run `scripts/comment_budget.py . --baseline docs/comment-budget.json`,
-  and offset `<5`-entry `agent:` appends by deleting a Tautology or Stale line
-  in the same edit.
+  changes (skip when no script ships).
+- **Comment audit** — grade every comment (earlier label wins): Tautology
+  → delete; Excuse → delete + row in `docs/comment-debt.md`; Stale → delete;
+  Decision Record → delete + `docs/adr/NNNN-slug.md` in the same change.
 
 ## 5. Engineering standards
 

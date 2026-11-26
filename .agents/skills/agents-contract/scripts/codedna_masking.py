@@ -2,14 +2,13 @@
 
 exports: mask_code
 used_by: .agents/skills/agents-contract/scripts/codedna_content.py → mask_code and the Python and heredoc scanners [cascade]
-used_by: .agents/skills/agents-contract/scripts/comment_budget.py → mask_code, _python_scan_inputs, and _shell_heredoc_lines [cascade]
 used_by: tests/test_codedna_check.py → mask_code [cascade]
 rules:   Masking preserves every newline and the line structure; string, template, and comment interiors blank so quotes and `#` inside them never read as comments; optional spans expose each comment range to the content scan; an unterminated heredoc, percent, or sigil literal never silences the rest of the file — a false opener must fail open. Block and line markers come from the language profile, never from a suffix test: a marker inside a literal is consumed by the literal first, and a line marker needs a code position so `https://` and `a//b` stay code.
-agent:   fx | unknown | 2026-10-31 | unknown | added optional comment spans, HTML comment masking, and restricted `//` to Go/Rust/JS so CSS and shell URLs stay code
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | restricted `/* */` to C-style profiles after an HTML page with `<b>provider/*</b>` masked the rest of the file as one block comment
 agent:   grok-4.6 | xai | 2026-10-31 | unknown | made masking profile-driven: block markers, line and word markers, quoting styles, Lua long brackets, and nested blocks
 agent:   grok-4.6 | xai | 2026-11-01 | unknown | review fixes: Ruby `%`/Elixir `~` literals mask, operator delimiters rejected, unterminated literals fail open, unused suffix parameter dropped
 agent:   fx | unknown | 2026-11-05 | unknown | split mask_code into prefix, long-string, line, and quoted literal helpers
+agent:   gemini-4-neon | google | 2026-11-26 | d7bcc136-70e7-4923-8114-ec7f030fb78d | removed deleted comment_budget.py from used_by
 """
 from __future__ import annotations
 

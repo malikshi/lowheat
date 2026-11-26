@@ -3,11 +3,11 @@
 exports: class ConflictGuardTestCase | class DryRunTestCase | class GrokRulesTestCase | class InstallerTestCase | class MirrorTestCase | class ProjectScopeTestCase
 used_by: none
 rules:   Load install.py by file path — the repo root is not a package. Every case runs against a temporary home or root so a test never rewrites real harness configs, and every emitted link must resolve to the contract source or the skill source. The contract is thin and names companions by filename, so the cases assert those files ship beside it and no `@` import is required. Directory comparisons ignore Python bytecode caches.
-agent:   fx | unknown | 2026-10-31 | unknown | thin-contract restructure: project cases now assert every named companion ships and AGENTS.md carries no @ imports
 agent:   fx | unknown | 2026-10-31 | unknown | added the bytecode-cache regression for the installer's copied-skill comparison
 agent:   fx | unknown | 2026-11-05 | unknown | covered force-directory replacement, path validation, project-only no-op, list/detect, and mirror dry-run
 agent:   fx | unknown | 2026-11-05 | unknown | covered --check clean/stale states and refresh of a stale copied skill
 agent:   gemini-4-carbon | google | 2026-11-24 | unknown | covered agy: both ~/.gemini/config rule names, its skills dir, and the project alias
+agent:   gemini-4-neon | google | 2026-11-26 | d7bcc136-70e7-4923-8114-ec7f030fb78d | updated multi-skill install test to use temporary skill fixtures after retiring delete-comment
 """
 
 from __future__ import annotations
@@ -566,15 +566,28 @@ class InstallerTestCase(unittest.TestCase):
         self.assertFalse(skill.with_name(skill.name + ".bak").exists())
 
     def test_every_repo_skill_is_installed_not_just_the_contract_skill(self) -> None:
-        names = {skill.name for skill in install.SKILL_DIRS}
+        real_names = {skill.name for skill in install.SKILL_DIRS}
+        self.assertIn("agents-contract", real_names)
+        self.assertNotIn("delete-comment", real_names)
 
-        self.assertIn("agents-contract", names)
-        self.assertIn("delete-comment", names)
+        skills_dir = self.home / "repo-skills"
+        for name in ("agents-contract", "extra-skill"):
+            skill = skills_dir / name
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
 
-        install.main(["--home", str(self.home), "--harness", "claude"])
+        with (
+            mock.patch.object(install, "SKILLS_DIR", skills_dir),
+            mock.patch.object(install, "SKILL_DIR", skills_dir / "agents-contract"),
+        ):
+            found = install._skill_dirs()
+            self.assertEqual({"agents-contract", "extra-skill"}, {s.name for s in found})
+            with mock.patch.object(install, "SKILL_DIRS", found):
+                code = install.main(["--home", str(self.home), "--harness", "claude"])
+
+        self.assertEqual(0, code)
         installed = {path.name for path in (self.home / ".claude" / "skills").iterdir()}
-
-        self.assertEqual(names, installed)
+        self.assertEqual({"agents-contract", "extra-skill"}, installed)
 
     def test_an_empty_skill_set_is_refused_instead_of_installing_nothing(self) -> None:
         stderr = io.StringIO()

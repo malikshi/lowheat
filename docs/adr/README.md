@@ -11,7 +11,9 @@ and that reasoning would be lost from the code itself.
 
 - `0000-template.md` — copy this to start a new record.
 - `0001-comments-are-codedna-only.md` — comment content, the four audit categories,
-  and the shrinking budget.
+  and the shrinking budget (superseded by `0002`).
+- `0002-comment-audit-is-prose-in-codedna.md` — comment audit lives as prose in
+  `codedna.md` without a separate skill or budget script.
 
 Keep the `Status:` line current (`accepted`, `superseded by NNNN`, `deprecated`).
 Never rewrite an accepted record's Context or Decision; a reversal is a new record

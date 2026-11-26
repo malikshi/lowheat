@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Contract-Version: 2026-11-25.2
+Contract-Version: 2026-11-26.1
 
 Thin cross-agent operating core; companions load on demand only when needed.
 
@@ -230,15 +230,12 @@ the skill ships its own read-only checker and git is the audit log.
 - **L2 & inline.** Public functions carry `Rules:` unless trivial with no domain
   constraint; inline `# Rules:` / `# message:` only for non-obvious invariants.
 - **Maintain on edit.** Update `exports:` and `rules:`, append one `agent:`
-  line (drop oldest >5), delete non-CodeDNA comments in
-  functions or blocks you edit, and run `codedna_check.py`. If
-  `docs/comment-budget.json` exists, also run `comment_budget.py` — offset
-  `<5`-entry `agent:` appends by deleting a Tautology or Stale annotation in
-  the same edit.
-- **Comment audit.** Grade Tautology / Stale (delete), Excuse (delete + row in
-  `docs/comment-debt.md`), Decision Record (delete + ADR in `docs/adr/`).
-  `comment_budget.py` may lower `docs/comment-budget.json`, never raise it
-  without `--force`.
+  line (drop oldest >5), delete non-CodeDNA comments in functions or blocks you edit,
+  and run `codedna_check.py`.
+- **Comment audit.** Grade every comment (including CodeDNA annotations;
+  earlier label wins): Tautology (delete), Excuse (delete + row in
+  `docs/comment-debt.md`), Stale (delete), Decision Record (delete + ADR in
+  `docs/adr/`) in the same change.
 
 ### Testing Requirements
 
@@ -360,7 +357,6 @@ Approve only with no CRITICAL/HIGH (security review also blocks HIGH).
 | Plugin / skill | Source | Purpose |
 |---|---|---|
 | `agents-contract` | installed beside this contract | Executable contract bootstrap; load at session start |
-| `delete-comment` | installed beside this contract | Comment audit and budget ratchet |
 | `semble` | `https://github.com/MinishLab/semble` | MCP/CLI code search — top discovery rung |
 | `superpowers` | `https://github.com/obra/superpowers` | Workflow skills (TDD, debugging, planning, verification) |
 

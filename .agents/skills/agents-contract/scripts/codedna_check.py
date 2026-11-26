@@ -2,15 +2,14 @@
 
 exports: DEFAULT_IGNORED_DIRS | EXPLICIT_SUFFIXES | SOURCE_SUFFIXES | TOOL_OWNED_DIRS | LanguageProfile | check_file | check_comment_content | check_examples | collect_source_files | main
 used_by: tests/test_codedna_check.py → main, check_file, check_comment_content, check_examples, collect_source_files, DEFAULT_IGNORED_DIRS, TOOL_OWNED_DIRS [cascade]
-used_by: .agents/skills/agents-contract/scripts/comment_budget.py → collect_source_files [cascade]
 used_by: contract/AGENTS.md → CodeDNA editing protocol (checker mentions)
 related: codedna_spec.py, codedna_masking.py, codedna_headers.py, codedna_content.py hold the split implementation.
 rules:   Read-only — report findings carrying line numbers; never rewrite a file. The sibling imports need this directory on sys.path first — the bootstrap below stays above them for direct execution and for importlib path loading. Re-export every name the tests load; the split must stay invisible from the command line. A Python `used_by:` claim is proven against the import graph built over the scanned files, so a bare path that no import backs is reported; a consumer that loads the module by path with `importlib` is exempt from that proof.
-agent:   grok-4.6 | xai | 2026-10-31 | unknown | collect_source_files now lowercases the suffix so `.R`/`.C` files reach the profile map
 agent:   fx | unknown | 2026-11-05 | unknown | split contract-document linting out of main; exported surface unchanged
 agent:   fx | unknown | 2026-11-06 | unknown | main builds the Python import index once and reports used_by entries no import backs; source collection asks the profile map for a compound-aware suffix
 agent:   antigravity | google | 2026-11-07 | 36039219-77f4-44e2-9830-d1fb34127935 | linted AGENTS.md contract examples deduplicating duplicate root paths
 agent:   unknown | nexrouter | 2026-11-21 | unknown | declared comment_budget.py as a collect_source_files consumer after the import proof reported it
+agent:   gemini-4-neon | google | 2026-11-26 | d7bcc136-70e7-4923-8114-ec7f030fb78d | removed deleted comment_budget.py from used_by
 message: Keep this file thin — new scan logic belongs in the module named for its job, and tests load the entry by path, so re-check the sys.path bootstrap after any import edit.
 """
 from __future__ import annotations

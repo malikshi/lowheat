@@ -3,7 +3,7 @@
 Verified on 2026-10-31 against the binaries installed on the build host. Detection
 is advisory; a green row means the installer emitted the paths, not that a live
 session authenticated and loaded them. Installer changes after that date are
-covered by the test suite and CI, not by a live harness session.
+covered by the test suite, not by a live harness session.
 
 On harnesses that scan a rules directory, every companion loads at session start
 and cannot be unloaded; the companion table in `AGENTS.md` routes attention

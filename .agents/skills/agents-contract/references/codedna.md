@@ -186,11 +186,11 @@ cross-file invariants is a rulebook, not a session ledger.
 
 The ban above is already enforced: `codedna_check.py` reports prose, commented-out
 code, and mid-stream `TODO` markers. Do not build a second detector — it would
-disagree with the first. What the ban cannot measure is the **permitted** annotation
-surface, which is legal by construction and grows without limit unless something
-counts it. That is what a comment audit is for.
+disagree with the first. What the ban cannot judge is the **permitted** annotation
+surface, which is legal by construction and still accumulates noise unless audited.
 
-Grade every comment, then take exactly one action:
+Grade every comment, then take exactly one action. Exactly one label per comment;
+when two fit, choose the earlier one:
 
 | Category | Test | Action |
 |---|---|---|
@@ -205,39 +205,25 @@ change the diff already shows, and a `message:` whose issue has since closed are
 Tautology or Stale. The four required L1 fields stay: removing one fails the
 checker.
 
-Two homes hold what deletion must not destroy. Reasoning goes to `docs/adr/`, one
-decision per file, moved in the same change that deletes the comment — never copied
-verbatim, always rewritten as Context / Decision / Consequences. An excused hack goes
-to `docs/comment-debt.md`, one row with the fix it was avoiding; the ledger is the
-tracker, so no issue tracker or network access is involved, and the file is deleted
-once the table is empty.
+Two homes hold what deletion must not destroy:
 
-**Ratchet.** Not every comment dies in one change, so the total may only fall.
-`comment_budget.py` counts two numbers over the same tree the ban covers:
+- **Excuse** → delete the line, then append one row to `docs/comment-debt.md`
+  (`id | file:line | hack the comment excused | fix | owner`). Create the ledger
+  when the first excused hack is recorded; it is the tracker, so no external issue
+  is filed, and delete `docs/comment-debt.md` once the table is empty.
+- **Decision Record** → delete the line, then write `docs/adr/NNNN-slug.md` using
+  Context, Decision, and Consequences (never copying the comment verbatim) and add
+  its row to `docs/adr/README.md`.
 
-```bash
-python3 <skill-dir>/scripts/comment_budget.py . \
-  --baseline docs/comment-budget.json            # exit 1 if either number grew
-python3 <skill-dir>/scripts/comment_budget.py . --update
-```
+Delete the comment in the **same** change that adds the ADR or debt row — never
+delete reasoning without relocating it.
 
-`<skill-dir>` is where the harness reports the `agents-contract` skill, as above.
+### Grading examples
 
-`comments` counts permitted annotation lines; `open_notes` counts `message:` lines,
-the genuinely unresolved items. An `agent:` entry counts like any other annotation,
-so a file below the five-entry cap pays one unit for the entry it appends. A file
-at the cap stays flat by dropping its oldest entry; a file below it pays, and pays
-by deleting an annotation the audit already judged Tautology or Stale. In a
-project with no baseline yet,
-`--bootstrap --template-dir <lowheat-checkout>/docs` creates one seeded with the
-current counts plus the ADR and debt templates. It never overwrites an existing
-file; `--update` still never creates one, so creating a baseline stays a separate,
-visible action and the ratchet is unchanged. `--update` refuses to raise either
-number without `--force`, and it refuses a baseline it cannot read rather than
-creating one — an unreadable file must never become a free reset. CI
-also compares the checked-in baseline against the base commit with `--against`,
-so editing the JSON upward fails the run even without `--update`. `--force` is a
-deliberate, reviewed exception and belongs in the pull request body. The
-`delete-comment` skill runs the whole pass end to end. Every skill that ships
-beside this contract is installed into each harness, so it is available wherever
-the contract is.
+| Comment | Label | Why |
+|---|---|---|
+| `# increment the counter` above `counter += 1` | Tautology | The code says it. |
+| `# retry twice; the upstream 502s on cold start` | Decision Record | Non-obvious *why* missing from the code. |
+| `# skip validation for internal calls` | Excuse | Justifies a missing trust-boundary check. |
+| `# see UserService.validate (removed in v2)` | Stale | The named symbol is gone. |
+| `rules: check the amount` on `def charge(amount_cents)` | Tautology | Restates the signature, no constraint. |
